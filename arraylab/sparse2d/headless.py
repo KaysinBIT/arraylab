@@ -138,13 +138,13 @@ def _stamp(bundle, operation, request=None):
     return bundle
 
 
-def compute(request, base_dir=None, progress=None):
+def compute(request, base_dir=None, progress=None, *, workers=None):
     """Importable API. Return the same in-memory numerical bundle as core.run."""
     normalized = validate_request(request, base_dir)
-    bundle = run(Config(**normalized['config']), progress)
+    bundle = run(Config(**normalized['config']), progress, workers=workers)
     for item in normalized['weighting']:
         settings = Weighting(**{k: v for k, v in item.items() if k != 'source'})
-        bundle = add_weighting(bundle, source_index(bundle, item['source']), settings, progress)
+        bundle = add_weighting(bundle, source_index(bundle, item['source']), settings, progress, workers=workers)
     return _stamp(bundle, 'run', normalized)
 
 
@@ -257,16 +257,16 @@ def load_bundle(path):
     return restore_bundle(read_json(path/'summary.json' if path.is_dir() else path))[0]
 
 
-def reweight(bundle, source='annealing', settings=None, progress=None):
+def reweight(bundle, source='annealing', settings=None, progress=None, *, workers=None):
     restored, config, _ = restore_bundle(bundle)
     values = _typed({} if settings is None else settings, asdict(Weighting()), 'weighting')
     setting = Weighting(**values).validate(config)
     if restored.get('restoration', {}).get('metrics_require_upgrade'):
-        restored = reevaluate(restored, progress=progress)
-    return _stamp(add_weighting(restored, source_index(restored, source), setting, progress), 'weight')
+        restored = reevaluate(restored, progress=progress, workers=workers)
+    return _stamp(add_weighting(restored, source_index(restored, source), setting, progress, workers=workers), 'weight')
 
 
-def reevaluate(bundle, eval_grid=None, progress=None, phase_bits=None):
+def reevaluate(bundle, eval_grid=None, progress=None, phase_bits=None, *, workers=None):
     restored, config, element = restore_bundle(bundle)
     if eval_grid is not None:
         values = {**asdict(config), 'eval_grid': eval_grid}
@@ -276,9 +276,9 @@ def reevaluate(bundle, eval_grid=None, progress=None, phase_bits=None):
         config=Config(**_typed({**asdict(config),'phase_bits':phase_bits},asdict(Config()),'config')).validate()
         restored['config']=asdict(config)
     domains = evaluation_domains(config)
-    for row in restored['results']:
-        if progress: progress('Validate '+row['name'])
-        evaluate_result(row, config, domains, element)
+    from .core import evaluate_layouts
+    restored['results'],restored['execution']=evaluate_layouts(restored['results'],config,domains,element,workers=workers,
+        progress=(lambda done,total:progress(f'Validate {done}/{total}')) if progress else None)
     if 'restoration' in restored:
         restored['restoration'] = {**restored['restoration'], 'metrics_require_upgrade': False}
     return _stamp(restored, 'evaluate')
@@ -402,6 +402,7 @@ def parser():
     batch.add_argument('--manifest', required=True)
     batch.add_argument('--fail-fast', action='store_true')
     for item in (compute_parser, commands.choices['weight'], commands.choices['evaluate'], batch):
+        item.add_argument('--workers',type=int,default=0,help='0=自动最多4路；1=单核；2..8=有界并行复核')
         item.add_argument('--output', required=True, help='新目录；run/weight/evaluate 可用 - 输出完整 JSON')
         item.add_argument('--report', action='store_true', help='额外生成图表/CSV/HTML；需要 Matplotlib')
     return p
@@ -414,6 +415,8 @@ def main(argv=None):
     operation = None
     try:
         args = parser().parse_args(argv); operation = args.command
+        from ..parallel import set_workers
+        set_workers(getattr(args,'workers',0))
         if operation == 'defaults':
             print(dumps({'schema_version': VERSION, 'config': asdict(Config()), 'weighting': []})); return 0
         if operation == 'batch':

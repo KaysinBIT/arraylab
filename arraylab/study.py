@@ -16,10 +16,10 @@ from .excitation import electrical_excitation, target_amplitudes, finite_number
 from .feed import FeedSettings, settings_payload, synthesize_impedance, write_text_atomic
 from .planar import PlanarParameters, geometry_payload, validate_planar_design, planar_amplitudes
 from .planar_pattern import field_uv, integrated_power
+from .parallel import ordered_map, requested_workers, check_cancelled, ComputationCancelled
 
 
-class StudyCancelled(Exception):
-    """A cancelled study never publishes a partial result."""
+StudyCancelled = ComputationCancelled
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,8 @@ def power_db(power):
     return 10 * np.log10(np.maximum(power, 1e-30))
 
 
-def run_study(parameters, settings, study=StudySettings(), *, progress=None, cancelled=None):
+def run_study(parameters, settings, study=StudySettings(), *, progress=None, cancelled=None, workers=None):
+    workers = requested_workers(workers)
     config = study_document(parameters, settings, study)
     planar = isinstance(parameters, PlanarParameters)
     p = parameters
@@ -124,10 +125,8 @@ def run_study(parameters, settings, study=StudySettings(), *, progress=None, can
     directions = np.column_stack([np.sin(np.deg2rad(angles)) * math.cos(phi_cut),
                                   np.sin(np.deg2rad(angles)) * math.sin(phi_cut)])
     values = np.linspace(study.start_deg, study.stop_deg, study.count)
-    records = []
-    for i in range(study.count):
-        if cancelled and cancelled():
-            raise StudyCancelled("评估已取消；原结果保留。")
+    def calculate_point(i):
+        check_cancelled(cancelled)
         key = ("scan_theta_deg" if study.scan_axis == "theta" else "scan_phi_deg") if planar else "scan_deg"
         condition = replace(p, **{key: float(values[i])})
         theta = condition.scan_theta_deg if planar else condition.scan_deg
@@ -152,13 +151,12 @@ def run_study(parameters, settings, study=StudySettings(), *, progress=None, can
                    "target_direction_directivity_dbi": 10 * math.log10(directivity) if directivity and directivity > 0 else None,
                    "output_to_nominal_power_ratio": electrical["output_to_nominal_power_ratio"],
                    "max_active_phase_error_deg": electrical["max_active_phase_error_deg"]}
-        records.append({"index": i + 1, "scan_theta_deg": theta, "scan_phi_deg": phi, "seed": settings.seed,
+        return {"index": i + 1, "scan_theta_deg": theta, "scan_phi_deg": phi, "seed": settings.seed,
                         "metrics": metrics, "pattern_db": power_db(power).tolist(),
-                        "ports": ports})
-        if progress:
-            progress(i + 1, study.count)
-    if cancelled and cancelled():
-        raise StudyCancelled("评估已取消；原结果保留。")
+                        "ports": ports}
+    records, execution = ordered_map(calculate_point, range(study.count), workers=workers,
+                                    work_units=study.count*p.elements*len(angles), progress=progress, cancelled=cancelled)
+    execution['scope'] = 'scan_points'
     notes = ["各向同性、无互耦、中心频点理想馈电；物理尺寸暂缓。",
              "指标是指定目标方向的方向性，不是全空间最大方向性、增益、波束指向误差或旁瓣电平。",
              "方向性分母使用全空间功率积分；全失效方向性未定义。",
@@ -168,7 +166,7 @@ def run_study(parameters, settings, study=StudySettings(), *, progress=None, can
     return {"format": "arraylab.electrical_study_result", "schema_version": 1, "app_version": __version__,
             "configuration": config, "runtime": {"numpy": np.__version__, "rng": type(np.random.default_rng(settings.seed).bit_generator).__name__,
                 "seed_rule": "same base seed and realization at every scan point"},
-            "angles_deg": angles.tolist(), "cut_phi_deg": p.cut_phi_deg if planar else 0,
+            "angles_deg": angles.tolist(), "cut_phi_deg": p.cut_phi_deg if planar else 0, "execution": execution,
             "network": network, "records": records, "notes": notes}
 
 

@@ -10,12 +10,12 @@ sparse_resources = [(str(ROOT / "arraylab/sparse2d/resources"), "arraylab/sparse
 desktop = Analysis(
     [str(ROOT / "launch.py")], pathex=[str(ROOT)],
     datas=sparse_resources,
-    hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "arraylab.sparse_smoke", "arraylab.pointing_smoke", "PySide6.QtTest"],
+    hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "arraylab.sparse_smoke", "arraylab.pointing_smoke", "arraylab.multicore_smoke", "PySide6.QtTest"],
     excludes=common, hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
 )
 headless = Analysis(
     [str(ROOT / "launch_cli.py")], pathex=[str(ROOT)],
-    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.sparse_widgets", "arraylab.sparse_smoke", "arraylab.sparse2d.gui", "arraylab.sparse2d.detail_view", "arraylab.smoke", "arraylab.pointing_smoke"],
+    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.sparse_widgets", "arraylab.sparse_smoke", "arraylab.sparse2d.gui", "arraylab.sparse2d.detail_view", "arraylab.smoke", "arraylab.pointing_smoke", "arraylab.multicore_smoke"],
     hooksconfig={"matplotlib": {"backends": ["Agg"]}},
 )
 gui = EXE(PYZ(desktop.pure), desktop.scripts, [], exclude_binaries=True,

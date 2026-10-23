@@ -39,6 +39,7 @@ def parser(planar=False):
     p.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
     p.add_argument("--config", type=Path, help="Versioned analysis JSON or legacy parameter JSON; explicit arguments override it")
+    p.add_argument("--workers", type=int, default=0, help="Calculation workers: 0=auto up to 4, 1=serial, 2..8=bounded parallel for supported independent tasks")
     p.add_argument("--feed-config", type=Path, help="Feed impedance configuration JSON; cannot combine with --config")
     p.add_argument("--feed-network", choices=["corporate", "series", "symmetric_series"], help="Quarter-wave feed impedances; symmetric_series requires an even element count")
     p.add_argument("--feed-input-ohm", type=float, help="Real input resistance (default: 50)")
@@ -248,6 +249,8 @@ def main(argv=None):
         return planar_main(argv)
     try:
         args = parser().parse_args(argv)
+        from .parallel import set_workers
+        set_workers(args.workers)
         if args.plot != "none" and args.output_dir is None:
             raise UsageError("--plot需要同时指定--output-dir。")
         if sys.stdout is None and args.output_dir is None:

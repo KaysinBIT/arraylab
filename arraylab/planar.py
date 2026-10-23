@@ -173,8 +173,9 @@ def load_planar_configuration(path):
     return p, s
 
 
-def design_planar(parameters, settings=FeedSettings()):
+def design_planar(parameters, settings=FeedSettings(), *, workers=None):
     from .planar_pattern import planar_pattern_analysis
+    from .parallel import ordered_map
     validate_planar_design(parameters, settings)
     points = parameters.positions()
     amplitude = planar_amplitudes(parameters, settings)
@@ -193,11 +194,14 @@ def design_planar(parameters, settings=FeedSettings()):
     network.pop("array_parameters")
     network["notes"].append("平面阵馈电按端口编号连接，连接示意不代表实际x-y布线；对称串馈的编号镜像不保证任意坐标的空间镜像。")
     reference = float(np.sum(abs(target)))
-    patterns = {name: planar_pattern_analysis(parameters, points, weights, reference, uv)
-                for name, weights in [("target", target), ("uncompensated", raw), ("output", output)]}
+    names = ['target', 'uncompensated', 'output']
+    values, execution = ordered_map(lambda weights: planar_pattern_analysis(parameters, points, weights, reference, uv),
+                                   [target, raw, output], workers=workers,
+                                   work_units=3*parameters.elements*(61*121+math.ceil(180/parameters.step_deg)))
+    patterns = dict(zip(names, values)); execution['scope'] = 'planar_patterns'
     from .pointing import planar_pointing
     return {"format": "arraylab.planar_electrical_result", "schema_version": 1, "app_version": __version__,
-            "geometry": geometry_payload(parameters), "settings": settings_payload(settings), "network": network,
+            "geometry": geometry_payload(parameters), "settings": settings_payload(settings), "network": network, "execution": execution,
             "electrical": {"metrics": metrics, "patterns": patterns, "pointing": planar_pointing(parameters, settings, patterns)},
             "notes": ["各向同性点源、z=0平面、无互耦；方向性为全空间积分，不是增益或全波结果。",
                       "θ从+z轴量起，φ从+x向+y；切面使用指定φ和有符号θ=-90…90°。",

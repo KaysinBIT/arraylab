@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.11.0，原创源码采用MIT许可。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.12.0，原创源码采用MIT许可。
+
+0.12.0加入有界多核计算：扫描点、平面阵三组方向图、稀疏方案复核可并行。工作台右下角选择自动（最多4路）、单核或2–8路；小任务自动串行，限制底层BLAS嵌套线程。无头使用`--workers`，随机实现及结果顺序保持。[多核范围、资源控制与示例](docs/multicore.md)。
 
 0.11.0在馈电页增加常驻目标波束角及“按目标生成”，支持直线阵θ、规则/任意平面阵θ与φ，也可继续设计稀疏页转入的布局。三种馈电拓扑按目标角综合端口补偿相位，并分别报告有效目标与模型输出峰值。物理尺寸和误差统计继续暂缓。
 
@@ -26,7 +28,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.11.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.12.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -39,7 +41,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.11.0/ArrayLab.
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.11.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.12.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -56,6 +58,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.11.0/ArrayLab.
 | `--include-phase` | DAT文件增加相位列 |
 | `--plot` | `none`、`rectangular`、`polar`或`both`，默认none；需要同时指定输出目录 |
 | `--help`、`--version` | 查看帮助或版本，不启动界面 |
+| `--workers` | 0自动、1单路、2–8指定上限；用于扫描、平面阵方向图及稀疏复核；普通直线阵计算仍串行 |
 
 不指定输出目录时，只向标准输出写一行JSON指标。指定目录时生成：
 
@@ -70,7 +73,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.11.0/ArrayLab.
 
 GUI入口也支持`ArrayLab.exe --headless --output-dir ...`，但Windows窗口版EXE不保证标准输出/错误流可用。脚本、重定向和调度任务应使用`ArrayLab-cli.exe`。
 
-仅安装源码计算功能可使用`pip install .`，基础依赖为NumPy和SciPy；导出PNG另安装`pip install ".[plotting]"`；桌面功能安装`pip install ".[desktop]"`。完整锁定清单包含本次构建与测试工具，并非无头计算的最小依赖清单。
+仅安装源码计算功能可使用`pip install .`，基础依赖为NumPy、SciPy及threadpoolctl；导出PNG另安装`pip install ".[plotting]"`；桌面功能安装`pip install ".[desktop]"`。完整锁定清单包含本次构建与测试工具，并非无头计算的最小依赖清单。
 
 ## 使用
 
@@ -203,7 +206,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.11.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.12.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

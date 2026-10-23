@@ -22,6 +22,8 @@ def main(argv=None):
         parser.add_argument("--scan-phi", dest="scan_phi_deg", type=float, help="Target beam phi, -180..180 deg from +x towards +y")
         parser.add_argument("--cut-phi", dest="cut_phi_deg", type=float, help="Azimuth of signed-theta 2-D cut")
         args = parser.parse_args(argv)
+        from .parallel import requested_workers
+        requested_workers(args.workers)
         if args.config or args.feed_config:
             raise UsageError("平面阵使用--planar-config，不能同时使用直线阵--config或--feed-config。")
         if any(getattr(args, key) is not None for key in ("elements", "spacing", "spacing_unit", "scan_deg")) or args.include_phase:
@@ -41,7 +43,7 @@ def main(argv=None):
             values.update(geometry="arbitrary", coordinates=read_coordinates_csv(args.coordinates))
         p = PlanarParameters(**values); p.validate()
         settings = feed_settings_from_args(args, p.array_parameters(), settings)
-        report = design_planar(p, settings)
+        report = design_planar(p, settings, workers=args.workers)
         if args.output_dir is not None: export_planar_directory(args.output_dir, report, args.plot)
         emit({"status":"ok","mode":"headless_planar","planar":report,
               "output_directory":str(args.output_dir.absolute()) if args.output_dir else None}, sys.stdout)

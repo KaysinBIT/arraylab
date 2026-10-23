@@ -5,7 +5,8 @@ import warnings
 import numpy as np
 from scipy.signal import windows
 from .core import (Config,admissible_pairs,amplitude_minimax,available_mask,
-    evaluate_result,joint_matrix)
+    evaluate_layouts,evaluation_domains,joint_matrix)
+from ..parallel import requested_workers,check_cancelled
 from .elements import build_element
 
 METHODS={'minimax':'副瓣优化 LP','taylor':'Taylor','chebyshev':'Chebyshev',
@@ -63,8 +64,9 @@ def window_weights(c,integer,settings):
         'reference_sll_is_not_sparse_psl_guarantee':True}
 
 
-def add_weighting(bundle,source_index,settings=Weighting(),progress=None):
+def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,workers=None,cancelled=None):
     """Return a new bundle; append one result and preserve every source result."""
+    workers=requested_workers(workers);check_cancelled(cancelled)
     c=Config(**bundle['config']).validate(); settings.validate(c)
     element=build_element(c,bundle.get('element_pattern'))
     if type(source_index) is not int or not 0<=source_index<len(bundle['results']):
@@ -103,6 +105,7 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None):
         'weights':weights,'notes':'Post-weighting: original positions/count preserved; original result retained. Window SLL is a reference, not a guarantee on sparse PSL.',
         'history':[],'weighting':metadata,'seconds':time.perf_counter()-start}
     tell('Validate weighted pattern on dense and shifted grids')
-    evaluate_result(result,c,element=element)
-    return {**bundle,'results':[*bundle['results'],result],'last_weighted_index':len(bundle['results']),
+    evaluated,execution=evaluate_layouts([result],c,evaluation_domains(c),element,workers=workers,cancelled=cancelled)
+    result=evaluated[0];execution['scope']='sparse_weighted_validation'
+    return {**bundle,'results':[*bundle['results'],result],'last_weighted_index':len(bundle['results']),'execution':execution,
             'model':{**bundle['model'],'post_weighting':'Uses calculated config snapshot; replaces amplitudes on the selected support; positive weights with separate DR cap; phase steering and positions unchanged'}}

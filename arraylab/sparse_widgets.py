@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, Q
     QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTabWidget, QScrollArea, QSplitter,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QDialog, QTextBrowser)
 from . import __version__
+from .parallel import ComputationCancelled, requested_workers
 from .sparse2d.core import Config, run, available_mask
 from .sparse2d.weighting import METHODS, Weighting, add_weighting
 from .sparse2d.elements import MODELS, build_element, write_example_csv
@@ -26,8 +27,7 @@ from .sparse2d.plots import (style, draw_detail_plot, draw_case_results, draw_we
 from .sparse_bridge import planar_from_sparse
 
 
-class SparseCancelled(Exception):
-    pass
+SparseCancelled = ComputationCancelled
 
 
 class SparseWorker(QThread):
@@ -36,6 +36,7 @@ class SparseWorker(QThread):
     def __init__(self, config=None, weighting=None, parent=None):
         super().__init__(parent)
         self.config, self.weighting = config, weighting
+        self.workers = requested_workers()
         self.result = None; self.error = None; self.cancelled = False
 
     def tell(self, message):
@@ -44,7 +45,7 @@ class SparseWorker(QThread):
 
     def run(self):
         try:
-            self.result = run(self.config, self.tell) if self.weighting is None else add_weighting(*self.weighting, progress=self.tell)
+            self.result = run(self.config, self.tell, workers=self.workers, cancelled=self.isInterruptionRequested) if self.weighting is None else add_weighting(*self.weighting, progress=self.tell, workers=self.workers, cancelled=self.isInterruptionRequested)
             self.tell('完成')
         except SparseCancelled: self.cancelled = True
         except Exception as exc: self.error = f'{type(exc).__name__}: {exc}'
@@ -337,7 +338,9 @@ class SparsePanel(QWidget):
         try: dirty = self.config_from_inputs() != Config(**bundle['config'])
         except ValueError: dirty = True
         suffix = '当前输入尚未综合，本次结果仍对应已计算参数。' if dirty else '结果与当前参数一致。'
-        self.set_state(f"已完成 {len(bundle['results'])} 个方案、{len(bundle['scenarios'])} 个工况；" + suffix)
+        execution=bundle.get('execution',{})
+        resources=f" · 复核{execution['workers']}路" if execution.get('scope')=='sparse_layout_validation' else ''
+        self.set_state(f"已完成 {len(bundle['results'])} 个方案、{len(bundle['scenarios'])} 个工况{resources}；" + suffix)
         self.host.statusBar().showMessage('稀疏结果已更新；选中方案可送入平面阵电气设计。')
         if self._job_kind == 'weight': self.view.setCurrentIndex(self.view.findData('weights')); self.tabs.setCurrentIndex(0)
 

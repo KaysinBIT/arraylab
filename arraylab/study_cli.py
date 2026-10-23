@@ -21,6 +21,7 @@ def main(argv=None):
         source.add_argument("--feed-config", type=Path, help="Saved linear feed electrical design")
         source.add_argument("--planar-config", type=Path, help="Saved rectangular/arbitrary planar design")
         parser.add_argument("--study-count", dest="count", type=int, help="2..200 scan points, inclusive endpoints")
+        parser.add_argument("--workers", type=int, default=0, help="0=auto up to 4; 1=serial; 2..8=bounded parallel scan points")
         parser.add_argument("--scan-axis", choices=["theta", "phi"], help="phi is available only for planar arrays")
         parser.add_argument("--scan-start", dest="start_deg", type=float)
         parser.add_argument("--scan-stop", dest="stop_deg", type=float)
@@ -42,7 +43,7 @@ def main(argv=None):
         for key in values:
             if getattr(args, key) is not None:
                 values[key] = getattr(args, key)
-        report = run_study(p, settings, StudySettings(**values))
+        report = run_study(p, settings, StudySettings(**values), workers=args.workers)
         if args.output_dir is not None:
             export_study_directory(args.output_dir, report, plot=args.plot == "all")
         emit({"status": "ok", "mode": "headless_scan_study", "study": report,

@@ -1,6 +1,6 @@
 """Independent narrowband planar-array experiment. Coordinates are in wavelengths.
 
-No imports from ArrayLab. Symmetric groups allow real-valued LP constraints.
+Symmetric groups allow real-valued LP constraints; ArrayLab bounds validation parallelism.
 """
 from dataclasses import asdict, dataclass
 import time
@@ -11,6 +11,7 @@ from .constraints import feasible_groups,pair_conflicts,spacing_stats
 from .scenarios import LIGHT_MM_GHZ,case_config,scenarios
 from .elements import build_element,validate_element_config
 from .phase_quantization import validate_bits,evaluate_quantization,sampled_peak,quantized_af
+from ..parallel import ordered_map, requested_workers, check_cancelled
 
 
 @dataclass(frozen=True)
@@ -405,13 +406,14 @@ def response_cut_width(result,c,case,element,along):
     return float(hi-lo)
 
 
-def evaluate_result(result,c,domains=None,element=None):
+def evaluate_result(result,c,domains=None,element=None,*,cancelled=None):
     """Evaluate one fixed layout with the same protocol as the synthesis run."""
     if domains is None: domains=evaluation_domains(c)
     element=build_element(c) if element is None else element
     available=available_mask(c)
     per_case=[]
     for case,cc,grids in domains:
+        check_cancelled(cancelled)
         amplitudes=[]; peaks=[]; af_peaks=[]; total_peaks=[]; main_peaks=[]; main_locations=[]
         response_at_scan=element.steering_response(case)
         for grid_index,uv in enumerate(grids):
@@ -468,13 +470,27 @@ def evaluate_result(result,c,domains=None,element=None):
         'aperture_x_lambda':float(np.ptp(result['xy'][:,0])),
         'aperture_y_lambda':float(np.ptp(result['xy'][:,1])),
         **{key:value for key,value in ca.items() if key not in ('lags','multiplicity')}}
-    evaluate_quantization(result,c,domains,element)
+    evaluate_quantization(result,c,domains,element,cancelled=cancelled)
     return result
 
 
-def run(c=Config(), progress=None):
+def evaluate_layouts(results,c,domains,element,*,workers=None,progress=None,cancelled=None):
+    # Prime the dipole normalization cache before sharing this read-only object.
+    for case,_,_ in domains: element.steering_response(case)
+    units=sum(len(row['xy']) for row in results)*sum(len(grid) for _,_,grids in domains for grid in grids)
+    def evaluate(row):return evaluate_result(dict(row),c,domains,element,cancelled=cancelled)
+    rows,execution=ordered_map(evaluate,results,workers=workers,work_units=units,progress=progress,cancelled=cancelled)
+    execution['scope']='sparse_layout_validation'
+    return rows,execution
+
+
+def run(c=Config(), progress=None, *, workers=None, cancelled=None):
+    workers=requested_workers(workers)
     c.validate()
-    tell=progress or (lambda message:None)
+    check_cancelled(cancelled)
+    def tell(message):
+        check_cancelled(cancelled)
+        if progress:progress(message)
     integer,xy,_=candidates(c)
     pairs=admissible_pairs(c)
     available=available_mask(c)
@@ -533,10 +549,9 @@ def run(c=Config(), progress=None):
     add('L1 weighted solution',group_weights=full,notes='Variable support on the documented feasible pool; shared positive taper across cases; not equal-budget comparison',seconds=lp_seconds)
     tell('Independent dense and shifted grids')
     domains=evaluation_domains(c)
-    for result in raw:
-        tell('Validate '+result['name'])
-        evaluate_result(result,c,domains,element)
-    return {'config':asdict(c),'results':raw,'lp':lp,'amplitude_lp':amplitude_info,
+    raw,execution=evaluate_layouts(raw,c,domains,element,workers=workers,cancelled=cancelled,
+        progress=lambda done,total:tell(f'Validate {done}/{total}'))
+    return {'config':asdict(c),'results':raw,'lp':lp,'amplitude_lp':amplitude_info,'execution':execution,
             'element_pattern':element.snapshot,'scenarios':scenarios(c),'spacing':{**packing,'minimum_lambda_ref':c.min_spacing,
                 'minimum_mm':c.min_spacing*LIGHT_MM_GHZ/c.reference_ghz,'lp_pool_pair_indices':pool.tolist()},
             'candidate_counts':{'total':len(xy),'available':int(available.sum()),'forbidden':int((~available).sum()),'admissible_pair_elements':2*len(pairs)},

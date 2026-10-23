@@ -469,6 +469,8 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_sparse(app, window, output, report, check)
             from .pointing_smoke import exercise_pointing
             exercise_pointing(app, window, output, report, check)
+            from .multicore_smoke import exercise_multicore
+            exercise_multicore(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

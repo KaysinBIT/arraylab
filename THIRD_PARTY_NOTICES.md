@@ -8,6 +8,7 @@ ArrayLab原创代码采用MIT许可，第三方组件继续适用各自的许可
 | PySide6 Essentials 与 Shiboken6 | [Qt for Python许可说明](https://doc.qt.io/qtforpython-6/)、[pyside-setup源代码](https://code.qt.io/cgit/pyside/pyside-setup.git/)、[Qt发布源码](https://download.qt.io/official_releases/qt/) |
 | NumPy | [源代码与许可](https://github.com/numpy/numpy) |
 | SciPy | [源代码与许可](https://github.com/scipy/scipy) |
+| threadpoolctl | [线程数控制与BSD-3-Clause许可](https://github.com/joblib/threadpoolctl) |
 | Matplotlib | [源代码与许可](https://github.com/matplotlib/matplotlib) |
 | PyInstaller 构建工具 | [源代码与许可例外](https://github.com/pyinstaller/pyinstaller) |
 
@@ -19,4 +20,4 @@ PCAAD7Manual.pdf仅用作用户提供的需求参考，不打包到运行包或�
 
 ## 二维稀疏模块来源
 
-`arraylab/sparse2d`由用户工作区的MIT许可Sparse2D 1.3.0迁入；原计算模块保留，仅调整包内导入。迁移及适配代码沿用本仓库MIT许可。未包含原运行数据、商业说明书或第三方训练模型。数值依赖仍为已列出的NumPy、SciPy、Matplotlib和PySide6，未新增外部数值依赖。迁移范围见`docs/sparse-migration.md`。
+`arraylab/sparse2d`由用户工作区的MIT许可Sparse2D 1.3.0迁入；0.9.0迁移时原计算模块保留，仅调整包内导入。0.12.0增加有界并行复核和取消检查，优化算法与数学定义保持。迁移及适配代码沿用本仓库MIT许可。未包含原运行数据、商业说明书或第三方训练模型。0.12.0新增已列出的threadpoolctl，用于控制数值库线程数。迁移范围见`docs/sparse-migration.md`。

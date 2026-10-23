@@ -152,7 +152,7 @@ class PlanarPanel(QWidget):
             try:self.electrical.phase_mode.setCurrentIndex(self.electrical.phase_mode.findData("scan"))
             finally:self._changing=False
         self.report=report;self.export_button.setEnabled(True)
-        self.state.setText(f"已生成：{p.geometry} · {p.elements}阵元 · {s.topology} · {self.electrical.phase_mode.currentText()}")
+        self.state.setText(f"已生成：{p.geometry} · {p.elements}阵元 · {s.topology} · {self.electrical.phase_mode.currentText()} · {report['execution']['workers']}路计算")
         self.window.statusBar().showMessage(self.state.text())
         if self.view.currentData() not in ("ports","sections") and self.settings_tabs.isVisible():self.toggle_controls()
         self.redraw()

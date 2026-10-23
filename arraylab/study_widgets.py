@@ -12,6 +12,7 @@ from .planar import PlanarParameters
 from .study import (StudySettings, run_study, validate_study, StudyCancelled,
                     load_study_configuration, save_study_configuration, export_study_directory)
 from .study_plot import draw_study
+from .parallel import requested_workers
 
 
 class ScanWorker(QThread):
@@ -20,12 +21,13 @@ class ScanWorker(QThread):
     def __init__(self, parameters, settings, study, parent=None):
         super().__init__(parent)
         self.parameters, self.settings, self.study = parameters, settings, study
+        self.workers = requested_workers()
         self.result = None; self.error = None; self.cancelled = False
 
     def run(self):
         try:
             self.result = run_study(self.parameters, self.settings, self.study,
-                                    progress=self.progress.emit, cancelled=self.isInterruptionRequested)
+                                    progress=self.progress.emit, cancelled=self.isInterruptionRequested, workers=self.workers)
         except StudyCancelled:
             self.cancelled = True
         except Exception as exc:
@@ -153,7 +155,7 @@ class ScanStudyDialog(QDialog):
                        ("target_direction_directivity_dbi", "目标方向 D/dBi"), ("target_direction_level_db", "目标方向幅度/dB"),
                        ("output_to_nominal_power_ratio", "输出/名义功率"), ("max_active_phase_error_deg", "最大相位偏差°")]
             self.fill_table(self.table, columns, [{**row, **row["metrics"]} for row in self.report["records"]])
-            self.redraw(); self.status.setText(f"已完成{len(self.report['records'])}个扫描点；指标、相位表与导出均对应此快照。")
+            self.redraw(); self.status.setText(f"已完成{len(self.report['records'])}个扫描点 · {self.report['execution']['workers']}路计算；指标、相位表与导出均对应此快照。")
         worker.deleteLater(); self.set_busy(False)
         if self._close_pending:
             super().reject()

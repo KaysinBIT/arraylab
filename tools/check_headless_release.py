@@ -173,6 +173,10 @@ def main():
         validated = json.loads(run("--sparse", "validate", "--config", saved_native).stdout)
         assert validated["ok"] and validated["request"]["config"]["seed"] == 2**32 - 1
         checks.append("native_sparse_toolbar_saved_settings_accepted_by_CLI_with_uint32_seed")
+        parallel_study=json.loads(run('--study-config',smoke/'parallel-study.json','--workers','2').stdout)['study']
+        assert same_numbers(parallel_study,gui_report['parallel_study_result'])
+        checks.append('parallel_desktop_scan_and_explicit_headless_worker_limit_match')
+        report['multicore_performance']=gui_report['multicore_performance']
         for kind, flag, key in [("linear", "--feed-config", "feed_network"), ("planar", "--planar-config", "planar")]:
             actual = json.loads(run(flag, smoke / f"pointing-{kind}.json").stdout)[key]
             assert same_numbers(actual, gui_report["pointing_results"][kind])

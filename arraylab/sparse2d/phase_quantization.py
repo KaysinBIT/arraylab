@@ -68,14 +68,16 @@ def _choose_peak(items,center):
     return maximum,chosen[1]
 
 
-def evaluate_quantization(result,c,domains,element):
+def evaluate_quantization(result,c,domains,element,*,cancelled=None):
     """Replay only. Ideal optimization and ideal metrics remain explicitly separate."""
     from .core import db,scan_uv,sidelobe_mask
+    from ..parallel import check_cancelled
     if not c.phase_bits:
         result['phase_quantization']={'enabled':False,'bits':0}
         return
     rows=[]
     for case,cc,grids in domains:
+        check_cancelled(cancelled)
         center=scan_uv(cc); phases=excitation_phases(result['xy'],case,c.phase_bits)
         gain=float(abs(np.sum(result['weights']*np.exp(1j*np.deg2rad(phases['error_deg'])))))
         valid=gain>1e-8
