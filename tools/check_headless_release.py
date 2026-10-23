@@ -87,6 +87,12 @@ def main():
             feed = json.loads(run("--feed-config", smoke / f"feed-{topology}.json").stdout)["feed_network"]
             assert feed == gui_report["feed_results"][topology]
             checks.append(f"{topology}_feed_impedance_GUI_and_headless_EXE_match")
+        electrical = json.loads(run("--feed-config", smoke / "feed-electrical.json").stdout)["feed_network"]
+        assert electrical == gui_report["electrical_result"]
+        checks.append("weighted_compensated_perturbed_electrical_GUI_and_CLI_match")
+        planar = json.loads(run("--planar-config", smoke / "planar-gui.json").stdout)["planar"]
+        assert planar == gui_report["planar_result"]
+        checks.append("arbitrary_planar_GUI_and_headless_EXE_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

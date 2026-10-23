@@ -238,7 +238,9 @@ class PatternPlot(QWidget):
                     ax.plot(np.deg2rad([a, b]) if polar else [a, b],
                             [10 * math.log10(.5) - (floor if polar else 0)] * 2,
                             "--", color="#7a8b9a", lw=1)
-        ax.legend(loc="lower left" if not polar else "upper left", fontsize=8, framealpha=.92)
+        legend = ax.legend(loc="lower left" if not polar else "upper left", fontsize=8, framealpha=.92)
+        for text in legend.get_texts():
+            text.set_parse_math(False)
         ax.tick_params(labelsize=9)
         self.canvas.draw_idle()
 

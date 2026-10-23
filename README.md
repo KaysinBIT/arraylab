@@ -1,12 +1,12 @@
 # ArrayLab 阵列分析
 
-用于均匀直线阵分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.6.0，原创源码采用MIT许可。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.7.0，原创源码采用MIT许可。
 
-桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.6.0新增“1分2后对称串馈”，与原并联、单臂串行一起支持λ/4变换线综合、连接图、设置保存和无头导出。阵列分析模型仍为均匀直线阵；馈电设计保持独立。
+桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.7.0完成相位补偿、幅度加权、自定义激励、误差/失效/量化分析和设计比较，并加入规则矩形及任意坐标平面阵、二维切面与可旋转三维阵因子。物理尺寸设计按用户要求暂缓。
 
 ![ArrayLab工作台](docs/images/workbench.png)
 
-[下一阶段计划](ROADMAP.md) · [验证记录](docs/validation.md) · [参与开发](CONTRIBUTING.md)
+[任务计划状态](ROADMAP.md) · [电气设计](docs/electrical-design.md) · [平面阵](docs/planar-arrays.md) · [验证记录](docs/validation.md) · [参与开发](CONTRIBUTING.md)
 
 功能分析参考PCAAD说明书，参考PDF不随仓库分发；界面风格参考[CST官方设计环境说明](https://www.3ds.com/products/simulia/cst-studio-suite/electromagnetic-design-environment)及[官方宣传册第3页](https://www.3ds.com/assets/invest/2024-03/simulia-cst-studio-suite-brochure.pdf)。本项目为独立实现。
 
@@ -24,7 +24,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.6.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.7.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
 
 ## 无头运行
 
@@ -37,7 +37,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.6.0/ArrayLab.e
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.6.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.7.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -98,9 +98,9 @@ python -m arraylab --headless --config "examples/analysis.json" --scan-deg 30 --
 
 覆盖仅作用于本次运行，不改动方案文件。详见[完整格式、兼容策略与失败行为](docs/analysis-format.md)。
 
-## 馈电网络阻抗设计
+## 馈电网络电气设计
 
-从“分析 → 馈电网络／阻抗设计”或F6进入。支持并联树形、串行逐级抽头、1分2后对称串馈，按等功率分配计算各支路输入阻抗及λ/4变换线特性阻抗。输入端、内部节点和阵元负载默认50 Ω，均可编辑。
+从“分析 → 馈电网络／电气设计”或F6进入。支持并联树形、串行逐级抽头、1分2后对称串馈，按目标幅度平方分配功率，计算各支路阻抗及λ/4变换线特性阻抗。输入端、内部节点和阵元负载默认50 Ω，均可编辑。
 
 ![馈电网络阻抗设计](docs/images/feed-series.png)
 
@@ -110,7 +110,11 @@ python -m arraylab --headless --config "examples/analysis.json" --scan-deg 30 --
 
 ![1分2后对称串馈](docs/images/feed-symmetric.png)
 
-可保存/加载馈电设置，导出JSON、CSV与SVG。修改输入不改变已有设计快照；本阶段仅进行中心频点、纯电阻负载、无损T型网络的阻抗综合。扫描相位、相位均衡、实际隔离、损耗、基板、线宽与物理尺寸未设计；现有理想阵列方向图不代表该馈电网络的实际辐射结果。
+在“幅相与加权”选择扫描/正侧向补偿及均匀、Chebyshev、Taylor或自定义CSV；在“误差与失效”设置量化位数、幅相误差、随机种子和失效端口。“方向图核对”并列目标、未经补偿和模型输出，使用相同参考幅度。
+
+![电气方向图核对](docs/images/electrical.png)
+
+支持保存/加载、JSON/CSV/SVG及无头PNG导出，保留最近5项可命名、可比较的设计记录。修改输入不改变已有快照。当前为中心频点、纯电阻、无损T型网络与理想匹配相移；实际隔离、器件损耗、基板和物理尺寸未设计。原有主工作台均匀阵基准与馈电模型结果分开显示。详见[电气设计范围和输入格式](docs/electrical-design.md)。
 
 ```powershell
 python -m arraylab --headless --elements 8 --feed-network corporate --output-dir results/feed-parallel
@@ -118,11 +122,24 @@ python -m arraylab --headless --feed-config examples/feed-series.json --output-d
 python -m arraylab --headless --feed-network symmetric_series --elements 8 --output-dir results/feed-symmetric
 ```
 
-`--feed-input-ohm`、`--feed-junction-ohm`和`--feed-load-ohm`设置阻抗；`--feed-min-line-ohm`与`--feed-max-line-ohm`设置提示范围。`--feed-config`与原有`--config`互斥。详见[计算公式、拓扑定义与导出约定](docs/feed-impedance.md)。
+`--feed-input-ohm`、`--feed-junction-ohm`和`--feed-load-ohm`设置阻抗；`--feed-min-line-ohm`与`--feed-max-line-ohm`设置提示范围。`--feed-config`与原有`--config`互斥。详见[阻抗公式与拓扑](docs/feed-impedance.md)及[电气模式、CSV与兼容约定](docs/electrical-design.md)。
+
+## 规则与任意坐标平面阵
+
+从“分析 → 平面阵／电气设计”或F7进入，本页参数独立于右侧直线阵输入。支持规则Nx×Ny阵及`element,x,y`坐标CSV，最多200阵元、最大两阵元距离40λ。可查看坐标、二维切面、上半球图、端口/阻抗表及可鼠标旋转的全空间三维方向图。
+
+![平面阵全空间方向图](docs/images/planar-3d.png)
+
+```powershell
+python -m arraylab --headless --planar-config examples/planar-rectangular.json --output-dir results/planar --plot all
+python -m arraylab --headless --planar --coordinates examples/planar-coordinates.csv --scan-theta 33 --scan-phi 47 --cut-phi 47 --output-dir results/arbitrary --plot all
+```
+
+扫描θ从+z轴量起，φ从+x朝+y；三维图为各向同性点源阵因子，前后半空间对称，不是全波或实体模型。方向性按全空间积分，非相干峰使用数值搜索并标记估计性质，不承诺唯一主瓣。[平面阵范围、角度及导出说明](docs/planar-arrays.md)。
 
 ## 首版范围与坐标
 
-- 仅均匀直线阵、相同各向同性单元、均匀幅度、无互耦、无地平面。阵元数1–200。
+- 主工作台保留原均匀直线阵基准；馈电电气页支持幅相加权，平面阵页支持二维坐标。均采用各向同性点源、无互耦、无地平面，最多200阵元。
 - 阵列沿x轴，阵列中心为相位参考。显示x-z前半空间切面，θ从+z朝+x为正，显示范围−90°至90°。
 - 各向同性直线阵在三维空间绕x轴旋转对称，图中的单个峰不意味着三维只有一个笔形波束；前后半空间具有对应辐射。
 - 方向性D使用全空间总辐射功率，不是二维切面积分，也不等于包含损耗的增益。
@@ -132,7 +149,7 @@ python -m arraylab --headless --feed-network symmetric_series --elements 8 --out
 - 方向图按理论峰值归一化0 dB；保存数值零点以−300 dB表示。该数值只是有限精度下限，零点的相位不作物理解释。显示下限不改变保存的数据。
 - 导入文件只显示数据，不由单个切面反推方向性，也不假定其角度定义与当前模型相同。允许的导入角度范围为−180°至180°，角度必须严格递增。
 
-尚未实现：非均匀幅度、非各向同性单元、互耦、任意位置优化、二维阵列、三维方向图、复阻抗匹配与全波网络求解、包含曲线及布局的完整项目持久化。
+尚未实现或暂缓：物理馈线尺寸、非各向同性/极化单元、互耦、任意位置自动优化、复阻抗匹配与全波求解、蒙特卡洛统计平均、包含窗口布局的完整项目持久化。
 
 ## 计算与核对
 
@@ -147,7 +164,7 @@ python -m arraylab --headless --feed-network symmetric_series --elements 8 --out
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.6.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.7.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

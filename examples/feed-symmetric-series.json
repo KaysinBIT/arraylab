@@ -1,6 +1,6 @@
 {
   "format": "arraylab.feed_impedance",
-  "schema_version": 1,
+  "schema_version": 2,
   "array_parameters": {
     "elements": 8,
     "frequency_ghz": 3.0,
@@ -15,6 +15,17 @@
     "junction_ohm": 50.0,
     "load_ohm": 50.0,
     "min_line_ohm": 20.0,
-    "max_line_ohm": 120.0
+    "max_line_ohm": 120.0,
+    "phase_mode": "scan",
+    "weighting": "uniform",
+    "sidelobe_db": 45.0,
+    "taylor_nbar": 4,
+    "custom_amplitudes": [],
+    "custom_phases_deg": [],
+    "phase_bits": 0,
+    "amplitude_error_db": 0.0,
+    "phase_error_deg": 0.0,
+    "failed_ports": [],
+    "seed": 0
   }
 }

@@ -38,7 +38,7 @@ def diagram_svg(report):
              '<rect width="100%" height="100%" fill="#f7fafc"/>',
              '<g font-family="Arial, sans-serif" font-size="13" fill="#25465c">',
              f'<text x="20" y="26" font-size="18">{title} / {n} ports / {report["array_parameters"]["frequency_ghz"]:g} GHz</text>',
-             '<text x="20" y="49">All sections: 90 deg at design frequency. Connection diagram only; not to scale.</text>']
+             '<text x="20" y="49">Divider: 90 deg. Terminal phase correction: port table. Not to scale.</text>']
     for line in report["sections"]:
         x1, y1 = positions[line["parent"]]
         x2, y2 = positions[line["child"]]

@@ -5,9 +5,9 @@ import sys
 import traceback
 
 import numpy as np
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QPoint
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog, QLineEdit
+from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog, QLineEdit, QDialog, QTableWidget, QInputDialog
 
 from .dataio import read_pattern
 from .configuration import load_configuration
@@ -237,7 +237,7 @@ def schedule_smoke_test(app, window, output: Path):
             check(window.grab().save(str(output / "feed-series.png")), "feed_series_screenshot_saved")
             feed.topology.setCurrentIndex(feed.topology.findData("symmetric_series"))
             click(feed.design_button)
-            check(feed.report["metrics"]["line_max_ohm"] == 100 and feed.ports.columnCount() == 7,
+            check(feed.report["metrics"]["line_max_ohm"] == 100 and feed.ports.horizontalHeaderItem(feed.ports.columnCount() - 1).text() == "镜像端口",
                   "symmetric_series_impedances_and_mirror_columns")
             check(feed.report["routing"]["left_ports"] == [4, 3, 2, 1]
                   and feed.report["routing"]["right_ports"] == [5, 6, 7, 8],
@@ -283,6 +283,166 @@ def schedule_smoke_test(app, window, output: Path):
                   "symmetric_series_result_export")
             app.processEvents()
             check(window.grab().save(str(output / "feed-symmetric.png")), "symmetric_series_screenshot_saved")
+            electrical = feed.electrical
+            window.phase_mode.setCurrentIndex(1); window.inputs["scan_deg"].setText("30")
+            feed.settings_tabs.setCurrentIndex(1)
+            electrical.phase_mode.setCurrentIndex(electrical.phase_mode.findData("scan"))
+            electrical.weighting.setCurrentIndex(electrical.weighting.findData("taylor"))
+            electrical.fields["sidelobe_db"].setText("30")
+            click(feed.design_button)
+            metrics = feed.report["electrical"]["patterns"]["output"]["metrics"]
+            check(abs(metrics["main_lobe_angle_deg"] - 30) < 1e-7 and feed.report["electrical"]["metrics"]["max_active_phase_error_deg"] < 1e-9,
+                  "taylor_weighted_scan_compensation_reaches_target")
+            feed.result_tabs.setCurrentIndex(3)
+            check(len(feed.pattern_plot.datasets) == 3, "electrical_target_raw_output_patterns_displayed")
+            feed.result_tabs.setCurrentIndex(2)
+            if not feed.settings_tabs.isVisible():
+                click(feed.toggle_settings)
+            previewed = []
+            def accept_preview():
+                modal = QApplication.activeModalWidget()
+                if isinstance(modal, QDialog):
+                    table = modal.findChild(QTableWidget)
+                    if table:
+                        previewed.append(table.rowCount())
+                    modal.accept()
+            QTimer.singleShot(200, accept_preview)
+            click(electrical.preview_button)
+            check(previewed == [8], "electrical_input_preview_dialog")
+            from .excitation import excitation_csv
+            dialog_path = output.resolve() / "custom-excitation.csv"
+            dialog_path.write_text(excitation_csv([1,2,3,4,4,3,2,1], [5,-5,0,0,0,0,-5,5]), encoding="utf-8")
+            QTimer.singleShot(200, accept_file_dialog)
+            click(electrical.import_button)
+            check(electrical.weighting.currentData() == "custom" and len(electrical.custom_amplitudes) == 8,
+                  "custom_excitation_import_dialog")
+            previous_values = electrical.custom_amplitudes
+            invalid_csv = output / "invalid-excitation.csv"; invalid_csv.write_text("element,amplitude,phase_deg\n1,1,0\n")
+            try:
+                electrical.import_path(invalid_csv)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("incomplete_excitation_imported")
+            check(electrical.custom_amplitudes == previous_values, "bad_excitation_preserves_previous_inputs")
+            click(feed.design_button)
+            electrical.fields["phase_bits"].setText("3")
+            electrical.fields["amplitude_error_db"].setText("0.5")
+            electrical.fields["phase_error_deg"].setText("2")
+            electrical.fields["seed"].setText("23"); electrical.failed.setText("2")
+            click(feed.design_button)
+            first_realization = feed.report
+            click(feed.design_button)
+            check(feed.report == first_realization and feed.report["ports"][1]["output_amplitude"] == 0
+                  and feed.report["ports"][1]["output_phase_deg"] is None,
+                  "seeded_error_quantization_and_matched_failure_reproducible")
+            check(len(feed.history) == 5, "electrical_history_bounded_at_five")
+            feed.history_selection.setCurrentIndex(0)
+            selected_report = feed.report
+            feed.compare_history.setChecked(True)
+            check(len(feed.pattern_plot.datasets) == 5 and feed.report is feed.history[0]["report"],
+                  "electrical_history_selection_drives_plot_and_metrics")
+            def name_history():
+                modal = QApplication.activeModalWidget()
+                if isinstance(modal, QInputDialog):
+                    modal.setTextValue("电气验证记录"); modal.accept()
+            QTimer.singleShot(150, name_history)
+            feed.rename_history()
+            check(feed.history[0]["label"] == "电气验证记录", "electrical_history_label_edit")
+            window.inputs["scan_deg"].setText("15")
+            feed.export_path(output / "electrical-selected-export")
+            check(json.loads((output / "electrical-selected-export/feed-network.json").read_text(encoding="utf-8")) == selected_report,
+                  "electrical_export_follows_selected_history")
+            feed.export_history_path(output / "electrical-comparison.json")
+            comparison = json.loads((output / "electrical-comparison.json").read_text(encoding="utf-8"))
+            check(len(comparison["records"]) == 5 and comparison["records"][0]["report"] == selected_report,
+                  "electrical_comparison_export_contains_full_snapshots")
+            window.inputs["scan_deg"].setText("30")
+            feed.compare_history.setChecked(False)
+            click(feed.design_button)
+            dialog_path = output.resolve() / "feed-electrical.json"
+            dialog_path.unlink(missing_ok=True)
+            QTimer.singleShot(200, accept_file_dialog)
+            click(feed.save_button)
+            report["electrical_result"] = feed.report
+            check(dialog_path.exists(), "electrical_settings_save_dialog")
+            if feed.settings_tabs.isVisible():
+                click(feed.toggle_settings)
+            feed.result_tabs.setCurrentIndex(3)
+            check(not feed.settings_tabs.isVisible(), "electrical_settings_collapse_for_plot")
+            app.processEvents()
+            check(window.grab().save(str(output / "electrical.png")), "electrical_workbench_screenshot")
+            line_parameters = window.read_parameters()
+            click(window.planar_button)
+            planar = window.planar_panel
+            check(window.tabs.currentIndex() == 5 and len(planar.report["network"]["ports"]) == 16,
+                  "planar_ribbon_opens_rectangular_design")
+            check(window.read_parameters() == line_parameters, "planar_parameters_independent_of_line_array")
+            planar.geometry_fields["scan_theta_deg"].setText("33")
+            planar.geometry_fields["scan_phi_deg"].setText("47")
+            planar.geometry_fields["cut_phi_deg"].setText("47")
+            click(planar.design_button)
+            pm = planar.report["electrical"]["patterns"]["output"]["metrics"]
+            check(abs(pm["representative_peak_theta_deg"] - 33) < 1e-8 and abs(pm["representative_peak_phi_deg"] - 47) < 1e-8,
+                  "rectangular_scan_theta_phi_compensation")
+            for name in ("cut", "map", "3d"):
+                planar.view.setCurrentIndex(planar.view.findData(name)); app.processEvents()
+                planar.canvas.draw()
+                check(bool(planar.figure.axes) and (name != "3d" or planar.figure.axes[0].name == "3d"),
+                      f"planar_{name}_view_renders")
+                if name == "3d":
+                    axes = planar.figure.axes[0]; before_view = (axes.azim, axes.elev)
+                    box = axes.get_window_extent()
+                    point = QPoint(int((box.x0 + box.x1) / 2), int(planar.canvas.height() - (box.y0 + box.y1) / 2))
+                    QTest.mousePress(planar.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point)
+                    QTest.mouseMove(planar.canvas, point + QPoint(45,20), 30)
+                    QTest.mouseRelease(planar.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point + QPoint(45,20))
+                    app.processEvents()
+                    check(before_view != (axes.azim, axes.elev), "planar_3d_mouse_rotation")
+            if not planar.settings_tabs.isVisible(): click(planar.toggle_settings)
+            planar.settings_tabs.setCurrentIndex(0)
+            dialog_path = output.resolve() / "arbitrary-coordinates.csv"
+            dialog_path.write_text("element,x,y\n1,-1,-0.3\n2,-0.3,0.6\n3,0.2,-0.5\n4,0.8,0.7\n5,0.5,0.1\n6,-0.7,-0.8\n", encoding="utf-8")
+            QTimer.singleShot(200, accept_file_dialog)
+            click(planar.import_coordinates_button)
+            check(planar.geometry.currentData() == "arbitrary" and len(planar.coordinates) == 6,
+                  "arbitrary_planar_coordinate_import_dialog")
+            click(planar.design_button)
+            arbitrary_report = planar.report
+            dialog_path = output.resolve() / "planar-gui.json"
+            dialog_path.unlink(missing_ok=True)
+            QTimer.singleShot(200, accept_file_dialog)
+            click(planar.save_button)
+            check(dialog_path.exists(), "planar_settings_save_dialog")
+            planar.geometry_fields["scan_theta_deg"].setText("10")
+            planar.export_path(output / "planar-selected-export")
+            check(json.loads((output / "planar-selected-export/planar-report.json").read_text(encoding="utf-8")) == arbitrary_report,
+                  "planar_export_uses_generated_snapshot")
+            QTimer.singleShot(200, accept_file_dialog)
+            click(planar.open_button)
+            check(planar.read_parameters().scan_theta_deg == 33 and len(planar.coordinates) == 6,
+                  "planar_settings_load_restores_geometry")
+            bad_planar = json.loads(dialog_path.read_text(encoding="utf-8"))
+            bad_planar["geometry"]["coordinates"][1] = bad_planar["geometry"]["coordinates"][0]
+            bad_scheme.write_text(json.dumps(bad_planar), encoding="utf-8")
+            previous_geometry = planar.read_parameters()
+            try:
+                planar.load_path(bad_scheme)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("overlapping_planar_elements_loaded")
+            check(planar.read_parameters() == previous_geometry and planar.report is arbitrary_report,
+                  "invalid_planar_geometry_preserves_inputs_and_result")
+            planar.geometry_fields["frequency_ghz"].setText("0")
+            QTimer.singleShot(150, close_warning)
+            click(planar.design_button)
+            check(planar.report is arbitrary_report and len(dismissed) == 4, "planar_invalid_input_dialog")
+            planar.geometry_fields["frequency_ghz"].setText("3")
+            report["planar_result"] = arbitrary_report
+            if planar.settings_tabs.isVisible(): click(planar.toggle_settings)
+            planar.view.setCurrentIndex(planar.view.findData("3d")); app.processEvents(); planar.canvas.draw()
+            check(window.grab().save(str(output / "planar.png")), "planar_workbench_screenshot")
             report["success"] = True
             code = 0
         except Exception:

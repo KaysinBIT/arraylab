@@ -19,8 +19,20 @@ class Parser(argparse.ArgumentParser):
         raise UsageError(message)
 
 
-def parser():
+def port_list(value):
+    if not value.strip():
+        return ()
+    try:
+        return tuple(int(part.strip()) for part in value.split(","))
+    except ValueError as exc:
+        raise UsageError("失效端口须为逗号分隔的整数，如1,3。") from exc
+
+
+def parser(planar=False):
     p = Parser(description="ArrayLab headless uniform linear-array analysis", allow_abbrev=False)
+    if not planar:
+        p.add_argument("--planar", action="store_true", help="Planar arrays: use --planar --help for geometry and plot options")
+        p.add_argument("--planar-config", type=Path, help="Run a saved planar electrical configuration")
     p.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
     p.add_argument("--config", type=Path, help="Versioned analysis JSON or legacy parameter JSON; explicit arguments override it")
@@ -31,6 +43,16 @@ def parser():
     p.add_argument("--feed-load-ohm", type=float, help="Equal real element load resistance (default: 50)")
     p.add_argument("--feed-min-line-ohm", type=float, help="Advisory line impedance lower bound (default: 20)")
     p.add_argument("--feed-max-line-ohm", type=float, help="Advisory line impedance upper bound (default: 120)")
+    p.add_argument("--feed-phase", dest="feed_phase_mode", choices=["none", "equalize", "scan"], help="Terminal phase compensation (new design default: scan; legacy v1: none)")
+    p.add_argument("--feed-weighting", choices=["uniform", "chebyshev", "taylor", "custom"], help="Target amplitude taper")
+    p.add_argument("--feed-sidelobe-db", type=float, help="Chebyshev/Taylor sidelobe parameter, positive dB")
+    p.add_argument("--feed-taylor-nbar", type=int, help="Taylor near-in sidelobe count")
+    p.add_argument("--feed-excitation", type=Path, help="Strict element,amplitude,phase_deg CSV; phase is an additional target offset")
+    p.add_argument("--feed-phase-bits", type=int, help="0=continuous; 1..12 phase-control bits")
+    p.add_argument("--feed-amplitude-error-db", type=float, help="Gaussian amplitude error standard deviation in dB")
+    p.add_argument("--feed-phase-error-deg", type=float, help="Gaussian phase error standard deviation in degrees")
+    p.add_argument("--feed-failed-ports", type=port_list, help="Comma-separated matched nonradiating port numbers")
+    p.add_argument("--feed-seed", type=int, help="Seed for one reproducible error realization")
     p.add_argument("--elements", type=int, help="Number of isotropic elements, 1..200 (default: 8)")
     p.add_argument("--frequency-ghz", type=float, help="Operating frequency in GHz (default: 3)")
     p.add_argument("--spacing", type=float, help="Center-to-center spacing (default: 0.5)")
@@ -39,7 +61,7 @@ def parser():
     p.add_argument("--step-deg", type=float, help="Pattern sampling interval, degrees (default: 0.1)")
     p.add_argument("--output-dir", type=Path, help="NEW directory for summary.json, pattern.dat and excitation.csv; never overwrite an existing directory")
     p.add_argument("--include-phase", action="store_true", help="Include the optional phase column in pattern.dat")
-    p.add_argument("--plot", choices=["none", "rectangular", "polar", "both"], default="none",
+    p.add_argument("--plot", choices=["none", "cut", "map", "3d", "all"] if planar else ["none", "rectangular", "polar", "both"], default="none",
                    help="Write PNG plots using Agg; requires --output-dir (default: none)")
     return p
 
@@ -89,7 +111,7 @@ def summary(result):
     }
 
 
-def render_plots(result, directory, mode):
+def render_plots(result, directory, mode, prefix="", patterns=None):
     # This is a file renderer, not a hidden/offscreen Qt application. Do not
     # import pyplot, widgets.py or any Qt backend, even when MPLBACKEND=QtAgg.
     import matplotlib
@@ -105,9 +127,15 @@ def render_plots(result, directory, mode):
             FigureCanvasAgg(figure)
             polar = kind == "polar"
             ax = figure.add_subplot(111, projection="polar" if polar else None)
-            data = np.maximum(result.pattern_db, -40)
-            ax.plot(np.deg2rad(result.angles_deg) if polar else result.angles_deg,
-                    data + 40 if polar else data, color="#087fa8", linewidth=1.8)
+            curves = [(None, result.pattern_db)] if patterns is None else [
+                ("Target", patterns["target"]["pattern_db"]), ("Uncompensated", patterns["uncompensated"]["pattern_db"]),
+                ("Output", patterns["output"]["pattern_db"])]
+            for (label, values), color in zip(curves, ["#087fa8", "#d77a28", "#6c5bc4"]):
+                data = np.maximum(values, -40)
+                ax.plot(np.deg2rad(result.angles_deg) if polar else result.angles_deg,
+                        data + 40 if polar else data, color=color, linewidth=1.8, label=label)
+            if patterns is not None:
+                ax.legend(fontsize=8)
             if polar:
                 ax.set_theta_zero_location("N")
                 ax.set_theta_direction(-1)
@@ -124,11 +152,11 @@ def render_plots(result, directory, mode):
                 ax.set_xlim(-90, 90)
                 ax.set_ylim(-40, 2)
                 ax.set_xlabel("Theta (deg), from +z towards +x")
-                ax.set_ylabel("Normalized pattern (dB)")
+                ax.set_ylabel("Target coherent-sum reference (dB)" if patterns else "Normalized pattern (dB)")
             p = result.parameters
             ax.set_title(f"ULA: N={p.elements}, d={p.spacing_lambda:g} lambda, scan={p.scan_deg:g} deg")
             ax.grid(True, color="#dce5ed", linewidth=.75)
-            figure.savefig(directory / f"{kind}.png")
+            figure.savefig(directory / f"{prefix}{kind}.png")
             figure.clear()
 
 
@@ -157,6 +185,10 @@ def save_outputs(result, report, args):
             render_plots(result, staging, args.plot)
             for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
                 files[kind + "_plot"] = kind + ".png"
+            if "feed_network" in report:
+                render_plots(result, staging, args.plot, prefix="feed-", patterns=report["feed_network"]["electrical"]["patterns"])
+                for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
+                    files["feed_" + kind + "_plot"] = "feed-" + kind + ".png"
         report["output_directory"] = str(target)
         report["files"] = files
         (staging / "summary.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
@@ -177,7 +209,32 @@ def emit(value, stream):
         stream.flush()
 
 
+def feed_settings_from_args(args, parameters, base=None):
+    from .feed import FeedSettings
+    values = asdict(base or FeedSettings())
+    if args.feed_network:
+        values["topology"] = args.feed_network
+    for key in values:
+        if key != "topology" and getattr(args, "feed_" + key, None) is not None:
+            values[key] = getattr(args, "feed_" + key)
+    if args.feed_weighting and args.feed_weighting != "custom":
+        values.update(custom_amplitudes=(), custom_phases_deg=())
+    if args.feed_excitation:
+        if args.feed_weighting not in (None, "custom"):
+            raise UsageError("--feed-excitation不能与非custom幅度分布同时使用。")
+        from .excitation import read_excitation_csv
+        amplitude, phase = read_excitation_csv(args.feed_excitation, parameters.elements)
+        values.update(weighting="custom", custom_amplitudes=amplitude, custom_phases_deg=phase)
+    settings = FeedSettings(**values)
+    settings.validate()
+    return settings
+
+
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if any(value == "--planar" or value == "--planar-config" or value.startswith("--planar-config=") for value in argv):
+        from .planar_cli import main as planar_main
+        return planar_main(argv)
     try:
         args = parser().parse_args(argv)
         if args.plot != "none" and args.output_dir is None:
@@ -192,23 +249,15 @@ def main(argv=None):
             base, feed_settings = load_feed_configuration(args.feed_config)
         parameters = load_parameters(args, base)
         if args.feed_network or feed_settings is not None:
-            from .feed import FeedSettings, synthesize_impedance
-            values = asdict(feed_settings or FeedSettings())
-            if args.feed_network:
-                values["topology"] = args.feed_network
-            for key in values:
-                if key != "topology" and getattr(args, "feed_" + key) is not None:
-                    values[key] = getattr(args, "feed_" + key)
-            feed_settings = FeedSettings(**values)
-            feed_settings.validate()
-        elif any(getattr(args, "feed_" + key) is not None for key in
-                 ("input_ohm", "junction_ohm", "load_ohm", "min_line_ohm", "max_line_ohm")):
+            from .feed import design_feed
+            feed_settings = feed_settings_from_args(args, parameters, feed_settings)
+        elif any(value is not None for key, value in vars(args).items() if key.startswith("feed_") and key not in ("feed_network", "feed_config")):
             raise UsageError("馈电阻抗选项需要--feed-network或--feed-config。")
         from .core import calculate
         result = calculate(parameters)
         report = summary(result)
         if feed_settings is not None:
-            report["feed_network"] = synthesize_impedance(parameters, feed_settings)
+            report["feed_network"] = design_feed(parameters, feed_settings)
         if args.output_dir is not None:
             save_outputs(result, report, args)
         emit(report, sys.stdout)

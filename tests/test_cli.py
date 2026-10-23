@@ -22,7 +22,7 @@ def run_cli(*args, guard=False):
 import importlib.abc,sys,runpy
 class NoGUI(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith(("PySide", "PyQt", "tkinter", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets")):
+        if fullname.startswith(("PySide", "PyQt", "tkinter", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets")):
             raise AssertionError("Headless attempted GUI import: " + fullname)
 sys.meta_path.insert(0,NoGUI())
 sys.argv=["arraylab", "--headless"] + sys.argv[1:]

@@ -1,0 +1,37 @@
+{
+  "format": "arraylab.planar_electrical",
+  "schema_version": 1,
+  "geometry": {
+    "geometry": "rectangular",
+    "frequency_ghz": 3.0,
+    "nx": 4,
+    "ny": 4,
+    "spacing_x": 0.5,
+    "spacing_y": 0.5,
+    "coordinate_unit": "lambda",
+    "coordinates": [],
+    "scan_theta_deg": 30,
+    "scan_phi_deg": 45,
+    "cut_phi_deg": 45,
+    "step_deg": 0.5
+  },
+  "settings": {
+    "topology": "symmetric_series",
+    "input_ohm": 50.0,
+    "junction_ohm": 50.0,
+    "load_ohm": 50.0,
+    "min_line_ohm": 20.0,
+    "max_line_ohm": 120.0,
+    "phase_mode": "scan",
+    "weighting": "taylor",
+    "sidelobe_db": 30,
+    "taylor_nbar": 4,
+    "custom_amplitudes": [],
+    "custom_phases_deg": [],
+    "phase_bits": 0,
+    "amplitude_error_db": 0.0,
+    "phase_error_deg": 0.0,
+    "failed_ports": [],
+    "seed": 0
+  }
+}

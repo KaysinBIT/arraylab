@@ -48,6 +48,8 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(index)
         if index == 4 and self.feed_panel.report is None:
             self.feed_panel.generate()
+        elif index == 5 and self.planar_panel.report is None:
+            self.planar_panel.generate()
 
     def set_plot_view(self, kind):
         self.plot_type.setCurrentIndex(kind)
@@ -134,7 +136,8 @@ class MainWindow(QMainWindow):
         action(plot_menu, "极坐标方向图", lambda: self.plot_type.setCurrentIndex(1))
         action(plot_menu, "复制当前图形", self.copy_plot)
         action(array_menu, "计算均匀直线阵", self.compute, "F5")
-        action(array_menu, "馈电网络阻抗设计", lambda: self.show_view(4), "F6")
+        action(array_menu, "馈电网络电气设计", lambda: self.show_view(4), "F6")
+        action(array_menu, "平面阵电气设计", lambda: self.show_view(5), "F7")
         action(array_menu, "载入说明书验证例题", self.load_example)
         action(help_menu, "本例程帮助", self.show_help, "F1")
         action(help_menu, "关于 ArrayLab", self.show_about)
@@ -436,9 +439,11 @@ class MainWindow(QMainWindow):
             "5. 文件菜单支持数值方向图读写，图下工具栏支持缩放及图片保存。\n\n"
             "分析方案：主页的“保存方案”保存当前输入的6项参数；“打开方案”加载后需重新计算。"
             "方案不包含历史曲线或窗口布局；也可通过无头入口的--config读取。\n\n"
-            "馈电阻抗（F6）：支持并联树形、串行抽头和1分2后对称串馈（偶数阵元），输入阻抗、节点阻抗和阵元纯电阻负载可改。"
-            "生成λ/4变换线阻抗，支持独立馈电设置保存/加载及JSON、CSV、SVG导出。"
-            "当前只做单频点理想阻抗综合，不包含相位均衡、线宽或实际基板。\n\n"
+            "馈电电气设计（F6）：支持三种拓扑、相位补偿、Chebyshev/Taylor及自定义幅相。"
+            "方向图核对区分目标、原始网络及模型输出。误差记录种子，失效保持匹配并将辐射置零。"
+            "保留最近5项独立设计记录，支持标签和比较导出；物理尺寸暂缓。\n\n"
+            "平面阵电气设计（F7）：规则矩形阵或element,x,y坐标CSV，最多200阵元、最大孔径40λ。"
+            "本页具有独立参数，支持切面、上半球图及可拖动旋转的全空间三维阵因子；峰值数值估计会明确标记。\n\n"
             "坐标：阵列沿x轴，以阵列中心为相位参考。图为x-z前半空间切面，θ从+z向+x为正，范围−90°至90°。"
             "各向同性单元没有极化；不提供同/交叉极化标识。\n"
             "方向性采用全空间功率积分，不等于增益。半功率宽度按功率峰值的一半计算（−3.0103 dB）。"

@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from arraylab.core import ArrayParameters
-from arraylab.feed import (FeedSettings, synthesize_impedance, save_feed_configuration,
+from arraylab.feed import (FeedSettings, synthesize_impedance, design_feed, save_feed_configuration,
                            load_feed_configuration, export_feed_directory)
 from arraylab.feed_diagram import diagram_svg
 from test_cli import run_cli
@@ -112,7 +112,7 @@ def test_configuration_export_and_headless_roundtrip(topology, tmp_path):
     save_feed_configuration(config, p, settings)
     assert load_feed_configuration(config) == (p, settings)
     original = config.read_bytes()
-    expected = synthesize_impedance(p, settings)
+    expected = design_feed(p, settings)
     out = tmp_path / "结果"
     process = run_cli("--feed-config", config, "--output-dir", out, guard=True)
     assert process.returncode == 0, process.stderr
@@ -145,7 +145,7 @@ def test_strict_feed_configuration(change, tmp_path):
     config = tmp_path / "feed.json"
     save_feed_configuration(config, ArrayParameters(), FeedSettings())
     doc = json.loads(config.read_text(encoding="utf-8"))
-    if change == "version": doc["schema_version"] = 2
+    if change == "version": doc["schema_version"] = 3
     if change == "boolean_version": doc["schema_version"] = True
     if change == "missing": del doc["settings"]["input_ohm"]
     if change == "unknown": doc["array_parameters"]["unknown"] = 1
