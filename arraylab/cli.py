@@ -1,0 +1,229 @@
+"""GUI-free command line execution. No Qt or GUI backend is imported here."""
+import argparse
+from dataclasses import asdict
+import json
+import math
+from pathlib import Path
+import sys
+import uuid
+
+from . import __version__
+
+
+class UsageError(ValueError):
+    pass
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise UsageError(message)
+
+
+def parser():
+    p = Parser(description="ArrayLab headless uniform linear-array analysis", allow_abbrev=False)
+    p.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
+    p.add_argument("--config", type=Path, help="UTF-8 JSON object of ArrayParameters; explicit arguments override it")
+    p.add_argument("--elements", type=int, help="Number of isotropic elements, 1..200 (default: 8)")
+    p.add_argument("--frequency-ghz", type=float, help="Operating frequency in GHz (default: 3)")
+    p.add_argument("--spacing", type=float, help="Center-to-center spacing (default: 0.5)")
+    p.add_argument("--spacing-unit", choices=["lambda", "mm"], help="Spacing unit (default: lambda)")
+    p.add_argument("--scan-deg", type=float, help="Signed scan angle from +z towards +x (default: 0)")
+    p.add_argument("--step-deg", type=float, help="Pattern sampling interval, degrees (default: 0.1)")
+    p.add_argument("--output-dir", type=Path, help="NEW directory for summary.json, pattern.dat and excitation.csv; never overwrite an existing directory")
+    p.add_argument("--include-phase", action="store_true", help="Include the optional phase column in pattern.dat")
+    p.add_argument("--plot", choices=["none", "rectangular", "polar", "both"], default="none",
+                   help="Write PNG plots using Agg; requires --output-dir (default: none)")
+    return p
+
+
+def load_parameters(args):
+    from .core import ArrayParameters
+    values = asdict(ArrayParameters())
+    if args.config:
+        if args.config.stat().st_size > 1024 * 1024:
+            raise UsageError("配置文件不能超过 1 MB。")
+
+        def invalid_constant(value):
+            raise UsageError(f"配置文件包含非法JSON常量：{value}")
+
+        def unique_keys(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise UsageError(f"配置字段重复：{key}")
+                result[key] = value
+            return result
+
+        config = json.loads(args.config.read_text(encoding="utf-8-sig"), parse_constant=invalid_constant,
+                            object_pairs_hook=unique_keys)
+        if not isinstance(config, dict):
+            raise UsageError("配置须为一个JSON对象。")
+        unknown = set(config) - set(values)
+        if unknown:
+            raise UsageError("未知配置字段：" + ", ".join(sorted(unknown)))
+        values.update(config)
+    for key in values:
+        supplied = getattr(args, key, None)
+        if supplied is not None:
+            values[key] = supplied
+    for key, value in values.items():
+        if key == "spacing_unit":
+            if not isinstance(value, str):
+                raise UsageError("spacing_unit须为字符串lambda或mm。")
+        elif isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise UsageError(f"{key}须为数值，不能是布尔值、字符串或null。")
+        elif key == "elements" and not isinstance(value, int):
+            raise UsageError("elements须为JSON整数。")
+    parameters = ArrayParameters(**values)
+    parameters.validate()
+    return parameters
+
+
+def summary(result):
+    p = result.parameters
+    return {
+        "schema_version": 1,
+        "app_version": __version__,
+        "status": "ok",
+        "mode": "headless",
+        "parameters": asdict(p),
+        "model": {
+            "array": "uniform_linear", "element": "isotropic", "amplitude": "uniform",
+            "mutual_coupling": False, "ground_plane": False, "array_axis": "x",
+            "cut": "x-z, z>=0", "angle_reference": "from +z towards +x",
+            "phase_reference": "array_center", "pattern_normalization": "theoretical_peak_0_dB",
+            "data_floor_db": -300, "directivity_integral": "full_sphere",
+        },
+        "metrics": {
+            "directivity_dbi": result.directivity_dbi,
+            "directivity_linear": 10 ** (result.directivity_dbi / 10),
+            "main_lobe_angle_deg": result.peaks_deg[0] if len(result.peaks_deg) == 1 else None,
+            "equal_peak_angles_deg": list(result.peaks_deg),
+            "half_power_beamwidth_deg": result.beamwidth_deg,
+            "half_power_edges_deg": list(result.half_power_deg) if result.half_power_deg else None,
+            "wavelength_mm": p.wavelength_mm,
+            "spacing_mm": p.spacing_mm,
+            "spacing_lambda": p.spacing_lambda,
+            "progressive_phase_deg": -360 * p.spacing_lambda * math.sin(math.radians(p.scan_deg)),
+            "sample_count": len(result.angles_deg),
+        },
+        "notices": list(result.notices),
+        "output_directory": None,
+        "files": {},
+    }
+
+
+def render_plots(result, directory, mode):
+    # This is a file renderer, not a hidden/offscreen Qt application. Do not
+    # import pyplot, widgets.py or any Qt backend, even when MPLBACKEND=QtAgg.
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+    import numpy as np
+
+    kinds = ["rectangular", "polar"] if mode == "both" else [mode]
+    for kind in kinds:
+        with matplotlib.rc_context({"font.family": "DejaVu Sans", "font.size": 10, "text.usetex": False}):
+            figure = Figure(figsize=(8, 5), dpi=150, layout="constrained")
+            FigureCanvasAgg(figure)
+            polar = kind == "polar"
+            ax = figure.add_subplot(111, projection="polar" if polar else None)
+            data = np.maximum(result.pattern_db, -40)
+            ax.plot(np.deg2rad(result.angles_deg) if polar else result.angles_deg,
+                    data + 40 if polar else data, color="#087fa8", linewidth=1.8)
+            if polar:
+                ax.set_theta_zero_location("N")
+                ax.set_theta_direction(-1)
+                ax.set_thetamin(-90)
+                ax.set_thetamax(90)
+                ax.set_ylim(0, 40)
+                ax.set_yticks([0, 10, 20, 30, 40])
+                ax.set_yticklabels([])
+                for level in [-30, -20, -10, 0]:
+                    ax.text(math.radians(-45), level + 39.4, str(level), ha="right", va="center", fontsize=8,
+                            bbox={"facecolor": "white", "edgecolor": "none", "alpha": .85, "pad": .8})
+                ax.set_xlabel("Normalized pattern (dB); theta from +z towards +x")
+            else:
+                ax.set_xlim(-90, 90)
+                ax.set_ylim(-40, 2)
+                ax.set_xlabel("Theta (deg), from +z towards +x")
+                ax.set_ylabel("Normalized pattern (dB)")
+            p = result.parameters
+            ax.set_title(f"ULA: N={p.elements}, d={p.spacing_lambda:g} lambda, scan={p.scan_deg:g} deg")
+            ax.grid(True, color="#dce5ed", linewidth=.75)
+            figure.savefig(directory / f"{kind}.png")
+            figure.clear()
+
+
+def save_outputs(result, report, args):
+    import numpy as np
+    from .dataio import write_pattern
+
+    target = args.output_dir.expanduser().absolute()
+    if target.exists():
+        raise FileExistsError("输出目录已存在，请指定新的目录，避免覆盖已有结果。")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.parent / (".arraylab-" + uuid.uuid4().hex)
+    staging.mkdir()
+    try:
+        write_pattern(staging / "pattern.dat", result.angles_deg, result.pattern_db,
+                      result.phase_deg if args.include_phase else None)
+        excitation = np.column_stack((np.arange(1, result.parameters.elements + 1), result.positions_mm,
+                                      np.ones(result.parameters.elements), result.excitation_phase_deg))
+        np.savetxt(staging / "excitation.csv", excitation, delimiter=",", header="element,x_mm,amplitude,phase_deg",
+                   comments="", fmt=["%d", "%.12g", "%.12g", "%.12g"])
+        files = {"summary": "summary.json", "pattern": "pattern.dat", "excitation": "excitation.csv"}
+        if args.plot != "none":
+            render_plots(result, staging, args.plot)
+            for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
+                files[kind + "_plot"] = kind + ".png"
+        report["output_directory"] = str(target)
+        report["files"] = files
+        (staging / "summary.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        # All outputs are complete before the directory becomes visible.
+        staging.rename(target)
+    finally:
+        if staging.exists():
+            # Only flat files created in this call; no recursive deletion.
+            for item in staging.iterdir():
+                item.unlink()
+            staging.rmdir()
+
+
+def emit(value, stream):
+    if stream is not None:
+        # ASCII-safe JSON on Windows pipes; JSON files are UTF-8 human-readable.
+        stream.write(json.dumps(value, ensure_ascii=True, allow_nan=False) + "\n")
+        stream.flush()
+
+
+def main(argv=None):
+    try:
+        args = parser().parse_args(argv)
+        if args.plot != "none" and args.output_dir is None:
+            raise UsageError("--plot需要同时指定--output-dir。")
+        if sys.stdout is None and args.output_dir is None:
+            raise UsageError("此入口没有标准输出，请指定--output-dir或使用ArrayLab-cli.exe。")
+        parameters = load_parameters(args)
+        from .core import calculate
+        result = calculate(parameters)
+        report = summary(result)
+        if args.output_dir is not None:
+            save_outputs(result, report, args)
+        emit(report, sys.stdout)
+        return 0
+    except (ValueError, TypeError, OverflowError, UnicodeError) as exc:
+        emit({"status": "error", "error": {"type": "input", "message": str(exc)}}, sys.stderr)
+        return 2
+    except OSError as exc:
+        emit({"status": "error", "error": {"type": "io", "message": str(exc)}}, sys.stderr)
+        return 3
+    except Exception as exc:
+        emit({"status": "error", "error": {"type": "runtime", "message": str(exc)}}, sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

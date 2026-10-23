@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arraylab-desktop"
+version = "0.3.0"
+description = "Local desktop analysis of uniform linear arrays of isotropic sources"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.2,<3",
+  "scipy>=1.15,<2",
+]
+
+[project.optional-dependencies]
+desktop = [
+  "PySide6-Essentials>=6.10,<7",
+  "matplotlib>=3.10,<4",
+]
+plotting = ["matplotlib>=3.10,<4"]
+
+[project.scripts]
+arraylab = "arraylab.__main__:main"
+arraylab-cli = "arraylab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["arraylab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
