@@ -13,7 +13,7 @@ desktop = Analysis(
 )
 headless = Analysis(
     [str(ROOT / "launch_cli.py")], pathex=[str(ROOT)],
-    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.smoke"],
+    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.smoke"],
     hooksconfig={"matplotlib": {"backends": ["Agg"]}},
 )
 gui = EXE(PYZ(desktop.pure), desktop.scripts, [], exclude_binaries=True,

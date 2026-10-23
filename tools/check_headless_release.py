@@ -83,6 +83,10 @@ def main():
         assert scheme_result["parameters"] == gui_report["scheme_result"]["parameters"]
         assert scheme_result["metrics"] == gui_report["scheme_result"]["metrics"]
         checks.append("desktop_saved_scheme_matches_headless_EXE_parameters_and_metrics")
+        for topology in ("corporate", "series"):
+            feed = json.loads(run("--feed-config", smoke / f"feed-{topology}.json").stdout)["feed_network"]
+            assert feed == gui_report["feed_results"][topology]
+            checks.append(f"{topology}_feed_impedance_GUI_and_headless_EXE_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

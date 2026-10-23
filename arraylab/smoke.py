@@ -185,6 +185,56 @@ def schedule_smoke_test(app, window, output: Path):
             app.processEvents()
             check(window.grab().save(str(output / "main.png")), "main_screenshot_saved")
             report["example_directivity_dbi"] = window.selected_dataset().result.directivity_dbi
+            window.reset_parameters()
+            retained = window.selected_dataset()
+            window.ribbon.setCurrentIndex(1)
+            click(window.feed_button)
+            feed = window.feed_panel
+            check(window.tabs.currentIndex() == 4 and feed.report["metrics"]["ports"] == 8,
+                  "feed_ribbon_opens_impedance_panel_with_current_inputs")
+            check(abs(feed.report["sections"][0]["line_ohm"] - 70.71067811865476) < 1e-10,
+                  "corporate_8_port_impedance_reference")
+            check(window.selected_dataset() is retained, "feed_design_does_not_replace_array_results")
+            report["feed_results"] = {}
+            for topology in ("corporate", "series"):
+                feed.topology.setCurrentIndex(feed.topology.findData(topology))
+                click(feed.design_button)
+                dialog_path = output.resolve() / f"feed-{topology}.json"
+                dialog_path.unlink(missing_ok=True)
+                QTimer.singleShot(200, accept_file_dialog)
+                click(feed.save_button)
+                check(dialog_path.exists(), f"feed_{topology}_settings_save_dialog")
+                report["feed_results"][topology] = feed.report
+            check(len(feed.report["metrics"]["out_of_range_sections"]) == 3,
+                  "series_high_impedance_sections_flagged")
+            old_feed = feed.report
+            feed.fields["load_ohm"].setText("75")
+            feed.export_path(output / "feed-export")
+            exported = json.loads((output / "feed-export/feed-network.json").read_text(encoding="utf-8"))
+            check(exported == old_feed and "尚未重新生成" in feed.state.text(),
+                  "feed_export_uses_displayed_snapshot_not_pending_inputs")
+            QTimer.singleShot(200, accept_file_dialog)
+            click(feed.open_button)
+            check(feed.read_settings().load_ohm == 50 and "请重新生成" in feed.state.text(),
+                  "feed_settings_open_dialog_restores_parameters_pending_regeneration")
+            bad_scheme.write_text('{"format":"arraylab.feed_impedance","schema_version":99}', encoding="utf-8")
+            before = feed.read_settings()
+            try:
+                feed.load_path(bad_scheme)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid_feed_settings_accepted")
+            check(feed.read_settings() == before and feed.report is old_feed,
+                  "invalid_feed_settings_preserve_inputs_and_result")
+            feed.fields["input_ohm"].setText("0")
+            QTimer.singleShot(150, close_warning)
+            click(feed.design_button)
+            check(feed.report is old_feed and len(dismissed) == 2, "invalid_feed_input_dialog_preserves_result")
+            feed.fields["input_ohm"].setText("50")
+            click(feed.design_button)
+            app.processEvents()
+            check(window.grab().save(str(output / "feed-series.png")), "feed_series_screenshot_saved")
             report["success"] = True
             code = 0
         except Exception:

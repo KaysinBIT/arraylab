@@ -24,6 +24,13 @@ def parser():
     p.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
     p.add_argument("--config", type=Path, help="Versioned analysis JSON or legacy parameter JSON; explicit arguments override it")
+    p.add_argument("--feed-config", type=Path, help="Feed impedance configuration JSON; cannot combine with --config")
+    p.add_argument("--feed-network", choices=["corporate", "series"], help="Synthesize equal-power quarter-wave feed impedances")
+    p.add_argument("--feed-input-ohm", type=float, help="Real input resistance (default: 50)")
+    p.add_argument("--feed-junction-ohm", type=float, help="Real internal junction resistance (default: 50)")
+    p.add_argument("--feed-load-ohm", type=float, help="Equal real element load resistance (default: 50)")
+    p.add_argument("--feed-min-line-ohm", type=float, help="Advisory line impedance lower bound (default: 20)")
+    p.add_argument("--feed-max-line-ohm", type=float, help="Advisory line impedance upper bound (default: 120)")
     p.add_argument("--elements", type=int, help="Number of isotropic elements, 1..200 (default: 8)")
     p.add_argument("--frequency-ghz", type=float, help="Operating frequency in GHz (default: 3)")
     p.add_argument("--spacing", type=float, help="Center-to-center spacing (default: 0.5)")
@@ -37,10 +44,10 @@ def parser():
     return p
 
 
-def load_parameters(args):
+def load_parameters(args, base=None):
     from .core import ArrayParameters
     from .configuration import load_configuration, parameters_from_values
-    values = asdict(load_configuration(args.config) if args.config else ArrayParameters())
+    values = asdict(load_configuration(args.config) if args.config else base or ArrayParameters())
     for key in values:
         supplied = getattr(args, key, None)
         if supplied is not None:
@@ -143,6 +150,9 @@ def save_outputs(result, report, args):
         np.savetxt(staging / "excitation.csv", excitation, delimiter=",", header="element,x_mm,amplitude,phase_deg",
                    comments="", fmt=["%d", "%.12g", "%.12g", "%.12g"])
         files = {"summary": "summary.json", "pattern": "pattern.dat", "excitation": "excitation.csv"}
+        if "feed_network" in report:
+            from .feed import write_feed_files
+            files.update(write_feed_files(staging, report["feed_network"]))
         if args.plot != "none":
             render_plots(result, staging, args.plot)
             for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
@@ -174,10 +184,31 @@ def main(argv=None):
             raise UsageError("--plot需要同时指定--output-dir。")
         if sys.stdout is None and args.output_dir is None:
             raise UsageError("此入口没有标准输出，请指定--output-dir或使用ArrayLab-cli.exe。")
-        parameters = load_parameters(args)
+        base, feed_settings = None, None
+        if args.feed_config:
+            if args.config:
+                raise UsageError("--feed-config不能与--config同时使用。")
+            from .feed import load_feed_configuration
+            base, feed_settings = load_feed_configuration(args.feed_config)
+        parameters = load_parameters(args, base)
+        if args.feed_network or feed_settings is not None:
+            from .feed import FeedSettings, synthesize_impedance
+            values = asdict(feed_settings or FeedSettings())
+            if args.feed_network:
+                values["topology"] = args.feed_network
+            for key in values:
+                if key != "topology" and getattr(args, "feed_" + key) is not None:
+                    values[key] = getattr(args, "feed_" + key)
+            feed_settings = FeedSettings(**values)
+            feed_settings.validate()
+        elif any(getattr(args, "feed_" + key) is not None for key in
+                 ("input_ohm", "junction_ohm", "load_ohm", "min_line_ohm", "max_line_ohm")):
+            raise UsageError("馈电阻抗选项需要--feed-network或--feed-config。")
         from .core import calculate
         result = calculate(parameters)
         report = summary(result)
+        if feed_settings is not None:
+            report["feed_network"] = synthesize_impedance(parameters, feed_settings)
         if args.output_dir is not None:
             save_outputs(result, report, args)
         emit(report, sys.stdout)

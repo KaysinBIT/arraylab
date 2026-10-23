@@ -153,6 +153,8 @@ def build_workbench(w):
     ribbon_group(pages[0], "结果", [w.result_button, ribbon_button("数据列表", "table", lambda: w.show_view(1))])
     ribbon_group(pages[1], "计算设置", [ribbon_button("分析参数", "parameters", w.focus_parameters), ribbon_button("开始计算\nF5", "run", w.compute)])
     ribbon_group(pages[1], "模型检查", [ribbon_button("模型视图", "model", lambda: w.show_view(3)), ribbon_button("阵元激励", "table", lambda: w.show_view(2)), ribbon_button("验证例题", "open", w.load_example)])
+    w.feed_button = ribbon_button("馈电网络\n阻抗设计", "parameters", lambda: w.show_view(4))
+    ribbon_group(pages[1], "馈电设计", [w.feed_button])
     ribbon_group(pages[2], "方向图", [ribbon_button("直角坐标", "plot", lambda: w.set_plot_view(0)), ribbon_button("极坐标", "polar", lambda: w.set_plot_view(1)), ribbon_button("完整范围", "reset", w.reset_plot_view)])
     ribbon_group(pages[2], "输出", [ribbon_button("保存数据", "save", w.save_dialog), ribbon_button("保存图片", "plot", w.save_plot), ribbon_button("复制图形", "copy", w.copy_plot)])
     w.restore_layout_button = ribbon_button("恢复布局", "layout", w.restore_workbench)
@@ -238,6 +240,9 @@ def build_workbench(w):
     model_note.setWordWrap(True)
     ml.addWidget(model_note)
     w.tabs.addTab(model_page, workbench_icon("model"), "模型示意")
+    from .feed_widgets import FeedPanel
+    w.feed_panel = FeedPanel(w)
+    w.tabs.addTab(w.feed_panel, workbench_icon("parameters"), "馈电阻抗")
     layout.addWidget(w.tabs, 1)
 
     w.tree = QTreeWidget()
@@ -254,6 +259,7 @@ def build_workbench(w):
     model = node(root, "模型", "model", ("view", 3))
     w.model_tree_item = node(model, "均匀直线阵 / 各向同性", "array", ("view", 3))
     node(root, "分析参数", "parameters", ("parameters", 0))
+    node(root, "馈电网络 · 阻抗设计", "parameters", ("view", 4))
     results = node(root, "结果", "open", ("view", 0))
     w.plot_tree_item = node(results, "1D 方向图", "plot", ("view", 0))
     w.data_tree_item = node(results, "方向图采样数据", "table", ("view", 1))
@@ -304,7 +310,7 @@ def build_workbench(w):
     w.physical = QLabel()
     w.physical.setObjectName("scope"); w.physical.setWordWrap(True)
     iv.addWidget(w.physical)
-    metrics = QGroupBox("所选结果摘要")
+    metrics = QGroupBox("所选阵列结果摘要")
     mf = QFormLayout(metrics); mf.setContentsMargins(8, 12, 8, 8); mf.setVerticalSpacing(7)
     w.metrics = {}
     for key, text in [("peak", "主瓣指向"), ("beamwidth", "半功率宽度"), ("directivity", "方向性"),

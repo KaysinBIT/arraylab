@@ -1,0 +1,20 @@
+{
+  "format": "arraylab.feed_impedance",
+  "schema_version": 1,
+  "array_parameters": {
+    "elements": 8,
+    "frequency_ghz": 3.0,
+    "spacing": 0.5,
+    "spacing_unit": "lambda",
+    "scan_deg": 0.0,
+    "step_deg": 0.1
+  },
+  "settings": {
+    "topology": "series",
+    "input_ohm": 50.0,
+    "junction_ohm": 50.0,
+    "load_ohm": 50.0,
+    "min_line_ohm": 20.0,
+    "max_line_ohm": 120.0
+  }
+}
