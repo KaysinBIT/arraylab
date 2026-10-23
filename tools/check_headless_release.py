@@ -79,6 +79,10 @@ def main():
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
         report["gui_checks_passed"] = len(gui_report["checks"])
+        scheme_result = json.loads(run("--config", smoke / "中文 分析方案.json").stdout)
+        assert scheme_result["parameters"] == gui_report["scheme_result"]["parameters"]
+        assert scheme_result["metrics"] == gui_report["scheme_result"]["metrics"]
+        checks.append("desktop_saved_scheme_matches_headless_EXE_parameters_and_metrics")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

@@ -1,0 +1,12 @@
+{
+  "format": "arraylab.analysis",
+  "schema_version": 1,
+  "parameters": {
+    "elements": 5,
+    "frequency_ghz": 3.0,
+    "spacing": 0.4,
+    "spacing_unit": "lambda",
+    "scan_deg": 60.0,
+    "step_deg": 0.1
+  }
+}

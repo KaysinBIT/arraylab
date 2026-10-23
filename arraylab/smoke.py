@@ -10,6 +10,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog, QLineEdit
 
 from .dataio import read_pattern
+from .configuration import load_configuration
 
 
 def schedule_smoke_test(app, window, output: Path):
@@ -84,6 +85,58 @@ def schedule_smoke_test(app, window, output: Path):
             selected_params = window.selected_dataset().result.parameters
             window.unit.setCurrentIndex(1)
             check(abs(window.read_parameters().spacing_lambda - selected_params.spacing_lambda) < 1e-10, "unit_switch_preserves_physical_spacing")
+            # Save pending inputs, not the selected curve's older parameter snapshot.
+            window.inputs["scan_deg"].setText("-27.5")
+            window.inputs["spacing"].setText("45.25")
+            scheme_parameters = window.read_parameters()
+            selected_before = window.selected_dataset()
+            sequence_before = window.sequence
+            dialog_path = output.resolve() / "中文 分析方案.json"
+            dialog_path.unlink(missing_ok=True)
+            QTimer.singleShot(200, accept_file_dialog)
+            click(window.save_scheme_button)
+            check(load_configuration(dialog_path) == scheme_parameters, "scheme_save_dialog_uses_pending_inputs")
+            window.reset_parameters()
+            QTimer.singleShot(200, accept_file_dialog)
+            click(window.load_scheme_button)
+            check(window.read_parameters() == scheme_parameters and window.unit.currentData() == "mm",
+                  "scheme_open_dialog_restores_parameters_and_units")
+            check(window.sequence == sequence_before and window.selected_dataset() is selected_before
+                  and "尚未重新计算" in window.state_label.text(), "scheme_load_preserves_old_result_and_marks_pending")
+            from .window import MainWindow
+            reopened = MainWindow(auto_compute=False)
+            try:
+                reopened.load_configuration_path(dialog_path)
+                check(reopened.read_parameters() == scheme_parameters and not reopened.datasets,
+                      "scheme_load_into_new_window_restores_analysis_inputs")
+            finally:
+                reopened.close()
+                reopened.deleteLater()
+            bad_scheme = output / "invalid-scheme.json"
+            bad_scheme.write_text('{"format":"arraylab.analysis","schema_version":99,"parameters":{}}', encoding="utf-8")
+            try:
+                window.load_configuration_path(bad_scheme)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid_scheme_was_accepted")
+            check(window.read_parameters() == scheme_parameters and window.selected_dataset() is selected_before,
+                  "invalid_scheme_preserves_inputs_and_selected_result")
+            saved_bytes = dialog_path.read_bytes()
+            window.inputs["elements"].setText("0")
+            try:
+                window.save_configuration_path(dialog_path)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid_inputs_were_saved")
+            check(dialog_path.read_bytes() == saved_bytes, "invalid_input_save_preserves_existing_scheme")
+            window.load_configuration_path(dialog_path)
+            click(window.compute_button)
+            check(window.selected_dataset().result.parameters == scheme_parameters,
+                  "scheme_compute_uses_restored_parameters")
+            from .cli import summary
+            report["scheme_result"] = summary(window.selected_dataset().result)
             window.plot_type.setCurrentIndex(1)
             window.plot.canvas.draw()
             app.processEvents()

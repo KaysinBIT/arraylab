@@ -23,7 +23,7 @@ def parser():
     p = Parser(description="ArrayLab headless uniform linear-array analysis", allow_abbrev=False)
     p.add_argument("--headless", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
-    p.add_argument("--config", type=Path, help="UTF-8 JSON object of ArrayParameters; explicit arguments override it")
+    p.add_argument("--config", type=Path, help="Versioned analysis JSON or legacy parameter JSON; explicit arguments override it")
     p.add_argument("--elements", type=int, help="Number of isotropic elements, 1..200 (default: 8)")
     p.add_argument("--frequency-ghz", type=float, help="Operating frequency in GHz (default: 3)")
     p.add_argument("--spacing", type=float, help="Center-to-center spacing (default: 0.5)")
@@ -39,45 +39,13 @@ def parser():
 
 def load_parameters(args):
     from .core import ArrayParameters
-    values = asdict(ArrayParameters())
-    if args.config:
-        if args.config.stat().st_size > 1024 * 1024:
-            raise UsageError("配置文件不能超过 1 MB。")
-
-        def invalid_constant(value):
-            raise UsageError(f"配置文件包含非法JSON常量：{value}")
-
-        def unique_keys(pairs):
-            result = {}
-            for key, value in pairs:
-                if key in result:
-                    raise UsageError(f"配置字段重复：{key}")
-                result[key] = value
-            return result
-
-        config = json.loads(args.config.read_text(encoding="utf-8-sig"), parse_constant=invalid_constant,
-                            object_pairs_hook=unique_keys)
-        if not isinstance(config, dict):
-            raise UsageError("配置须为一个JSON对象。")
-        unknown = set(config) - set(values)
-        if unknown:
-            raise UsageError("未知配置字段：" + ", ".join(sorted(unknown)))
-        values.update(config)
+    from .configuration import load_configuration, parameters_from_values
+    values = asdict(load_configuration(args.config) if args.config else ArrayParameters())
     for key in values:
         supplied = getattr(args, key, None)
         if supplied is not None:
             values[key] = supplied
-    for key, value in values.items():
-        if key == "spacing_unit":
-            if not isinstance(value, str):
-                raise UsageError("spacing_unit须为字符串lambda或mm。")
-        elif isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise UsageError(f"{key}须为数值，不能是布尔值、字符串或null。")
-        elif key == "elements" and not isinstance(value, int):
-            raise UsageError("elements须为JSON整数。")
-    parameters = ArrayParameters(**values)
-    parameters.validate()
-    return parameters
+    return parameters_from_values(values)
 
 
 def summary(result):

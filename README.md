@@ -1,8 +1,8 @@
 # ArrayLab 阵列分析
 
-用于均匀直线阵分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.3.0，原创源码采用MIT许可。
+用于均匀直线阵分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.4.0，原创源码采用MIT许可。
 
-当前版本0.3.0，桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。桌面与无头模式共用原有计算逻辑，功能范围仍为均匀直线阵分析。
+桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.4.0新增分析方案保存与加载，桌面与无头模式使用同一份JSON参数文件；计算模型仍为均匀直线阵。
 
 ![ArrayLab工作台](docs/images/workbench.png)
 
@@ -24,7 +24,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.3.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.4.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
 
 ## 无头运行
 
@@ -37,7 +37,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.3.0/ArrayLab.e
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.3.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.4.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -49,7 +49,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.3.0/ArrayLab.e
 | `--spacing`、`--spacing-unit` | 间距及单位`lambda`或`mm`，默认0.5λ |
 | `--scan-deg` | 扫描角，默认0° |
 | `--step-deg` | 绘图/导出采样步长，默认0.1° |
-| `--config` | UTF-8 JSON参数文件，例如`examples/ula.json`；显式命令行参数覆盖文件值 |
+| `--config` | UTF-8 JSON分析方案，例如`examples/analysis.json`；兼容旧版`examples/ula.json`，显式命令行参数覆盖文件值 |
 | `--output-dir` | 创建一个新结果目录；已有目录（包括空目录）不覆盖，退出码3 |
 | `--include-phase` | DAT文件增加相位列 |
 | `--plot` | `none`、`rectangular`、`polar`或`both`，默认none；需要同时指定输出目录 |
@@ -62,7 +62,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.3.0/ArrayLab.e
 - `excitation.csv`：阵元编号、x坐标mm、相对幅度、激励相位°。
 - `rectangular.png`和/或`polar.png`：按需生成，使用无交互Agg渲染；显示下限−40 dB不影响数据文件。图中文字使用通用英文字体，避免依赖系统中文字体。
 
-结果先在临时目录内全部生成，成功后再发布为目标目录。不要让多项任务共用一个输出目录；批处理脚本为每次调用分配不同路径即可。配置文件只接受`ArrayParameters`中的6个字段，未知字段、重复字段、错误类型和非有限数值会被拒绝。
+结果先在临时目录内全部生成，成功后再发布为目标目录。不要让多项任务共用一个输出目录；批处理脚本为每次调用分配不同路径即可。配置文件的格式及6项参数见[分析方案约定](docs/analysis-format.md)；未知字段、重复字段、错误类型、未知版本和非有限数值会被拒绝。
 
 成功退出码为0，参数/配置内容错误为2，文件读写错误为3，其他运行异常为1。失败时错误JSON写入标准错误，标准输出不混入成功信息；`--help`和`--version`输出普通文本。无唯一主瓣或无完整半功率宽度时，相关字段为JSON的`null`，仍属正常计算结果。
 
@@ -82,7 +82,21 @@ GUI入口也支持`ArrayLab.exe --headless --output-dir ...`，但Windows窗口�
 8. 左侧导航树可切换模型、数据及历史计算记录；中央“模型示意”支持透视/x-z视角、参考网格、坐标轴和滚轮缩放。
 9. 导航、参数与消息面板可以拖动、浮动、关闭；使用“视图 → 恢复工作台布局”恢复默认位置。底部消息保留本次会话最近300条运行信息。
 
-修改输入不会篡改已有结果。状态条会提示未重算；图形、指标和保存操作始终对应选中的结果快照。
+修改输入不会篡改已有结果。状态条会提示未重算；图形、指标和“保存数据”始终对应选中的结果快照。
+
+## 保存与恢复分析方案
+
+在主页点击“保存方案”（Ctrl+Shift+S），保存右侧当前输入的6项有效参数，即使这些参数尚未计算也可保存。重开程序后点击“打开方案”（Ctrl+Shift+O），载入参数并按F5计算。加载不会自动计算或清除已有曲线，界面会提示结果仍属于此前计算。
+
+方案包含阵元数、频率、间距、间距单位、扫描角和采样步长；不包含结果曲线、导入数据、窗口布局和显示选项。保存已有文件时由文件对话框确认覆盖；校验或写入失败时保留原文件。旧版平铺参数JSON可直接打开，新保存统一使用版本1格式。
+
+桌面保存的JSON可直接用于无头计算，也可显式覆盖其中的参数：
+
+```powershell
+python -m arraylab --headless --config "examples/analysis.json" --scan-deg 30 --output-dir "results/scheme01"
+```
+
+覆盖仅作用于本次运行，不改动方案文件。详见[完整格式、兼容策略与失败行为](docs/analysis-format.md)。
 
 ## 首版范围与坐标
 
@@ -96,7 +110,7 @@ GUI入口也支持`ArrayLab.exe --headless --output-dir ...`，但Windows窗口�
 - 方向图按理论峰值归一化0 dB；保存数值零点以−300 dB表示。该数值只是有限精度下限，零点的相位不作物理解释。显示下限不改变保存的数据。
 - 导入文件只显示数据，不由单个切面反推方向性，也不假定其角度定义与当前模型相同。允许的导入角度范围为−180°至180°，角度必须严格递增。
 
-尚未实现：非均匀幅度、非各向同性单元、互耦、任意位置优化、二维阵列、三维方向图、阻抗与匹配、项目持久化。首版只包含已经约定的直线阵闭环及其数据对比操作。
+尚未实现：非均匀幅度、非各向同性单元、互耦、任意位置优化、二维阵列、三维方向图、阻抗与匹配、包含曲线及布局的完整项目持久化。
 
 ## 计算与核对
 
@@ -111,12 +125,12 @@ GUI入口也支持`ArrayLab.exe --headless --output-dir ...`，但Windows窗口�
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.3.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.4.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。
 
-GitHub Actions运行Windows/Linux上的数值、文件与无头测试，不执行发布或部署，也不替代桌面视觉验收。下一步开发按[ROADMAP](ROADMAP.md)推进。
+GitHub Actions仅保留手动触发入口，推送和拉取请求不会自动运行测试。本轮验证均安排在推送前，推送后不再测试。手动工作流覆盖Windows/Linux上的数值、文件与无头测试，不替代桌面视觉验收。下一步开发按[ROADMAP](ROADMAP.md)推进。
 
 ## 许可
 

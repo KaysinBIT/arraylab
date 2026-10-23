@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from . import __version__
 from .core import ArrayParameters, InputError, calculate
+from .configuration import load_configuration, save_configuration
 from .dataio import read_pattern, write_pattern
 from .widgets import NumericTableModel, PatternSet
 
@@ -121,6 +122,9 @@ class MainWindow(QMainWindow):
             menu.addAction(a)
             return a
 
+        action(file_menu, "打开分析方案…", self.open_configuration_dialog, "Ctrl+Shift+O")
+        action(file_menu, "保存当前参数为方案…", self.save_configuration_dialog, "Ctrl+Shift+S")
+        file_menu.addSeparator()
         action(file_menu, "读取方向图…", self.open_dialog, "Ctrl+O")
         self.save_action = action(file_menu, "保存所选方向图…", self.save_dialog, "Ctrl+S")
         action(file_menu, "退出", self.close, "Ctrl+Q")
@@ -152,16 +156,57 @@ class MainWindow(QMainWindow):
         return p
 
     def reset_parameters(self):
+        self.apply_parameters(ArrayParameters())
+
+    def apply_parameters(self, parameters):
+        # Unit changes must not convert values while restoring a complete snapshot.
         self._changing = True
-        for key, value in asdict(ArrayParameters()).items():
+        self.unit.setCurrentIndex(self.unit.findData(parameters.spacing_unit))
+        self._spacing_unit = parameters.spacing_unit
+        self.phase_mode.setCurrentIndex(1 if parameters.scan_deg != 0 else 0)
+        for key, value in asdict(parameters).items():
             if key in self.inputs:
                 self.inputs[key].setText(str(value))
-        self.unit.setCurrentIndex(0)
-        self._spacing_unit = "lambda"
-        self.phase_mode.setCurrentIndex(0)
-        self.inputs["scan_deg"].setEnabled(False)
+        self.inputs["scan_deg"].setEnabled(self.phase_mode.currentIndex() == 1)
         self._changing = False
         self.mark_dirty()
+
+    def load_configuration_path(self, path):
+        parameters = load_configuration(path)  # Validate everything before changing widgets.
+        self.apply_parameters(parameters)
+        self.last_directory = str(Path(path).parent)
+        self.state_label.setText("方案已加载，尚未重新计算。已有图形和指标仍对应所选历史结果；点击“开始计算”生成新结果。")
+        self.statusBar().showMessage(f"已加载分析方案：{Path(path).name}；请点击“开始计算”。")
+        self.record_message(f"已加载分析方案：{Path(path).name}（待计算）。")
+        self.focus_parameters()
+
+    def save_configuration_path(self, path):
+        save_configuration(path, self.read_parameters())
+        self.last_directory = str(Path(path).parent)
+        self.statusBar().showMessage(f"已保存当前输入参数：{Path(path).name}。")
+        self.record_message(f"已保存分析方案：{Path(path).name}（当前输入参数）。")
+
+    def open_configuration_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(self, "打开分析方案（加载后需重新计算）", self.last_directory,
+                                            "分析方案 (*.json)", options=QFileDialog.Option.DontUseNativeDialog)
+        if path:
+            try:
+                self.load_configuration_path(path)
+            except (OSError, ValueError, OverflowError) as exc:
+                QMessageBox.warning(self, "方案加载失败", str(exc))
+
+    def save_configuration_dialog(self):
+        # A default suffix lets Qt check the exact destination for overwrite confirmation.
+        dialog = QFileDialog(self, "保存当前输入参数为分析方案", self.last_directory, "分析方案 (*.json)")
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        dialog.setDefaultSuffix("json")
+        dialog.selectFile("analysis.json")
+        if dialog.exec():
+            try:
+                self.save_configuration_path(dialog.selectedFiles()[0])
+            except (OSError, ValueError, OverflowError) as exc:
+                QMessageBox.warning(self, "方案保存失败", str(exc))
 
     def load_example(self):
         self.reset_parameters()
@@ -200,7 +245,7 @@ class MainWindow(QMainWindow):
         if self._changing or not hasattr(self, "state_label"):
             return
         if self.datasets:
-            self.state_label.setText("参数已修改，尚未重新计算。下方图形、指标和保存操作仍对应所选历史结果。")
+            self.state_label.setText("参数已修改，尚未重新计算。图形、指标和“保存数据”仍对应所选历史结果；“保存方案”保存当前输入。")
         else:
             self.state_label.setText("设置参数后点击“计算”。扫描角从 +z 朝 +x 为正。")
 
@@ -294,7 +339,7 @@ class MainWindow(QMainWindow):
                     matches = self.read_parameters() == p
                 except ValueError:
                     matches = False
-                self.state_label.setText(("显示所选计算结果：" if matches else "当前输入与所选结果不同；保存操作仅针对所选结果：") + data.label)
+                self.state_label.setText(("显示所选计算结果：" if matches else "当前输入与所选结果不同；“保存数据”仅针对所选结果：") + data.label)
             else:
                 self.geometry.hide()
                 self.notice.setText("外部曲线按原始 dB 值显示，不重新归一化。没有完整模型，故不推算方向性或主瓣指标。")
@@ -384,6 +429,8 @@ class MainWindow(QMainWindow):
             "3. 切换直角/极坐标；在图中移动鼠标读数、点击定位。\n"
             "4. 勾选叠加比较后计算可保留最近5条曲线。所选曲线决定指标和保存内容。\n"
             "5. 文件菜单支持数值方向图读写，图下工具栏支持缩放及图片保存。\n\n"
+            "分析方案：主页的“保存方案”保存当前输入的6项参数；“打开方案”加载后需重新计算。"
+            "方案不包含历史曲线或窗口布局；也可通过无头入口的--config读取。\n\n"
             "坐标：阵列沿x轴，以阵列中心为相位参考。图为x-z前半空间切面，θ从+z向+x为正，范围−90°至90°。"
             "各向同性单元没有极化；不提供同/交叉极化标识。\n"
             "方向性采用全空间功率积分，不等于增益。半功率宽度按功率峰值的一半计算（−3.0103 dB）。"
