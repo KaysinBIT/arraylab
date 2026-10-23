@@ -36,6 +36,8 @@ def draw_planar_figure(figure, report, view, chinese=False):
         bound=max(1,float(np.max(radius)))
         ax.set_xlim(-bound,bound);ax.set_ylim(-bound,bound);ax.set_zlim(-bound,bound)
         ax.set_box_aspect((1,1,1));ax.view_init(elev=22,azim=-50)
+        from matplotlib.ticker import MaxNLocator
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):axis.set_major_locator(MaxNLocator(3))
     else:
         ax = figure.add_subplot(111)
         ports = report["network"]["ports"]
@@ -45,6 +47,19 @@ def draw_planar_figure(figure, report, view, chinese=False):
             for row in ports: ax.annotate(str(row["port"]),(row["x_lambda"],row["y_lambda"]),xytext=(4,5),textcoords="offset points",fontsize=8)
         ax.set(xlabel="x / wavelength",ylabel="y / wavelength",title="Planar element coordinates (z = 0)")
         ax.set_aspect("equal",adjustable="datalim");ax.grid(True,alpha=.3)
+
+
+    if view in ('cut', 'map', '3d'):
+        from .pattern_metrics import planar_summary, metrics_text, draw_metric_footer
+        if getattr(figure, '_metric_report', None) is not report:
+            figure._metric_report = report
+            figure._metric_summary = planar_summary(report)
+        lines = metrics_text(figure._metric_summary, chinese=chinese)
+        lines.insert(0, (f"实际输出 · {p['frequency_ghz']:g} GHz · 切面 φ={p['cut_phi_deg']:g}°"
+                         if chinese else f"Output | {p['frequency_ghz']:g} GHz | cut phi={p['cut_phi_deg']:g} deg"))
+        lines.append('前后空间对称；代表峰不承诺唯一；PSL按切面两侧首个极小值分界。' if chinese
+                     else 'Front/back symmetry; representative peak may be nonunique. Cut PSL: first-minimum boundaries.')
+        draw_metric_footer(figure, lines)
 
 
 def render_planar_plots(directory, report, mode):

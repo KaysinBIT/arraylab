@@ -65,7 +65,7 @@ def parser(planar=False):
     p.add_argument("--step-deg", type=float, help="Pattern sampling interval, degrees (default: 0.1)")
     p.add_argument("--output-dir", type=Path, help="NEW directory for summary.json, pattern.dat and excitation.csv; never overwrite an existing directory")
     p.add_argument("--include-phase", action="store_true", help="Include the optional phase column in pattern.dat")
-    p.add_argument("--plot", choices=["none", "cut", "map", "3d", "all"] if planar else ["none", "rectangular", "polar", "both"], default="none",
+    p.add_argument("--plot", choices=["none", "cut", "map", "3d", "all"] if planar else ["none", "rectangular", "polar", "both", "3d", "all"], default="none",
                    help="Write PNG plots using Agg; requires --output-dir (default: none)")
     return p
 
@@ -82,6 +82,8 @@ def load_parameters(args, base=None):
 
 
 def summary(result):
+    from .linear_plot import linear_metrics
+    derived = linear_metrics(result)
     p = result.parameters
     return {
         "schema_version": 1,
@@ -95,8 +97,16 @@ def summary(result):
             "cut": "x-z, z>=0", "angle_reference": "from +z towards +x",
             "phase_reference": "array_center", "pattern_normalization": "theoretical_peak_0_dB",
             "data_floor_db": -300, "directivity_integral": "full_sphere",
+            "sphere_theta_reference": "0..180 degrees from +z",
+            "sphere_phi_reference": "-180..180 degrees from +x towards +y",
+            "sphere_sampling_step_deg": 2,
         },
         "metrics": {
+            "peak_sidelobe_db": derived.get("peak_sidelobe_db"),
+            "sidelobe_main_lobe_bounds_deg": derived.get("main_lobe_bounds_deg"),
+            "sidelobe_method": "sampled_xz_cut_outside_nearest_main_lobe_minima",
+            "gain_dbi": None,
+            "gain_status": "not_calculated_missing_radiation_efficiency",
             "directivity_dbi": result.directivity_dbi,
             "directivity_linear": 10 ** (result.directivity_dbi / 10),
             "main_lobe_angle_deg": result.peaks_deg[0] if len(result.peaks_deg) == 1 else None,
@@ -115,7 +125,11 @@ def summary(result):
     }
 
 
-def render_plots(result, directory, mode, prefix="", patterns=None):
+def plot_kinds(mode):
+    return ["rectangular", "polar", "3d"] if mode == "all" else ["rectangular", "polar"] if mode == "both" else [mode]
+
+
+def render_plots(result, directory, mode, prefix="", patterns=None, feed_report=None):
     # This is a file renderer, not a hidden/offscreen Qt application. Do not
     # import pyplot, widgets.py or any Qt backend, even when MPLBACKEND=QtAgg.
     import matplotlib
@@ -124,11 +138,20 @@ def render_plots(result, directory, mode, prefix="", patterns=None):
     from matplotlib.figure import Figure
     import numpy as np
 
-    kinds = ["rectangular", "polar"] if mode == "both" else [mode]
+    from .linear_plot import linear_metrics, metric_lines, sphere_pattern, sphere_from_feed, draw_sphere
+    from .pattern_metrics import draw_metric_footer
+    kinds = plot_kinds(mode)
     for kind in kinds:
         with matplotlib.rc_context({"font.family": "DejaVu Sans", "font.size": 10, "text.usetex": False}):
             figure = Figure(figsize=(8, 5), dpi=150, layout="constrained")
             FigureCanvasAgg(figure)
+            metrics = linear_metrics(result if feed_report is None else None, feed_report, sphere=kind == "3d")
+            if kind == "3d":
+                sphere = sphere_from_feed(feed_report) if feed_report is not None else sphere_pattern(result.parameters)
+                draw_sphere(figure, sphere)
+                draw_metric_footer(figure, metric_lines(metrics, sphere=True, label="Feed output" if feed_report else "Linear array"))
+                figure.savefig(directory / f"{prefix}{kind}.png"); figure.clear()
+                continue
             polar = kind == "polar"
             ax = figure.add_subplot(111, projection="polar" if polar else None)
             curves = [(None, result.pattern_db)] if patterns is None else [
@@ -159,7 +182,13 @@ def render_plots(result, directory, mode, prefix="", patterns=None):
                 ax.set_ylabel("Target coherent-sum reference (dB)" if patterns else "Normalized pattern (dB)")
             p = result.parameters
             ax.set_title(f"ULA: N={p.elements}, d={p.spacing_lambda:g} lambda, scan={p.scan_deg:g} deg")
+            edges = metrics.get("half_power_edges_deg")
+            if edges is not None and metrics.get("peak_level_db") is not None:
+                threshold = metrics["peak_level_db"] + 10 * math.log10(.5)
+                ax.plot(np.deg2rad(edges) if polar else edges,
+                        [threshold + (40 if polar else 0)] * 2, "o--", color="#7a8b9a", lw=1, markersize=3)
             ax.grid(True, color="#dce5ed", linewidth=.75)
+            draw_metric_footer(figure, metric_lines(metrics, label="Feed output" if feed_report else "Linear array"))
             figure.savefig(directory / f"{prefix}{kind}.png")
             figure.clear()
 
@@ -182,16 +211,19 @@ def save_outputs(result, report, args):
         np.savetxt(staging / "excitation.csv", excitation, delimiter=",", header="element,x_mm,amplitude,phase_deg",
                    comments="", fmt=["%d", "%.12g", "%.12g", "%.12g"])
         files = {"summary": "summary.json", "pattern": "pattern.dat", "excitation": "excitation.csv"}
+        from .linear_plot import sphere_pattern, write_sphere_csv
+        write_sphere_csv(staging / "sphere-pattern.csv", sphere_pattern(result.parameters))
+        files["sphere_pattern"] = "sphere-pattern.csv"
         if "feed_network" in report:
             from .feed import write_feed_files
             files.update(write_feed_files(staging, report["feed_network"]))
         if args.plot != "none":
             render_plots(result, staging, args.plot)
-            for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
+            for kind in plot_kinds(args.plot):
                 files[kind + "_plot"] = kind + ".png"
             if "feed_network" in report:
-                render_plots(result, staging, args.plot, prefix="feed-", patterns=report["feed_network"]["electrical"]["patterns"])
-                for kind in (["rectangular", "polar"] if args.plot == "both" else [args.plot]):
+                render_plots(result, staging, args.plot, prefix="feed-", patterns=report["feed_network"]["electrical"]["patterns"], feed_report=report["feed_network"])
+                for kind in plot_kinds(args.plot):
                     files["feed_" + kind + "_plot"] = "feed-" + kind + ".png"
         report["output_directory"] = str(target)
         report["files"] = files
@@ -236,6 +268,10 @@ def feed_settings_from_args(args, parameters, base=None):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    routed = [value for value in argv if value != "--headless"]
+    if routed and routed[0] == "subarray":
+        from .subarray_cli import main as subarray_main
+        return subarray_main(routed[1:])
     if "--sparse" in argv:
         from .sparse_cli import main as sparse_main
         args = [value for value in argv if value != "--headless"]

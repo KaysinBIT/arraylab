@@ -118,6 +118,7 @@ def draw_detail(fig,bundle,result,case_index=None,view_mode='total',phase_mode='
     for index,(kind,_) in enumerate(DETAIL_PLOTS):
         _draw_detail_axes(fig,fig.add_subplot(2,2,index+1),kind,bundle,result,case_index,view_mode,phase_mode)
     fig.subplots_adjust(left=.075,right=.96,bottom=.13,top=.93,wspace=.36,hspace=.56)
+    _metric_footer(fig,bundle,result,case_index,view_mode,phase_mode)
 
 
 def draw_detail_plot(fig,bundle,result,kind,case_index=None,view_mode='total',compact=False,phase_mode='ideal'):
@@ -136,6 +137,8 @@ def draw_detail_plot(fig,bundle,result,kind,case_index=None,view_mode='total',co
         if kind=='pattern':
             fig.axes[1].set_ylabel('Element / dB' if view_mode=='element' else 'Field / dB',fontsize=8)
             fig.axes[1].tick_params(labelsize=7)
+    if kind in ('pattern','cuts'):
+        _metric_footer(fig,bundle,result,case_index,view_mode,phase_mode)
     return ax
 
 
@@ -143,6 +146,14 @@ def detail_figure(bundle,result,phase_mode='ideal'):
     fig=Figure(figsize=(12,8),dpi=130)
     draw_detail(fig,bundle,result,phase_mode=phase_mode)
     return fig
+
+
+def _metric_footer(fig,bundle,result,case_index,view_mode,phase_mode):
+    from .pattern_metrics import sparse_pattern_summary, sparse_metric_lines
+    from ..pattern_metrics import draw_metric_footer
+    index=result['metrics'].get('worst_case_index',0) if case_index is None else case_index
+    summary=sparse_pattern_summary(bundle,result,index,view_mode,phase_mode)
+    draw_metric_footer(fig,sparse_metric_lines(summary))
 
 
 def comparison_figure(bundle):

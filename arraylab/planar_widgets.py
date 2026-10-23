@@ -176,8 +176,9 @@ class PlanarPanel(QWidget):
             self.fill_table(self.table,columns,self.report["network"]["ports" if view=="ports" else "sections"])
             self.table.resizeColumnsToContents()
         else:
-            draw_planar_figure(self.figure,self.report,view)
+            draw_planar_figure(self.figure,self.report,view,chinese=True)
             self.update_plot_layout()
+        self.metrics.setVisible(table_view)
         metric=self.report["electrical"]["patterns"]["output"]["metrics"]
         def number(value):return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"
         estimate="（数值估计）" if metric["peak_search_method"]=="disk_grid_multistart_estimate" else ""
@@ -194,7 +195,8 @@ class PlanarPanel(QWidget):
         if not hasattr(self,"toolbar"):return
         compact=self.width()<700 or self.window.height()<820
         self.toolbar.setVisible(not compact and self.view.currentData() not in ("ports","sections"))
-        self.figure.subplots_adjust(left=.13 if compact else .11,right=.87 if compact else .9,bottom=.24 if compact else .18,top=.85 if compact else .88)
+        bottom=max(.24 if compact else .18,getattr(self.figure,'_arraylab_footer_reserved',.22)+.08) if self.view.currentData() in ('cut','map','3d') else (.24 if compact else .18)
+        self.figure.subplots_adjust(left=.13 if compact else .11,right=.87 if compact else .9,bottom=bottom,top=.85 if compact else .88)
         for ax in self.figure.axes:
             ax.tick_params(labelsize=7 if compact else 9)
             ax.title.set_fontsize(8 if compact else 10)

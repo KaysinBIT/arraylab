@@ -58,7 +58,7 @@ def main():
     assert not sample.stderr
     checks.append("console_stdout_JSON_matches_manual_example")
     images = work / "图形 数据"
-    result = run("--elements", 20, "--scan-deg", 30, "--plot", "both", "--include-phase", "--output-dir", images)
+    result = run("--elements", 20, "--scan-deg", 30, "--plot", "all", "--include-phase", "--output-dir", images)
     summary = json.loads(result.stdout)
     assert json.loads((images / "summary.json").read_text(encoding="utf-8")) == summary
     assert abs(summary["metrics"]["directivity_dbi"] - 13.010299956639813) < 1e-9
@@ -66,9 +66,23 @@ def main():
     assert len((images / "pattern.dat").read_text().splitlines()[0].split()) == 3
     assert len((images / "excitation.csv").read_text().splitlines()) == 21
     checks.append("unicode_paths_JSON_DAT_CSV_exports")
-    for name in ("rectangular.png", "polar.png"):
+    for name in ("rectangular.png", "polar.png", "3d.png"):
         assert (images / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     checks.append("PNG_export_with_invalid_Qt_platform_and_forced_QtAgg_environment")
+    sphere = (images / 'sphere-pattern.csv').read_text(encoding='utf-8').splitlines()
+    assert len(sphere) == 91*181+1
+    checks.append('linear_full_sphere_CSV_and_3d_PNG_without_Qt')
+    subarray_directory = work / '子阵 连续中心'
+    subarray = json.loads(run('subarray', '--config', release / 'examples/subarray.json',
+                             '--output', subarray_directory, '--workers', '2', '--plot', 'all').stdout)
+    assert subarray['ok'] and subarray['element_count'] == subarray['subarray_count']*4
+    subarray_report = json.loads((subarray_directory/'report.json').read_text(encoding='utf-8'))
+    assert subarray_report['best']['worst_psl_db'] <= subarray_report['initial']['worst_psl_db']+1e-10
+    assert (subarray_directory/'best-case-0-sphere.csv').exists()
+    assert (subarray_directory/'case-metrics.csv').exists()
+    for view in ('layout', 'pattern', 'cuts', '3d'):
+        assert (subarray_directory/f'subarray-{view}-case-0.png').read_bytes().startswith(b'\x89PNG')
+    checks.append('subarray_parallel_centers_actual_elements_metrics_sphere_and_four_PNG_views_without_Qt')
     for flags in [("--elements", "0"), ("--unknown",)]:
         error = run(*flags, expected=2)
         assert not error.stdout
@@ -96,7 +110,7 @@ def main():
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
         process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
-                                 cwd=work, env=gui_env, timeout=180)
+                                 cwd=work, env=gui_env, timeout=420)
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
         report["gui_checks_passed"] = len(gui_report["checks"])

@@ -27,6 +27,9 @@ class HistoryActions:
     """MainWindow actions; the window owns all widgets and task routing."""
 
     def _require_history_idle(self):
+        subarray = getattr(self, 'subarray_panel', None)
+        if subarray is not None and (subarray._busy or subarray.thread is not None):
+            raise ValueError('子阵任务仍在计算或导出，请完成后再恢复历史记录。')
         sparse = getattr(self, "sparse_panel", None)
         if sparse is not None and (getattr(sparse, "_busy", False) or getattr(sparse, "thread", None) is not None):
             raise ValueError("二维稀疏任务仍在计算或导出，请完成后再恢复历史记录。")

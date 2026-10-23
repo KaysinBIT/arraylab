@@ -47,6 +47,8 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
 
     def build_ui(self):
         build_workbench(self)
+        from .subarray_widgets import attach_subarray
+        attach_subarray(self)
 
 
 
@@ -64,6 +66,10 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         self.show(); self.raise_(); self.activateWindow()
 
     def closeEvent(self, event):
+        subarray = getattr(self, 'subarray_panel', None)
+        if subarray is not None and (subarray.thread is not None or subarray._busy):
+            self.statusBar().showMessage('子阵任务仍在计算或导出，请完成后关闭。')
+            event.ignore(); return
         sparse = getattr(self, 'sparse_panel', None)
         if sparse is not None and (sparse.thread is not None or sparse._busy):
             self.statusBar().showMessage('二维稀疏任务仍在计算或导出，请完成后关闭。')
@@ -328,7 +334,7 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
                 self.state_label.setText(("显示所选计算结果：" if matches else "当前输入与所选结果不同；“导出曲线”仅针对所选结果：") + data.label)
             else:
                 self.geometry.hide()
-                self.notice.setText("外部曲线按原始 dB 值显示，不重新归一化。没有完整模型，故不推算方向性或主瓣指标。")
+                self.notice.setText("外部曲线按原始 dB 值显示，仅提取采样切面指标。缺少完整模型，无法推算三维方向图、方向性或增益。")
                 self.notice.show()
                 self.state_label.setText("显示外部数据：" + data.label + "；未将其作为当前输入的计算结果。")
         else:
@@ -352,7 +358,8 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         if hasattr(self, "plot"):
             self.plot.draw_sets(self.datasets, self.selection.currentIndex(),
                                 self.plot_type.currentIndex() == 1,
-                                [-30, -40, -60, -80][self.floor_combo.currentIndex()])
+                                [-30, -40, -60, -80][self.floor_combo.currentIndex()],
+                                view="3d" if self.plot_type.currentIndex() == 2 else None)
 
     def select_result_tab(self, current, previous):
         payload = current.data(0, Qt.ItemDataRole.UserRole) if current else None

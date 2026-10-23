@@ -28,6 +28,11 @@ def main():
         "--distpath", str(ROOT / "dist"), "--workpath", str(ROOT / "build" / VERSION),
         str(ROOT / "ArrayLab.spec"),
     ], cwd=ROOT, env=env, check=True)
+    finish_release()
+
+
+def finish_release():
+    """Copy documentation and dependency notices after a full or incremental build."""
     release = ROOT / "dist" / f"ArrayLab-{VERSION}"
     if (release / "_internal" / "icuuc.dll").exists():
         raise RuntimeError("Unexpected bundled icuuc.dll; check the DLL provenance before shipping.")

@@ -13,6 +13,7 @@ def build_start_page(window):
         ('feed','直线阵馈电','设计并联、串行、1分2对称串馈的阻抗与端口相位。','设计直线阵馈电'),
         ('planar','平面阵馈电','为规则或任意x-y布局设计二维波束指向和馈电。','设计平面阵馈电'),
         ('sparse','二维稀疏设计','在候选位置中选择阵元，比较方案，再转入馈电设计。','综合稀疏阵列'),
+        ('subarray','子阵中心优化','固定子阵内部模板，优化中心位置，并核对多工况方向图。','优化子阵位置'),
     ]):
         card=QGroupBox(title);body=QVBoxLayout(card);body.setContentsMargins(16,18,16,14)
         label=QLabel(description);label.setWordWrap(True);body.addWidget(label);body.addStretch()

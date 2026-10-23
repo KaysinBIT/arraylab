@@ -28,6 +28,8 @@ class PatternSet:
     db: np.ndarray
     phase: np.ndarray | None = None
     result: ArrayResult | None = None
+    feed_report: dict | None = None
+    pattern_key: str = "output"
 
 
 class NumericTableModel(QAbstractTableModel):
@@ -184,10 +186,25 @@ class PatternPlot(QWidget):
         self.canvas.mpl_connect("button_press_event", self.on_click)
         self.draw_sets([], -1)
 
-    def draw_sets(self, datasets, selected, polar=False, floor=-40.0):
+    def draw_sets(self, datasets, selected, polar=False, floor=-40.0, view=None):
         self.datasets, self.selected, self.polar, self.floor = datasets, selected, polar, floor
+        self.three_dimensional = view == "3d"
         self.figure.clear()
         self.cursor_artist = None
+        if self.three_dimensional and datasets and 0 <= selected < len(datasets):
+            from .linear_plot import sphere_pattern, sphere_from_feed, draw_sphere
+            data = datasets[selected]
+            if data.result is not None:
+                sphere = sphere_pattern(data.result.parameters)
+            elif data.feed_report is not None:
+                sphere = sphere_from_feed(data.feed_report, data.pattern_key)
+            else:
+                self.axes = self.figure.add_subplot(111); self.axes.set_axis_off()
+                self.axes.text(.5, .5, "此记录仅含二维曲线\n缺少完整阵列或激励，无法生成三维方向图。", ha="center", va="center", transform=self.axes.transAxes)
+                self.canvas.draw_idle(); return
+            self.axes = draw_sphere(self.figure, sphere, chinese=True)
+            self.draw_metrics(data)
+            self.canvas.draw_idle(); return
         self.axes = self.figure.add_subplot(111, projection="polar" if polar else None)
         ax = self.axes
         if not datasets:
@@ -242,10 +259,33 @@ class PatternPlot(QWidget):
         for text in legend.get_texts():
             text.set_parse_math(False)
         ax.tick_params(labelsize=9)
+        if 0 <= selected < len(datasets):
+            self.draw_metrics(datasets[selected])
         self.canvas.draw_idle()
 
+    def draw_metrics(self, data):
+        from .linear_plot import linear_metrics, metric_lines
+        from .pattern_metrics import draw_metric_footer
+        self.current_metrics = linear_metrics(data.result, data.feed_report, data.pattern_key, data.angles, data.db,
+                                              sphere=self.three_dimensional)
+        if not self.three_dimensional and data.result is None:
+            peak = self.current_metrics.get("main_lobe_angle_deg")
+            level = self.current_metrics.get("peak_level_db")
+            if peak is not None and level is not None:
+                self.axes.plot([math.radians(peak) if self.polar else peak],
+                               [level - self.floor if self.polar else level], "o", color="#d77a28", markersize=5)
+                edges = self.current_metrics.get("half_power_edges_deg")
+                if edges:
+                    threshold = level + 10 * math.log10(.5)
+                    self.axes.plot(np.deg2rad(edges) if self.polar else edges,
+                                   [threshold - (self.floor if self.polar else 0)] * 2,
+                                   "o--", color="#7a8b9a", lw=1, markersize=3)
+        draw_metric_footer(self.figure, metric_lines(self.current_metrics, chinese=True,
+                                                     sphere=self.three_dimensional, label=data.label))
+
+
     def _read(self, event):
-        if event.inaxes != self.axes or event.xdata is None or not 0 <= self.selected < len(self.datasets):
+        if self.three_dimensional or event.inaxes != self.axes or event.xdata is None or not 0 <= self.selected < len(self.datasets):
             return None
         theta = math.degrees(event.xdata) if self.polar else event.xdata
         if self.polar:

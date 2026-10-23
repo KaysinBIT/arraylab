@@ -168,8 +168,19 @@ class FeedPanel(QWidget):
         self.result_tabs.addTab(diagram_page, "连接示意")
         self.result_tabs.addTab(self.ports, "端口与相位")
         pattern_page = QWidget(); pattern_layout = QVBoxLayout(pattern_page); pattern_layout.setContentsMargins(0, 0, 0, 0)
+        view_row = QHBoxLayout()
+        self.pattern_view = QComboBox(); self.pattern_view.addItems(["直角坐标", "极坐标", "三维方向图"])
+        self.pattern_source = QComboBox()
+        for label, key in [("目标激励", "target"), ("网络原始输出", "uncompensated"), ("电气模型输出", "output")]:
+            self.pattern_source.addItem(label, key)
+        self.pattern_source.setCurrentIndex(2)
+        view_row.addWidget(QLabel("显示方式")); view_row.addWidget(self.pattern_view)
+        view_row.addWidget(QLabel("指标／三维来源")); view_row.addWidget(self.pattern_source, 1)
+        pattern_layout.addLayout(view_row)
+        self.pattern_view.currentIndexChanged.connect(self.change_pattern_view)
+        self.pattern_source.currentIndexChanged.connect(self.redraw_patterns)
         self.pattern_metrics = QLabel(); self.pattern_metrics.setWordWrap(True)
-        pattern_layout.addWidget(self.pattern_metrics)
+        self.pattern_metrics.hide()  # Summary now lives inside the exported figure.
         self.pattern_plot = PatternPlot(); pattern_layout.addWidget(self.pattern_plot, 1)
         with matplotlib.rc_context({"figure.autolayout": False, "figure.constrained_layout.use": False}):
             self.pattern_plot.figure.set_layout_engine(None)
@@ -313,10 +324,9 @@ class FeedPanel(QWidget):
         self.pattern_plot.toolbar.setVisible(not compact)
         self.pattern_hint.setVisible(not compact)
         self.pattern_plot.setToolTip(self.pattern_hint.text() + " 放大窗口可显示完整图形工具栏。")
-        self.pattern_plot.figure.subplots_adjust(left=.13 if compact else .09, right=.98,
-                                                bottom=.37 if compact else .26, top=.94)
+        # The shared footer owns the plot's lower margin, including PNG export.
         ax = self.pattern_plot.axes
-        if ax is not None:
+        if ax is not None and not self.pattern_plot.three_dimensional:
             from matplotlib.ticker import MaxNLocator
             ax.tick_params(labelsize=7 if compact else 9)
             ax.xaxis.set_major_locator(MaxNLocator(5 if compact else 9))
@@ -342,21 +352,29 @@ class FeedPanel(QWidget):
             self.history_selection.setItemText(index, self.history[index]["label"])
             self.redraw_patterns()
 
+    def change_pattern_view(self, index):
+        self.pattern_polar = index == 1
+        self.redraw_patterns()
+
     def redraw_patterns(self):
         if self.report is None or not hasattr(self, "pattern_plot"):
             return
         patterns = self.report["electrical"]["patterns"]
         if self.compare_history.isChecked():
             data = [PatternSet(record["label"], np.array(record["report"]["electrical"]["patterns"]["output"]["angles_deg"]),
-                               np.array(record["report"]["electrical"]["patterns"]["output"]["pattern_db"])) for record in self.history]
+                               np.array(record["report"]["electrical"]["patterns"]["output"]["pattern_db"]),
+                               feed_report=record["report"]) for record in self.history]
             selected = self.history_selection.currentIndex()
             self.pattern_hint.setText("历史比较：每条曲线使用其目标相干和作参考；配置与归一化定义随记录一同导出。")
         else:
-            data = [PatternSet(label, np.array(patterns[key]["angles_deg"]), np.array(patterns[key]["pattern_db"]))
+            data = [PatternSet(label, np.array(patterns[key]["angles_deg"]), np.array(patterns[key]["pattern_db"]),
+                               feed_report=self.report, pattern_key=key)
                     for key, label in [("target", "目标激励"), ("uncompensated", "网络原始输出"), ("output", "电气模型输出")]]
-            selected = 2
+            selected = self.pattern_source.currentIndex()
             self.pattern_hint.setText("共同0 dB参考：该设计目标激励的相干幅度和；未单独抬高各曲线峰值。")
-        self.pattern_plot.draw_sets(data, selected, polar=getattr(self,'pattern_polar',False), floor=-60)
+        self.pattern_source.setEnabled(not self.compare_history.isChecked())
+        self.pattern_plot.draw_sets(data, selected, polar=getattr(self,'pattern_polar',False), floor=-60,
+                                   view="3d" if self.pattern_view.currentIndex() == 2 else None)
         target, output = patterns["target"]["metrics"], patterns["output"]["metrics"]
         def number(value):
             return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"

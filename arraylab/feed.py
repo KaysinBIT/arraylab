@@ -274,6 +274,11 @@ def write_feed_files(directory, report):
     files = {"feed_report": "feed-network.json", "feed_configuration": "feed-config.json",
             "feed_sections": "feed-sections.csv", "feed_ports": "feed-ports.csv", "feed_diagram": "feed-network.svg"}
     if "electrical" in report:
+        from .linear_plot import sphere_from_feed, write_sphere_csv
+        for key in ("target", "uncompensated", "output"):
+            filename = f"feed-{key}-sphere.csv"
+            write_sphere_csv(directory / filename, sphere_from_feed(report, key))
+            files[f"feed_{key}_sphere"] = filename
         patterns = report["electrical"]["patterns"]
         data = np.column_stack([patterns["target"]["angles_deg"], *[patterns[key]["pattern_db"] for key in ("target", "uncompensated", "output")]])
         np.savetxt(directory / "feed-patterns.csv", data, delimiter=",", header="theta_deg,target_db,uncompensated_db,output_db", comments="", fmt="%.12g")

@@ -141,3 +141,18 @@ def test_help_and_version_do_not_load_gui():
         r = run_cli(*args, guard=True)
         assert r.returncode == 0
         assert r.stdout
+
+
+def test_linear_and_feed_3d_export_remains_headless(tmp_path):
+    out = tmp_path / "三维结果"
+    r = run_cli("--elements", 6, "--scan-deg", 26, "--feed-network", "series",
+                "--feed-phase-bits", 3, "--output-dir", out, "--plot", "3d", guard=True)
+    assert r.returncode == 0, r.stderr
+    doc = json.loads(r.stdout)
+    for name in ("3d.png", "feed-3d.png"):
+        assert (out / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    for name in ("sphere-pattern.csv", "feed-output-sphere.csv", "feed-target-sphere.csv"):
+        data = np.loadtxt(out / name, delimiter=",", skiprows=1)
+        assert data.shape[1] == 4 and np.isfinite(data).all()
+    assert doc["files"]["feed_3d_plot"] == "feed-3d.png"
+    assert doc["metrics"]["gain_dbi"] is None

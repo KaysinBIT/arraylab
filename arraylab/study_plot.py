@@ -30,6 +30,15 @@ def draw_study(figure, report, view="response", selected=0):
         ax.legend(fontsize=8); ax.grid(alpha=.25)
         ax.set_title("Target direction only; not peak gain or pointing accuracy")
     figure.subplots_adjust(left=.12, right=.9 if view == "map" else .97, bottom=.2, top=.86)
+    if view == 'pattern':
+        from .pattern_metrics import sampled_cut_metrics, metrics_text, draw_metric_footer
+        summary = sampled_cut_metrics(report['angles_deg'], row['pattern_db'])
+        lines = metrics_text(summary)
+        value = row['metrics']['target_direction_directivity_dbi']
+        target = 'n/a' if value is None else f'{value:.3g} dBi'
+        lines[1] = 'Target-direction D ' + target + ' (not peak D) | Gain G unavailable (efficiency missing)'
+        lines.append('Selected scan-point cut; sample estimates. PSL excludes first bounding minima.')
+        draw_metric_footer(figure, lines)
 
 
 def render_study_plot(path, report):

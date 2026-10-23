@@ -377,12 +377,17 @@ class SparsePanel(QWidget):
         self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
         self.figure = figure; self.canvas.figure = figure; figure.set_canvas(self.canvas)
         figure.set_size_inches(max(1, self.canvas.width()) / figure.dpi, max(1, self.canvas.height()) / figure.dpi, forward=False)
+        if hasattr(figure, '_arraylab_footer_lines'):
+            from .pattern_metrics import draw_metric_footer
+            draw_metric_footer(figure, figure._arraylab_footer_lines)
         if self.view.currentData() == 'pattern' and len(figure.axes) == 2:
             figure.set_layout_engine(None)
             height, width = max(1, self.canvas.height()), max(1, self.canvas.width())
-            span = min(.6, .64 * height / width)
-            figure.axes[0].set_position([.48 - span / 2, .20, span, .64]); figure.axes[0].set_anchor('C')
-            figure.axes[1].set_position([.48 + span / 2 + .04, .20, .018, .64])
+            bottom = max(.20, getattr(figure, '_arraylab_footer_reserved', .12) + .09)
+            plot_height = max(.15, .90-bottom)
+            span = min(.6, plot_height * height / width)
+            figure.axes[0].set_position([.48 - span / 2, bottom, span, plot_height]); figure.axes[0].set_anchor('C')
+            figure.axes[1].set_position([.48 + span / 2 + .04, bottom, .018, plot_height])
             figure.axes[1].set_ylabel(''); figure.axes[1].set_xlabel('dB', fontsize=8, labelpad=1)
             figure.axes[0].title.set_fontsize(10)
             for axis in figure.axes: axis.tick_params(labelsize=8)

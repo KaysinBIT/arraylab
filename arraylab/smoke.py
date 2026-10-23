@@ -481,6 +481,8 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_history(app, window, output, report, check)
             from .workflow_smoke import exercise_workflow
             exercise_workflow(app, window, output, report, check)
+            from .next_stage_smoke import exercise_next_stage
+            exercise_next_stage(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:
