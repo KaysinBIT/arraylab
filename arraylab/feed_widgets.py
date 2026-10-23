@@ -118,6 +118,10 @@ class FeedPanel(QWidget):
         self.toggle_settings = QPushButton("收起设置")
         self.toggle_settings.clicked.connect(self.toggle_controls)
         actions.addWidget(self.toggle_settings)
+        self.study_button = QPushButton("扫描评估")
+        self.study_button.setToolTip("以所选已生成设计为基础，逐扫描角计算电气响应")
+        self.study_button.clicked.connect(self.open_study)
+        actions.addWidget(self.study_button)
         actions.addStretch()
         layout.addLayout(actions)
         self.state = QLabel("请设置参数后点击“生成电气设计”。50 Ω为初值，请按设计条件修改。")
@@ -173,6 +177,14 @@ class FeedPanel(QWidget):
         settings = FeedSettings(topology=self.topology.currentData(), **values, **self.electrical.values())
         settings.validate()
         return settings
+
+    def open_study(self):
+        if self.report is None:
+            QMessageBox.warning(self, "扫描评估", "请先生成并选择一项电气设计。")
+            return
+        from .study_widgets import ScanStudyDialog
+        self.study_dialog = ScanStudyDialog(self.report, self)
+        self.study_dialog.exec()
 
     def mark_dirty(self):
         if self._changing or not hasattr(self, "state"):

@@ -81,3 +81,5 @@ python -m arraylab --headless --feed-config examples/feed-electrical.json --feed
 除原阻抗文件外，导出包括`feed-patterns.csv`、目标/输出激励CSV及按需的`feed-rectangular.png`、`feed-polar.png`。0.7.1另提供`feed-target.dat`、`feed-uncompensated.dat`、`feed-output.dat`，分别对应所选记录的目标、未补偿及模型输出曲线。DAT为无表头的角度°、幅度dB两列，保留三条曲线的共同参考和−300 dB数值下限，与完整JSON使用同一快照，文本精度为12位有效数字。可通过主工作台“读取数据”重新读入；单切面导入不生成方向性指标。相位和模型信息保留在完整JSON中。
 
 顶层原有`pattern.dat`等仍表示独立的均匀阵基准，馈电结果位于`feed_network.electrical`及feed前缀文件。`--include-phase`只控制均匀阵基准DAT的第三列，不改变上述馈电DAT的两列格式。
+
+0.8.0可从所选已生成设计进入[多扫描角电气评估](scan-study.md)，逐点查看补偿相位、指定目标方向响应及方向图。扫描复用同一组阵元误差，不进行误差统计。

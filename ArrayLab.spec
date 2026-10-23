@@ -8,12 +8,12 @@ common = ["tkinter", "PyQt5", "PyQt6", "PySide2", "pytest"]
 
 desktop = Analysis(
     [str(ROOT / "launch.py")], pathex=[str(ROOT)],
-    hiddenimports=["arraylab.smoke", "PySide6.QtTest"],
+    hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "PySide6.QtTest"],
     excludes=common, hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
 )
 headless = Analysis(
     [str(ROOT / "launch_cli.py")], pathex=[str(ROOT)],
-    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.smoke"],
+    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.smoke"],
     hooksconfig={"matplotlib": {"backends": ["Agg"]}},
 )
 gui = EXE(PYZ(desktop.pure), desktop.scripts, [], exclude_binaries=True,

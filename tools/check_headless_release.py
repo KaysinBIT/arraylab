@@ -92,7 +92,7 @@ def main():
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
         process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
-                                 cwd=work, env=gui_env, timeout=45)
+                                 cwd=work, env=gui_env, timeout=90)
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
         report["gui_checks_passed"] = len(gui_report["checks"])
@@ -119,6 +119,16 @@ def main():
         for key, pattern in planar["electrical"]["patterns"].items():
             check_dat(planar_directory / f"planar-cut-{key}.dat", pattern["cut_angles_deg"], pattern["cut_db"])
         checks.append("arbitrary_planar_GUI_headless_EXE_and_DAT_match")
+        for kind in ("linear", "planar"):
+            directory = work / f"cli-study-{kind}"
+            scan = json.loads(run("--study-config", smoke / f"study-{kind}.json", "--output-dir", directory,
+                                  "--plot", "all").stdout)["study"]
+            assert scan == gui_report["scan_results"][kind]
+            assert json.loads((directory / "study-report.json").read_text(encoding="utf-8")) == scan
+            assert (directory / "study.png").read_bytes().startswith(b"\x89PNG")
+            for row in scan["records"]:
+                check_dat(directory / f"study-{row['index']:03d}.dat", scan["angles_deg"], row["pattern_db"])
+            checks.append(f"{kind}_scan_GUI_headless_EXE_DAT_PNG_and_saved_configuration_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

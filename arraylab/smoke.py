@@ -463,6 +463,8 @@ def schedule_smoke_test(app, window, output: Path):
                 dataset = window.selected_dataset()
                 check(dataset.result is None and np.allclose(dataset.db, values, rtol=0, atol=1e-8),
                       f"{Path(filename).name}_desktop_import_without_inferred_directivity")
+            from .study_smoke import exercise_scan_dialogs
+            exercise_scan_dialogs(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

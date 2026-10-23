@@ -69,6 +69,7 @@ class PlanarPanel(QWidget):
         self.export_button=QPushButton("导出结果");self.export_button.clicked.connect(self.export_dialog);self.export_button.setEnabled(False)
         self.toggle_settings=QPushButton("收起设置");self.toggle_settings.clicked.connect(self.toggle_controls)
         for button in [self.design_button,self.open_button,self.save_button,self.export_button,self.toggle_settings]:actions.addWidget(button)
+        self.study_button=QPushButton("扫描评估");self.study_button.clicked.connect(self.open_study);actions.addWidget(self.study_button)
         actions.addStretch();layout.addLayout(actions)
         self.state=QLabel("请设置平面阵参数后生成设计。右侧直线阵参数不会覆盖本页。")
         self.state.setObjectName("state");self.state.setWordWrap(True);layout.addWidget(self.state)
@@ -91,6 +92,8 @@ class PlanarPanel(QWidget):
     def update_geometry_controls(self):
         regular=self.geometry.currentData()=="rectangular"
         for key in ("nx","ny","spacing_x","spacing_y"):self.geometry_fields[key].setEnabled(regular)
+
+    open_study = FeedPanel.open_study
 
     def read_parameters(self):
         values={key:int(edit.text().strip()) if key in ("nx","ny") else float(edit.text().strip()) for key,edit in self.geometry_fields.items()}
