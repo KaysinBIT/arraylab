@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.10.0，原创源码采用MIT许可。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.11.0，原创源码采用MIT许可。
+
+0.11.0在馈电页增加常驻目标波束角及“按目标生成”，支持直线阵θ、规则/任意平面阵θ与φ，也可继续设计稀疏页转入的布局。三种馈电拓扑按目标角综合端口补偿相位，并分别报告有效目标与模型输出峰值。物理尺寸和误差统计继续暂缓。
 
 桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.7.0完成相位补偿、幅度加权、自定义激励、误差/失效/量化分析和设计比较，并加入规则矩形及任意坐标平面阵、二维切面与可旋转三维阵因子。0.7.1补齐馈电及平面阵切面DAT导出；0.8.0新增多扫描角电气评估、逐点相位表、扫描方向图总览和可取消的后台计算。0.9.0合并二维稀疏选点、禁布/间距约束、稀疏后加权、角频联合综合和量化复核，并连接到平面阵电气设计。0.10.0将稀疏界面重做为主工作台内置页面，删除原独立稀疏窗口代码。物理尺寸设计按用户要求暂缓。
 
@@ -24,7 +26,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.10.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.11.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -37,7 +39,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.10.0/ArrayLab.
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.10.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.11.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -112,7 +114,14 @@ python -m arraylab --headless --config "examples/analysis.json" --scan-deg 30 --
 
 在“幅相与加权”选择扫描/正侧向补偿及均匀、Chebyshev、Taylor或自定义CSV；在“误差与失效”设置量化位数、幅相误差、随机种子和失效端口。“方向图核对”并列目标、未经补偿和模型输出，使用相同参考幅度。
 
-![电气方向图核对](docs/images/electrical.png)
+在顶部“目标波束θ”输入−90°至90°的角度，点击“按目标生成”，即可启用指向补偿；与右侧直线阵角度同步。普通“生成电气设计”保留所选相位模式。方向图上方分别列有效目标、输出切面峰及单峰偏差；多峰或无定义时不填造唯一指向。设置/结果均可保存并无头复算：
+
+```powershell
+python -m arraylab --headless --elements 8 --scan-deg -24 --feed-network symmetric_series --feed-phase scan --output-dir results/beam-line --plot both
+python -m arraylab --headless --planar --nx 4 --ny 4 --scan-theta 35 --scan-phi 60 --feed-phase scan --output-dir results/beam-planar --plot all
+```
+
+![目标波束与电气方向图核对](docs/images/beam-pointing-linear.png)
 
 支持保存/加载、DAT/JSON/CSV/SVG及无头PNG导出，保留最近5项可命名、可比较的设计记录。修改输入不改变已有快照。当前为中心频点、纯电阻、无损T型网络与理想匹配相移；实际隔离、器件损耗、基板和物理尺寸未设计。原有主工作台均匀阵基准与馈电模型结果分开显示。详见[电气设计范围和输入格式](docs/electrical-design.md)。
 
@@ -128,7 +137,9 @@ python -m arraylab --headless --feed-network symmetric_series --elements 8 --out
 
 从“分析 → 平面阵／电气设计”或F7进入，本页参数独立于右侧直线阵输入。支持规则Nx×Ny阵及`element,x,y`坐标CSV，最多200阵元、最大两阵元距离40λ。可查看坐标、二维切面、上半球图、端口/阻抗表及可鼠标旋转的全空间三维方向图。
 
-![平面阵全空间方向图](docs/images/planar-3d.png)
+顶部目标θ（0–90°）和φ（−180–180°）常驻显示，“按目标生成”按实际阵元位置设计补偿相位。结果区同时显示目标、输出代表峰与球面角距；角距不代表唯一波束误差。切面φ独立设置，天顶φ及无定义峰值显示“未定义”。
+
+![平面阵波束目标与输出代表峰](docs/images/beam-pointing-planar.png)
 
 ```powershell
 python -m arraylab --headless --planar-config examples/planar-rectangular.json --output-dir results/planar --plot all
@@ -192,7 +203,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.10.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.11.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

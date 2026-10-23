@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLE)
         self.build_ui()
         self.build_menus()
+        self.feed_panel.connect_shared_steering()
         self.reset_parameters()
         self.update_selection()
         if auto_compute:
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
                 self.tree.blockSignals(True); self.tree.setCurrentItem(item); self.tree.blockSignals(False)
         self.inspector_stack.setCurrentIndex(1 if active else 0)
         self.inspector_dock.setWindowTitle('稀疏参数' if active else '参数与结果')
-        self.result_bar.setVisible(not active)
+        self.result_bar.setVisible(index not in (4, 5, 6))
         self.compute_button.setText('开始综合\nF5' if active else '开始计算\nF5')
         self.save_button.setText('导出稀疏' if active else '保存数据')
         self.save_button.setEnabled(bool(self.sparse_panel.bundle) if active else self.selected_dataset() is not None)
@@ -508,6 +509,8 @@ class MainWindow(QMainWindow):
             "分析方案：主页的“保存方案”保存当前输入的6项参数；“打开方案”加载后需重新计算。"
             "方案不包含历史曲线或窗口布局；也可通过无头入口的--config读取。\n\n"
             "馈电电气设计（F6）：支持三种拓扑、相位补偿、Chebyshev/Taylor及自定义幅相。"
+            "页面顶部可设置目标波束角，点击“按目标生成”启用指向补偿；平面阵分别设置θ和φ。"
+            "输出峰值与目标分别显示，多峰或无定义时不报告唯一指向偏差。"
             "方向图核对区分目标、原始网络及模型输出。误差记录种子，失效保持匹配并将辐射置零。"
             "保留最近5项独立设计记录，支持标签和比较导出；物理尺寸暂缓。\n\n"
             "平面阵电气设计（F7）：规则矩形阵或element,x,y坐标CSV，最多200阵元、最大孔径40λ。"

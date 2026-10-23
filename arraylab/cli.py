@@ -46,7 +46,7 @@ def parser(planar=False):
     p.add_argument("--feed-load-ohm", type=float, help="Equal real element load resistance (default: 50)")
     p.add_argument("--feed-min-line-ohm", type=float, help="Advisory line impedance lower bound (default: 20)")
     p.add_argument("--feed-max-line-ohm", type=float, help="Advisory line impedance upper bound (default: 120)")
-    p.add_argument("--feed-phase", dest="feed_phase_mode", choices=["none", "equalize", "scan"], help="Terminal phase compensation (new design default: scan; legacy v1: none)")
+    p.add_argument("--feed-phase", dest="feed_phase_mode", choices=["none", "equalize", "scan"], help="scan: compensate towards requested beam angles; equalize: broadside; none: raw network (new default: scan; legacy v1: none)")
     p.add_argument("--feed-weighting", choices=["uniform", "chebyshev", "taylor", "custom"], help="Target amplitude taper")
     p.add_argument("--feed-sidelobe-db", type=float, help="Chebyshev/Taylor sidelobe parameter, positive dB")
     p.add_argument("--feed-taylor-nbar", type=int, help="Taylor near-in sidelobe count")

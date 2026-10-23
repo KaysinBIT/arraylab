@@ -18,8 +18,8 @@ def main(argv=None):
         parser.add_argument("--spacing-x", type=float); parser.add_argument("--spacing-y", type=float)
         parser.add_argument("--coordinate-unit", choices=["lambda", "mm"])
         parser.add_argument("--coordinates", type=Path, help="element,x,y CSV; implies arbitrary geometry")
-        parser.add_argument("--scan-theta", dest="scan_theta_deg", type=float, help="0..90 deg from +z")
-        parser.add_argument("--scan-phi", dest="scan_phi_deg", type=float, help="Azimuth from +x towards +y")
+        parser.add_argument("--scan-theta", dest="scan_theta_deg", type=float, help="Target beam theta, 0..90 deg from +z; use --feed-phase scan for compensation")
+        parser.add_argument("--scan-phi", dest="scan_phi_deg", type=float, help="Target beam phi, -180..180 deg from +x towards +y")
         parser.add_argument("--cut-phi", dest="cut_phi_deg", type=float, help="Azimuth of signed-theta 2-D cut")
         args = parser.parse_args(argv)
         if args.config or args.feed_config:

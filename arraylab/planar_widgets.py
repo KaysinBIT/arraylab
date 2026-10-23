@@ -44,12 +44,12 @@ class PlanarPanel(QWidget):
         grid.addWidget(self.coordinate_label,3,2,1,2);grid.setColumnStretch(1,1);grid.setColumnStretch(3,1)
         self.settings_tabs.addTab(geometry,"阵列几何")
         scan=QWidget();sg=QGridLayout(scan);sg.setContentsMargins(6,3,6,3)
-        for index,(key,label,value) in enumerate([("frequency_ghz","频率(GHz)","3"),("scan_theta_deg","扫描θ(0–90°)","30"),
-                                                ("scan_phi_deg","扫描φ(°)","0"),("cut_phi_deg","切面φ(°)","0"),("step_deg","切面步长(°)","0.5")]):
+        for index,(key,label,value) in enumerate([("frequency_ghz","频率(GHz)","3"),
+                                                ("cut_phi_deg","切面φ(°)","0"),("step_deg","切面步长(°)","0.5")]):
             edit=QLineEdit(value);edit.setMinimumWidth(45);self.geometry_fields[key]=edit
             row,col=index//2,2*(index%2);sg.addWidget(QLabel(label),row,col);sg.addWidget(edit,row,col+1);edit.textChanged.connect(self.mark_dirty)
-        sg.addWidget(QLabel("θ从+z轴；φ从+x朝+y"),2,2,1,2);sg.setColumnStretch(1,1);sg.setColumnStretch(3,1)
-        self.settings_tabs.addTab(scan,"频率与扫描")
+        sg.addWidget(QLabel("切面方位与波束目标可分别设置"),2,0,1,4);sg.setColumnStretch(1,1);sg.setColumnStretch(3,1)
+        self.settings_tabs.addTab(scan,"频率与切面")
         network=QWidget();ng=QGridLayout(network);ng.setContentsMargins(6,3,6,3)
         self.topology=QComboBox()
         for text,value in [("并联树形","corporate"),("串行抽头","series"),("1分2＋对称串馈","symmetric_series")]:self.topology.addItem(text,value)
@@ -61,6 +61,18 @@ class PlanarPanel(QWidget):
             row,col=index//2,2*(index%2);ng.addWidget(QLabel(label),row,col);ng.addWidget(edit,row,col+1);edit.textChanged.connect(self.mark_dirty)
         ng.setColumnStretch(1,1);ng.setColumnStretch(3,1);self.settings_tabs.addTab(network,"馈电阻抗")
         self.electrical=ElectricalControls(self,self.settings_tabs)
+        self.beam_row=QWidget();beam=QHBoxLayout(self.beam_row);beam.setContentsMargins(0,0,0,0)
+        for key,label,value in [("scan_theta_deg","目标 θ (°)","30"),("scan_phi_deg","φ (°)","0")]:
+            edit=QLineEdit(value);edit.setMaximumWidth(75);self.geometry_fields[key]=edit
+            edit.setAccessibleName("平面阵目标波束"+label)
+            edit.setToolTip("θ为0–90°，从+z轴量起；φ从+x朝+y，范围−180°至180°。")
+            edit.textChanged.connect(self.mark_dirty);beam.addWidget(QLabel(label));beam.addWidget(edit)
+        self.pointing_button=QPushButton("按目标生成");self.pointing_button.clicked.connect(lambda:self.generate(True))
+        self.pointing_button.setToolTip("按实际阵元坐标计算目标相位，启用指向补偿并生成输出方向图。")
+        beam.addWidget(self.pointing_button)
+        self.beam_mode_hint=QLabel();self.beam_mode_hint.setWordWrap(True);beam.addWidget(self.beam_mode_hint,1)
+        self.electrical.phase_mode.currentIndexChanged.connect(self.update_beam_hint)
+        self.update_beam_hint();layout.addWidget(self.beam_row)
         layout.addWidget(self.settings_tabs)
         actions=QHBoxLayout()
         self.design_button=QPushButton("生成平面阵设计");self.design_button.clicked.connect(self.generate)
@@ -93,6 +105,10 @@ class PlanarPanel(QWidget):
         regular=self.geometry.currentData()=="rectangular"
         for key in ("nx","ny","spacing_x","spacing_y"):self.geometry_fields[key].setEnabled(regular)
 
+    def update_beam_hint(self):
+        self.beam_mode_hint.setText({"scan":"θ从+z轴；φ从+x朝+y。", "equalize":"当前为正侧向0°；按目标生成可切换。",
+                                     "none":"当前不补偿；按目标生成将启用补偿。"}[self.electrical.phase_mode.currentData()])
+
     open_study = FeedPanel.open_study
 
     def read_parameters(self):
@@ -105,8 +121,10 @@ class PlanarPanel(QWidget):
 
     def preview_amplitudes(self):return planar_amplitudes(self.read_parameters(),self.read_settings())
 
-    def read_settings(self):
-        settings=FeedSettings(topology=self.topology.currentData(),**{key:float(edit.text().strip()) for key,edit in self.fields.items()},**self.electrical.values())
+    def read_settings(self,phase_mode=None):
+        electrical=self.electrical.values()
+        if phase_mode is not None:electrical["phase_mode"]=phase_mode
+        settings=FeedSettings(topology=self.topology.currentData(),**{key:float(edit.text().strip()) for key,edit in self.fields.items()},**electrical)
         settings.validate();return settings
 
     def mark_dirty(self):
@@ -117,10 +135,10 @@ class PlanarPanel(QWidget):
         visible=not self.settings_tabs.isVisible();self.settings_tabs.setVisible(visible)
         self.toggle_settings.setText("收起设置" if visible else "展开设置")
 
-    def generate(self):
+    def generate(self,force_pointing=False):
         busy=False
         try:
-            p,s=self.read_parameters(),self.read_settings()
+            p,s=self.read_parameters(),self.read_settings("scan" if force_pointing else None)
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             busy=True
             report=design_planar(p,s)
@@ -129,8 +147,12 @@ class PlanarPanel(QWidget):
             QMessageBox.warning(self,"平面阵设计失败",str(exc));return
         finally:
             if busy:QApplication.restoreOverrideCursor()
+        if force_pointing:
+            self._changing=True
+            try:self.electrical.phase_mode.setCurrentIndex(self.electrical.phase_mode.findData("scan"))
+            finally:self._changing=False
         self.report=report;self.export_button.setEnabled(True)
-        self.state.setText(f"已生成：{p.geometry} · {p.elements}阵元 · θ={p.scan_theta_deg:g}° / φ={p.scan_phi_deg:g}° · {s.topology}")
+        self.state.setText(f"已生成：{p.geometry} · {p.elements}阵元 · {s.topology} · {self.electrical.phase_mode.currentText()}")
         self.window.statusBar().showMessage(self.state.text())
         if self.view.currentData() not in ("ports","sections") and self.settings_tabs.isVisible():self.toggle_controls()
         self.redraw()
@@ -154,9 +176,12 @@ class PlanarPanel(QWidget):
             draw_planar_figure(self.figure,self.report,view)
             self.update_plot_layout()
         metric=self.report["electrical"]["patterns"]["output"]["metrics"]
-        def number(value):return "未定义" if value is None else f"{value:.4g}"
+        def number(value):return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"
         estimate="（数值估计）" if metric["peak_search_method"]=="disk_grid_multistart_estimate" else ""
-        self.metrics.setText(f"输出方向性 {number(metric['directivity_dbi'])} dBi {estimate}  |  代表峰 θ={number(metric['representative_peak_theta_deg'])}° / φ={number(metric['representative_peak_phi_deg'])}°")
+        pointing=self.report["electrical"]["pointing"]
+        self.metrics.setText(f"有效目标 θ={number(pointing['target_theta_deg'])}° / φ={number(pointing['target_phi_deg'])}°  |  "
+                             f"输出代表峰 θ={number(metric['representative_peak_theta_deg'])}° / φ={number(metric['representative_peak_phi_deg'])}° {estimate}\n"
+                             f"代表峰与目标角距 {number(pointing['representative_peak_separation_deg'])}°（非唯一波束误差）  |  输出方向性 {number(metric['directivity_dbi'])} dBi")
 
     def resizeEvent(self,event):
         super().resizeEvent(event)

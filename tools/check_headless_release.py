@@ -96,7 +96,7 @@ def main():
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
         process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
-                                 cwd=work, env=gui_env, timeout=90)
+                                 cwd=work, env=gui_env, timeout=120)
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
         report["gui_checks_passed"] = len(gui_report["checks"])
@@ -173,6 +173,10 @@ def main():
         validated = json.loads(run("--sparse", "validate", "--config", saved_native).stdout)
         assert validated["ok"] and validated["request"]["config"]["seed"] == 2**32 - 1
         checks.append("native_sparse_toolbar_saved_settings_accepted_by_CLI_with_uint32_seed")
+        for kind, flag, key in [("linear", "--feed-config", "feed_network"), ("planar", "--planar-config", "planar")]:
+            actual = json.loads(run(flag, smoke / f"pointing-{kind}.json").stdout)[key]
+            assert same_numbers(actual, gui_report["pointing_results"][kind])
+            checks.append(f"visible_{kind}_pointing_controls_save_and_headless_EXE_full_report_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

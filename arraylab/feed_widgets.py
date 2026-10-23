@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib
 
-from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtCore import QByteArray, Qt, QSignalBlocker
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtSvgWidgets import QGraphicsSvgItem
@@ -75,6 +75,7 @@ class FeedPanel(QWidget):
         layout.setContentsMargins(8, 6, 8, 6)
         intro = QLabel("按目标幅度分配功率 · 纯电阻负载 · 匹配相位补偿。阵列参数取右侧当前输入。")
         intro.setWordWrap(True)
+        self.intro = intro
         layout.addWidget(intro)
         self.settings_tabs = QTabWidget()
         self.settings_tabs.setMaximumHeight(152)
@@ -102,6 +103,17 @@ class FeedPanel(QWidget):
         grid.setColumnStretch(1, 1); grid.setColumnStretch(3, 1)
         self.settings_tabs.addTab(impedance_page, "阻抗与拓扑")
         self.electrical = ElectricalControls(self, self.settings_tabs)
+        self.beam_row = QWidget(); beam = QHBoxLayout(self.beam_row); beam.setContentsMargins(0, 0, 0, 0)
+        beam.addWidget(QLabel("目标波束 θ (°)")); self.target_theta = QLineEdit("0"); self.target_theta.setMaximumWidth(90)
+        self.target_theta.setAccessibleName("馈电目标波束指向角")
+        self.target_theta.setToolTip("−90°至90°，从+z朝+x为正；与右侧直线阵扫描角同步。")
+        beam.addWidget(self.target_theta)
+        self.pointing_button = QPushButton("按目标生成")
+        self.pointing_button.setToolTip("启用按目标指向补偿，生成阻抗、端口相位、电长度和输出方向图。")
+        self.pointing_button.clicked.connect(lambda: self.generate(True)); beam.addWidget(self.pointing_button)
+        self.beam_mode_hint = QLabel(); self.beam_mode_hint.setWordWrap(True); beam.addWidget(self.beam_mode_hint, 1)
+        self.electrical.phase_mode.currentIndexChanged.connect(self.update_beam_hint)
+        self.update_beam_hint(); layout.addWidget(self.beam_row)
         layout.addWidget(self.settings_tabs)
         actions = QHBoxLayout()
         self.design_button = QPushButton("生成电气设计")
@@ -172,9 +184,37 @@ class FeedPanel(QWidget):
         self.notice.setWordWrap(True); self.notice.setObjectName("notice")
         layout.addWidget(self.notice)
 
-    def read_settings(self):
+    def connect_shared_steering(self):
+        self._syncing_beam = False
+        self.target_theta.textChanged.connect(self.edit_target_theta)
+        self.window.inputs["scan_deg"].textChanged.connect(self.sync_target_theta)
+        self.window.phase_mode.currentIndexChanged.connect(self.sync_target_theta)
+        self.sync_target_theta()
+
+    def edit_target_theta(self, text):
+        if self._syncing_beam: return
+        self._syncing_beam = True
+        try:
+            self.window.phase_mode.setCurrentIndex(1)
+            self.window.inputs["scan_deg"].setText(text)
+        finally: self._syncing_beam = False
+        self.mark_dirty()
+
+    def sync_target_theta(self, *_):
+        if self._syncing_beam: return
+        text = self.window.inputs["scan_deg"].text() if self.window.phase_mode.currentIndex() == 1 else "0"
+        with QSignalBlocker(self.target_theta): self.target_theta.setText(text)
+
+    def update_beam_hint(self):
+        mode = self.electrical.phase_mode.currentData()
+        self.beam_mode_hint.setText({"scan": "沿x轴直线阵 · θ从+z朝+x；按目标补偿。", "equalize": "当前为正侧向0°；“按目标生成”可切换为指定指向。",
+                                     "none": "当前不补偿；“按目标生成”将启用指向补偿。"}[mode])
+
+    def read_settings(self, phase_mode=None):
         values = {key: float(edit.text().strip()) for key, edit in self.fields.items()}
-        settings = FeedSettings(topology=self.topology.currentData(), **values, **self.electrical.values())
+        electrical = self.electrical.values()
+        if phase_mode is not None: electrical["phase_mode"] = phase_mode
+        settings = FeedSettings(topology=self.topology.currentData(), **values, **electrical)
         settings.validate()
         return settings
 
@@ -191,12 +231,16 @@ class FeedPanel(QWidget):
             return
         self.state.setText("输入已改变，尚未重新生成。表格、方向图和导出仍对应所选设计；保存设置使用当前输入。")
 
-    def generate(self):
+    def generate(self, force_pointing=False):
         try:
-            report = design_feed(self.window.read_parameters(), self.read_settings())
+            report = design_feed(self.window.read_parameters(), self.read_settings("scan" if force_pointing else None))
         except (ValueError, ArithmeticError) as exc:
             QMessageBox.warning(self, "馈电阻抗设计失败", str(exc))
             return
+        if force_pointing:
+            self._changing = True
+            try: self.electrical.phase_mode.setCurrentIndex(self.electrical.phase_mode.findData("scan"))
+            finally: self._changing = False
         self.report = report
         self.sequence += 1
         s, p = report["settings"], report["array_parameters"]
@@ -261,11 +305,12 @@ class FeedPanel(QWidget):
         if not force and compact == self._compact_mode:
             return
         self._compact_mode = compact
+        self.intro.setVisible(not compact)
         self.pattern_plot.toolbar.setVisible(not compact)
         self.pattern_hint.setVisible(not compact)
         self.pattern_plot.setToolTip(self.pattern_hint.text() + " 放大窗口可显示完整图形工具栏。")
         self.pattern_plot.figure.subplots_adjust(left=.13 if compact else .09, right=.98,
-                                                bottom=.28 if compact else .22, top=.94)
+                                                bottom=.37 if compact else .26, top=.94)
         ax = self.pattern_plot.axes
         if ax is not None:
             from matplotlib.ticker import MaxNLocator
@@ -310,9 +355,13 @@ class FeedPanel(QWidget):
         self.pattern_plot.draw_sets(data, selected, floor=-60)
         target, output = patterns["target"]["metrics"], patterns["output"]["metrics"]
         def number(value):
-            return "未定义" if value is None else f"{value:.4g}"
-        self.pattern_metrics.setText(f"目标D {number(target['directivity_dbi'])} dBi  |  输出D {number(output['directivity_dbi'])} dBi  |  "
-                                     f"输出主瓣 {number(output['main_lobe_angle_deg'])}°  |  HPBW {number(output['half_power_beamwidth_deg'])}°")
+            return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"
+        pointing = self.report["electrical"]["pointing"]
+        peaks = ', '.join(f'{x:.4g}°' for x in pointing['output_cut_peak_angles_deg'])
+        peak_text = f"切面峰 {peaks}" if peaks else "切面峰未定义"
+        self.pattern_metrics.setText(f"有效目标 θ={number(pointing['target_theta_deg'])}°  |  {peak_text}  |  "
+                                     f"单峰偏差 {number(pointing['output_cut_offset_deg'])}°\n"
+                                     f"目标D {number(target['directivity_dbi'])} / 输出D {number(output['directivity_dbi'])} dBi  |  HPBW {number(output['half_power_beamwidth_deg'])}°")
         self.update_plot_layout(force=True)
 
     def export_history_path(self, path):

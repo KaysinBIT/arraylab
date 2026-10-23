@@ -195,9 +195,10 @@ def design_planar(parameters, settings=FeedSettings()):
     reference = float(np.sum(abs(target)))
     patterns = {name: planar_pattern_analysis(parameters, points, weights, reference, uv)
                 for name, weights in [("target", target), ("uncompensated", raw), ("output", output)]}
+    from .pointing import planar_pointing
     return {"format": "arraylab.planar_electrical_result", "schema_version": 1, "app_version": __version__,
             "geometry": geometry_payload(parameters), "settings": settings_payload(settings), "network": network,
-            "electrical": {"metrics": metrics, "patterns": patterns},
+            "electrical": {"metrics": metrics, "patterns": patterns, "pointing": planar_pointing(parameters, settings, patterns)},
             "notes": ["各向同性点源、z=0平面、无互耦；方向性为全空间积分，不是增益或全波结果。",
                       "θ从+z轴量起，φ从+x向+y；切面使用指定φ和有符号θ=-90…90°。",
                       "平面阵前后半空间对称；报告代表峰方向，不承诺唯一峰。非相干峰使用数值搜索并明确标记估计性质。",

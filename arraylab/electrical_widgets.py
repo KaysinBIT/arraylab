@@ -11,7 +11,7 @@ class ElectricalControls:
         self.custom_amplitudes = ()
         self.custom_phases_deg = ()
         self.phase_mode = QComboBox()
-        for text, value in [("不补偿（保留网络相位）", "none"), ("正侧向补偿（0°）", "equalize"), ("扫描补偿（右侧扫描角）", "scan")]:
+        for text, value in [("不补偿（保留网络相位）", "none"), ("正侧向补偿（0°）", "equalize"), ("按目标指向补偿", "scan")]:
             self.phase_mode.addItem(text, value)
         self.phase_mode.setCurrentIndex(2)
         self.weighting = QComboBox()

@@ -189,6 +189,8 @@ def design_feed(parameters, settings=FeedSettings()):
     report["electrical"] = {"metrics": metrics, "patterns": {}}
     for name, weights in [("target", target), ("uncompensated", raw), ("output", output)]:
         report["electrical"]["patterns"][name] = pattern_analysis(parameters, weights, reference)
+    from .pointing import linear_pointing
+    report["electrical"]["pointing"] = linear_pointing(parameters, settings, report["electrical"]["patterns"])
     report["notes"].extend([
         "端口补偿采用与负载同阻抗的理想无损匹配相移，输出匹配保持不变；电长度按中心频点给出，不是宽带真时延设计。",
         "目标与输出方向图使用同一目标相干和作为0 dB参考；输出激励用于全空间方向性积分，方向性不等于增益。",

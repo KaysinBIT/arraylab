@@ -116,8 +116,8 @@ def exercise_sparse(app, window, output, report, check):
     planar=window.planar_panel;p,s=planar.read_parameters(),planar.read_settings()
     check(not sparse.isVisible() and window.tabs.currentIndex()==5 and planar.report is old_planar,
           'sparse_handoff_loads_inputs_preserving_previous_electrical_result')
-    check(window.inspector_stack.currentIndex()==0 and window.result_bar.isVisible(),
-          'leaving_sparse_restores_original_workbench_inspector')
+    check(window.inspector_stack.currentIndex()==0 and not window.result_bar.isVisible(),
+          'leaving_sparse_restores_inspector_and_planar_result_context')
     np.testing.assert_allclose(np.array(p.coordinates),row['xy']*299.792458/config.reference_ghz,atol=1e-12)
     check(p.elements==8 and p.coordinate_unit=='mm' and p.frequency_ghz==10
           and p.scan_theta_deg==30 and p.scan_phi_deg==35 and s.phase_bits==0 and s.weighting=='custom',
