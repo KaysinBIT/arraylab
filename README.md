@@ -1,8 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.13.0，原创源码采用MIT许可。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版本0.20.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.20.0) · [发行说明](docs/releases/0.20.0.md)。
 
-0.13.0按操作顺序重整界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
+本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
 
 直线阵与直线阵馈电现在支持保存并重新打开完整计算记录，恢复曲线、标签、选中项及已有结果，不重新计算；也能打开旧版馈电比较文件。保存参数、保存记录、导出结果各有明确入口，详见[计算记录与文件选择](docs/calculation-history.md)。平面阵和二维稀疏设计尚不支持这项完整多次历史恢复。
 
@@ -16,7 +16,9 @@
 
 ## 启动
 
-仓库提供源码，不包含预构建EXE。克隆后可在Windows PowerShell中创建环境并启动桌面版：
+Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.20.0)下载`ArrayLab-0.20.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
+
+源码用户可在Windows PowerShell中创建环境并启动桌面版：
 
 ```powershell
 git clone https://github.com/KaysinBIT/arraylab.git
@@ -28,7 +30,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.13.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。具体系统和验证边界见[验证记录](docs/validation.md)。
+Windows源码构建后的桌面入口为`dist/ArrayLab-0.20.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -41,7 +43,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.13.0/ArrayLab.
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.13.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.20.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -215,7 +217,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.13.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.20.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

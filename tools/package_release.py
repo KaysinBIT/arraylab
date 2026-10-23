@@ -36,6 +36,8 @@ def main():
             assert archive.testzip() is None
         print(p.name, p.stat().st_size)
     (OUT / "SHA256SUMS.txt").write_text("\n".join(hashes) + "\n", encoding="ascii")
+    current = [line for line in hashes if f"  ArrayLab-{VERSION}-" in line]
+    (OUT / f"SHA256SUMS-{VERSION}.txt").write_text("\n".join(current) + "\n", encoding="ascii")
 
 
 if __name__ == "__main__":
