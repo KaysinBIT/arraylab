@@ -25,7 +25,7 @@ def parser():
     p.add_argument("--version", action="version", version=f"ArrayLab {__version__} (headless)")
     p.add_argument("--config", type=Path, help="Versioned analysis JSON or legacy parameter JSON; explicit arguments override it")
     p.add_argument("--feed-config", type=Path, help="Feed impedance configuration JSON; cannot combine with --config")
-    p.add_argument("--feed-network", choices=["corporate", "series"], help="Synthesize equal-power quarter-wave feed impedances")
+    p.add_argument("--feed-network", choices=["corporate", "series", "symmetric_series"], help="Quarter-wave feed impedances; symmetric_series requires an even element count")
     p.add_argument("--feed-input-ohm", type=float, help="Real input resistance (default: 50)")
     p.add_argument("--feed-junction-ohm", type=float, help="Real internal junction resistance (default: 50)")
     p.add_argument("--feed-load-ohm", type=float, help="Equal real element load resistance (default: 50)")

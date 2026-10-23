@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arraylab-desktop"
-version = "0.5.0"
+version = "0.6.0"
 description = "Local desktop analysis of uniform linear arrays of isotropic sources"
 requires-python = ">=3.11"
 dependencies = [

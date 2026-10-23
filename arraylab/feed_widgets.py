@@ -36,6 +36,8 @@ class NetworkView(QGraphicsView):
         self.scene().setSceneRect(item.boundingRect())
         n = report["metrics"]["ports"]
         self.focus_point = (400, 180 if report["settings"]["topology"] == "series" else 100 + (n - 1) * 45)
+        if report["settings"]["topology"] == "symmetric_series":
+            self.focus_point = (730, 180)
         self.readable_view()
 
     def readable_view(self):
@@ -69,6 +71,8 @@ class FeedPanel(QWidget):
         self.topology = QComboBox()
         self.topology.addItem("并联馈电（树形）", "corporate")
         self.topology.addItem("串行馈电（逐级抽头）", "series")
+        self.topology.addItem("1分2＋对称串馈", "symmetric_series")
+        self.topology.setItemData(2, "偶数阵元2–200；先等分到左右两臂，再从中心向外逐级抽头。", Qt.ItemDataRole.ToolTipRole)
         grid.addWidget(QLabel("馈电拓扑"), 0, 0); grid.addWidget(self.topology, 0, 1)
         self.fields = {}
         for index, (key, label, value) in enumerate([
@@ -150,9 +154,12 @@ class FeedPanel(QWidget):
                    ("child_equivalent_ohm", "下游等效 (Ω)"), ("line_ohm", "变换线 Zₜ (Ω)"),
                    ("electrical_length_deg", "电长度 (°)"), ("outside_range", "超提示范围")]
         self.fill_table(self.sections, columns, report["sections"])
-        self.fill_table(self.ports, [("port", "端口"), ("load_ohm", "负载 (Ω)"),
-                                   ("power_fraction", "总功率占比"), ("quarter_wave_sections", "λ/4段数"),
-                                   ("network_phase_deg", "未补偿相位 (°)")], report["ports"])
+        port_columns = [("port", "端口"), ("load_ohm", "负载 (Ω)"),
+                        ("power_fraction", "总功率占比"), ("quarter_wave_sections", "λ/4段数"),
+                        ("network_phase_deg", "未补偿相位 (°)")]
+        if report["settings"]["topology"] == "symmetric_series":
+            port_columns.extend([("arm", "支臂"), ("mirror_port", "镜像端口")])
+        self.fill_table(self.ports, port_columns, report["ports"])
         self.diagram.set_report(report)
         m, p = report["metrics"], report["array_parameters"]
         self.state.setText(f"已生成：{self.topology.currentText()} · {m['ports']}端口 · {p['frequency_ghz']:g} GHz · "
@@ -172,6 +179,8 @@ class FeedPanel(QWidget):
             for j, (key, _) in enumerate(columns):
                 value = row[key]
                 text = ("是" if value else "否") if isinstance(value, bool) else f"{value:.7g}" if isinstance(value, float) else str(value)
+                if key == "arm":
+                    text = {"left": "左", "right": "右"}[value]
                 item = QTableWidgetItem(text)
                 if row.get("outside_range"):
                     item.setForeground(QColor("#a45c14"))

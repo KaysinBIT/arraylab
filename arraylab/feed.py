@@ -1,7 +1,7 @@
 """Lossless, single-frequency quarter-wave T-junction impedance synthesis.
 
 This is an impedance network, not an isolated Wilkinson divider or an EM model.
-The two topologies deliver equal power to equal, purely resistive loads.
+All topologies deliver equal power to equal, purely resistive loads.
 """
 from dataclasses import asdict, dataclass
 import csv
@@ -24,8 +24,8 @@ class FeedSettings:
     max_line_ohm: float = 120.0
 
     def validate(self):
-        if self.topology not in ("corporate", "series"):
-            raise ValueError("馈电拓扑须为corporate（并联）或series（串行）。")
+        if self.topology not in ("corporate", "series", "symmetric_series"):
+            raise ValueError("馈电拓扑须为corporate（并联）、series（串行）或symmetric_series（1分2后对称串馈）。")
         for key, value in asdict(self).items():
             if key == "topology":
                 continue
@@ -37,9 +37,15 @@ class FeedSettings:
             raise ValueError("提示范围的下限必须小于上限。")
 
 
-def synthesize_impedance(parameters, settings=FeedSettings()):
+def validate_feed_inputs(parameters, settings):
     parameters.validate()
     settings.validate()
+    if settings.topology == "symmetric_series" and parameters.elements % 2:
+        raise ValueError("1分2后对称串馈需要2–200个偶数阵元；奇数阵元的中心馈点结构尚未定义。")
+
+
+def synthesize_impedance(parameters, settings=FeedSettings()):
+    validate_feed_inputs(parameters, settings)
     n = parameters.elements
     nodes, sections, ports = [], [], []
 
@@ -52,7 +58,7 @@ def synthesize_impedance(parameters, settings=FeedSettings()):
                          "branch_input_ohm": seen, "line_ohm": z_line, "electrical_length_deg": 90.0,
                          "outside_range": not settings.min_line_ohm <= z_line <= settings.max_line_ohm})
 
-    def visit(indices, input_z, depth):
+    def visit(indices, input_z, depth, arm=None):
         if len(indices) == 1:
             i = indices[0]
             name = f"P{i}"
@@ -60,16 +66,21 @@ def synthesize_impedance(parameters, settings=FeedSettings()):
                           "last_port": i, "equivalent_ohm": settings.load_ohm})
             ports.append({"port": i, "load_ohm": settings.load_ohm, "power_fraction": 1.0 / n,
                           "quarter_wave_sections": depth, "network_phase_deg": -90.0 * depth})
+            if arm is not None:
+                nodes[-1]["arm"] = arm
+                ports[-1].update(arm=arm, mirror_port=n + 1 - i)
             return name
         name = f"J{len([item for item in nodes if item['kind'] == 'junction']) + 1}"
         nodes.append({"id": name, "kind": "junction", "depth": depth,
-                      "first_port": indices[0], "last_port": indices[-1], "equivalent_ohm": input_z})
+                      "first_port": min(indices), "last_port": max(indices), "equivalent_ohm": input_z})
+        if arm is not None:
+            nodes[-1].update(arm=arm, tap_port=indices[0])
         split = len(indices) // 2 if settings.topology == "corporate" else 1
         for group_index, group in enumerate((indices[:split], indices[split:])):
             child_z = settings.load_ohm if len(group) == 1 else settings.junction_ohm
-            child = visit(group, child_z, depth + 1)
+            child = visit(group, child_z, depth + 1, arm)
             branch(name, child, len(group) / len(indices), input_z, child_z, len(group),
-                   ("tap" if group_index == 0 else "through") if settings.topology == "series" else "branch")
+                   ("tap" if group_index == 0 else "through") if settings.topology != "corporate" else "branch")
         return name
 
     if n == 1:
@@ -78,6 +89,18 @@ def synthesize_impedance(parameters, settings=FeedSettings()):
                       "last_port": 1, "equivalent_ohm": settings.input_ohm})
         child = visit([1], settings.load_ohm, 1)
         branch(root, child, 1.0, settings.input_ohm, settings.load_ohm, 1, "match")
+    elif settings.topology == "symmetric_series":
+        root = "J1"
+        nodes.append({"id": root, "kind": "junction", "depth": 0, "first_port": 1,
+                      "last_port": n, "equivalent_ohm": settings.input_ohm})
+        half = n // 2
+        # Physical port order remains P1..PN along the array. Both chains start
+        # at the center and proceed outward, so corresponding paths are mirrored.
+        for arm, indices in (("left", list(range(half, 0, -1))),
+                             ("right", list(range(half + 1, n + 1)))):
+            child_z = settings.load_ohm if half == 1 else settings.junction_ohm
+            child = visit(indices, child_z, 1, arm)
+            branch(root, child, .5, settings.input_ohm, child_z, half, "input_split")
     else:
         root = visit(list(range(1, n + 1)), settings.input_ohm, 0)
     # Display sections in source-to-load order, not recursive return order.
@@ -98,24 +121,32 @@ def synthesize_impedance(parameters, settings=FeedSettings()):
     ]
     if settings.topology == "series":
         notes.append("串行定义：沿主干逐级T型抽头，抽头和续传支路各带λ/4变换线；末端接最后一个负载，无独立终端电阻。")
+    if settings.topology == "symmetric_series":
+        notes.append("输入先1:1等分，两臂各N/2端口并从中心向外串馈。端口P1…PN按阵列顺序编号，镜像配对为Pi与P(N+1−i)。仅支持偶数阵元。")
+        notes.append("首级及两臂均使用理想T型λ/4变换线；左右镜像端口路径相位相同，不表示不同级的全部端口已等相。")
     if not phases_equal:
         notes.append("各端口经历的λ/4线段数不同，当前网络不是等相馈电；不能直接作为已有理想阵列方向图的实际馈电。")
     else:
         notes.append("中心频点端口相位模360°相同；扫描相位尚未加入，仍不能替代扫描阵列的完整馈电设计。")
     if out_of_range:
         notes.append(f"{len(out_of_range)}条变换线超出所设阻抗提示范围；需调整拓扑、节点阻抗或后续实现方式。")
-    return {"format": "arraylab.feed_impedance_result", "schema_version": 1, "app_version": __version__,
+    report = {"format": "arraylab.feed_impedance_result", "schema_version": 1, "app_version": __version__,
             "array_parameters": asdict(parameters), "settings": asdict(settings), "root": root,
             "nodes": nodes, "sections": sections, "ports": ports,
             "metrics": {"ports": n, "junctions": max(n - 1, 0), "transformers": len(sections),
                         "input_equivalent_ohm": settings.input_ohm, "line_min_ohm": min(line_values),
                         "line_max_ohm": max(line_values), "out_of_range_sections": out_of_range,
                         "equal_port_phase_at_design_frequency": phases_equal}, "notes": notes}
+    if settings.topology == "symmetric_series":
+        report["routing"] = {"input_split": [.5, .5], "direction": "center_to_outward",
+                             "left_ports": list(range(n // 2, 0, -1)), "right_ports": list(range(n // 2 + 1, n + 1))}
+        report["metrics"]["ports_per_arm"] = n // 2
+    return report
 
 
 def configuration_document(parameters, settings):
     parameters_from_values(asdict(parameters))
-    settings.validate()
+    validate_feed_inputs(parameters, settings)
     return {"format": "arraylab.feed_impedance", "schema_version": 1,
             "array_parameters": asdict(parameters), "settings": asdict(settings)}
 
@@ -139,7 +170,7 @@ def load_feed_configuration(path):
         raise ValueError("馈电设置字段缺失或含未知字段。")
     p = parameters_from_values(doc["array_parameters"])
     settings = FeedSettings(**doc["settings"])
-    settings.validate()
+    validate_feed_inputs(p, settings)
     return p, settings
 
 

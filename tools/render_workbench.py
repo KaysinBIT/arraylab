@@ -59,6 +59,16 @@ def main():
             feed.topology.setCurrentIndex(0); feed.generate()
             QTest.qWait(100)
             assert window.grab().save(str(args.output / "feed-diagram-corporate.png"))
+            feed.topology.setCurrentIndex(2); feed.generate()
+            QTest.qWait(100)
+            assert window.grab().save(str(args.output / "feed-diagram-symmetric.png"))
+            feed.diagram.fit(); QTest.qWait(100)
+            assert window.grab().save(str(args.output / "feed-symmetric-overview.png"))
+            feed.result_tabs.setCurrentIndex(0)
+            QTest.qWait(100)
+            assert window.grab().save(str(args.output / "feed-symmetric.png"))
+            window.resize(1100, 740); QTest.qWait(100)
+            assert window.grab().save(str(args.output / "feed-symmetric-compact.png"))
             app.exit(0)
         except Exception:
             import traceback

@@ -235,6 +235,54 @@ def schedule_smoke_test(app, window, output: Path):
             click(feed.design_button)
             app.processEvents()
             check(window.grab().save(str(output / "feed-series.png")), "feed_series_screenshot_saved")
+            feed.topology.setCurrentIndex(feed.topology.findData("symmetric_series"))
+            click(feed.design_button)
+            check(feed.report["metrics"]["line_max_ohm"] == 100 and feed.ports.columnCount() == 7,
+                  "symmetric_series_impedances_and_mirror_columns")
+            check(feed.report["routing"]["left_ports"] == [4, 3, 2, 1]
+                  and feed.report["routing"]["right_ports"] == [5, 6, 7, 8],
+                  "symmetric_series_arms_route_center_outward")
+            dialog_path = output.resolve() / "feed-symmetric_series.json"
+            dialog_path.unlink(missing_ok=True)
+            QTimer.singleShot(200, accept_file_dialog)
+            click(feed.save_button)
+            check(dialog_path.exists(), "symmetric_series_settings_save_dialog")
+            original_bytes = dialog_path.read_bytes()
+            old_symmetric = feed.report
+            window.inputs["elements"].setText("5")
+            QTimer.singleShot(150, close_warning)
+            click(feed.design_button)
+            check(feed.report is old_symmetric and len(dismissed) == 3 and "偶数" in dismissed[-1],
+                  "symmetric_series_odd_count_dialog_preserves_result")
+            try:
+                feed.save_path(dialog_path)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("odd_symmetric_settings_saved")
+            check(dialog_path.read_bytes() == original_bytes, "odd_symmetric_save_preserves_existing_settings")
+            odd_document = json.loads(original_bytes)
+            odd_document["array_parameters"]["elements"] = 3
+            bad_scheme.write_text(json.dumps(odd_document), encoding="utf-8")
+            try:
+                feed.load_path(bad_scheme)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("odd_symmetric_settings_loaded")
+            check(window.read_parameters().elements == 5 and feed.report is old_symmetric,
+                  "odd_symmetric_load_preserves_inputs_and_result")
+            QTimer.singleShot(200, accept_file_dialog)
+            click(feed.open_button)
+            check(window.read_parameters().elements == 8 and feed.read_settings().topology == "symmetric_series",
+                  "symmetric_series_settings_open_dialog")
+            click(feed.design_button)
+            report["feed_results"]["symmetric_series"] = feed.report
+            feed.export_path(output / "feed-symmetric-export")
+            check(json.loads((output / "feed-symmetric-export/feed-network.json").read_text(encoding="utf-8")) == feed.report,
+                  "symmetric_series_result_export")
+            app.processEvents()
+            check(window.grab().save(str(output / "feed-symmetric.png")), "symmetric_series_screenshot_saved")
             report["success"] = True
             code = 0
         except Exception:

@@ -103,9 +103,10 @@ def test_invalid_settings(changes):
         synthesize_impedance(ArrayParameters(), FeedSettings(**changes))
 
 
-@pytest.mark.parametrize("topology", ["corporate", "series"])
+@pytest.mark.parametrize("topology", ["corporate", "series", "symmetric_series"])
 def test_configuration_export_and_headless_roundtrip(topology, tmp_path):
-    p = ArrayParameters(elements=5, frequency_ghz=10, spacing_unit="mm", spacing=10)
+    count = 6 if topology == "symmetric_series" else 5
+    p = ArrayParameters(elements=count, frequency_ghz=10, spacing_unit="mm", spacing=10)
     settings = FeedSettings(topology=topology, input_ohm=75, load_ohm=100)
     config = tmp_path / "中文 馈电.json"
     save_feed_configuration(config, p, settings)
@@ -120,7 +121,7 @@ def test_configuration_export_and_headless_roundtrip(topology, tmp_path):
     assert json.loads((out / "feed-network.json").read_text(encoding="utf-8")) == expected
     assert load_feed_configuration(out / "feed-config.json") == (p, settings)
     assert config.read_bytes() == original
-    assert len((out / "feed-sections.csv").read_text(encoding="utf-8-sig").splitlines()) == 9
+    assert len((out / "feed-sections.csv").read_text(encoding="utf-8-sig").splitlines()) == 2 * (count - 1) + 1
     assert ET.parse(out / "feed-network.svg").getroot().tag.endswith("svg")
     override = run_cli("--feed-config", config, "--elements", 8, "--feed-load-ohm", 25, guard=True)
     assert override.returncode == 0, override.stderr
@@ -169,3 +170,77 @@ def test_atomic_export_preserves_existing_and_cleans_failed_staging(tmp_path, mo
     with pytest.raises(OSError): export_feed_directory(tmp_path / "failed", report)
     assert not (tmp_path / "failed").exists()
     assert not list(tmp_path.glob(".arraylab-feed-*"))
+
+
+@pytest.mark.parametrize("count", [2, 4, 6, 8, 10, 200])
+def test_symmetric_series_abcd_and_mirrored_paths(count):
+    settings = FeedSettings(topology="symmetric_series", input_ohm=75, junction_ohm=33, load_ohm=100)
+    report = synthesize_impedance(ArrayParameters(elements=count), settings)
+    z_input, powers, voltages = independent_circuit(report)
+    assert z_input == pytest.approx(75, abs=1e-9)
+    assert sum(powers.values()) == pytest.approx(1, abs=1e-11)
+    assert len(report["sections"]) == 2 * (count - 1)
+    root_sections = [s for s in report["sections"] if s["parent"] == report["root"]]
+    assert len(root_sections) == 2
+    assert all(s["kind"] == "input_split" and s["local_power_fraction"] == .5 for s in root_sections)
+    assert report["routing"]["left_ports"] == list(range(count // 2, 0, -1))
+    assert report["routing"]["right_ports"] == list(range(count // 2 + 1, count + 1))
+    nodes = {node["id"]: node for node in report["nodes"]}
+    left = [s for s in report["sections"] if nodes[s["parent"]].get("arm") == "left"]
+    right = [s for s in report["sections"] if nodes[s["parent"]].get("arm") == "right"]
+    assert [(s["kind"], s["line_ohm"], s["local_power_fraction"]) for s in left] == [
+        (s["kind"], s["line_ohm"], s["local_power_fraction"]) for s in right]
+    for port in report["ports"]:
+        i = port["port"]
+        assert port["mirror_port"] == count + 1 - i
+        assert powers[f"P{i}"] == pytest.approx(1 / count, abs=1e-11)
+        assert voltages[f"P{i}"] == pytest.approx(voltages[f"P{count + 1 - i}"], abs=1e-10)
+        assert voltages[f"P{i}"] / abs(voltages[f"P{i}"]) == pytest.approx(
+            np.exp(1j * np.deg2rad(port["network_phase_deg"])), abs=1e-10)
+    assert ET.fromstring(diagram_svg(report)).tag.endswith("svg")
+
+
+def test_symmetric_series_eight_reference_and_phases():
+    report = synthesize_impedance(ArrayParameters(), FeedSettings(topology="symmetric_series"))
+    assert report["metrics"]["line_max_ohm"] == 100
+    assert not report["metrics"]["out_of_range_sections"]
+    assert [s["line_ohm"] for s in report["sections"][:4]] == pytest.approx(
+        [70.7106781187, 70.7106781187, 100, 57.735026919])
+    assert [p["network_phase_deg"] for p in report["ports"]] == [-360, -360, -270, -180, -180, -270, -360, -360]
+    assert not report["metrics"]["equal_port_phase_at_design_frequency"]
+
+
+@pytest.mark.parametrize("count", [1, 3, 5, 199])
+def test_symmetric_series_rejects_odd_arrays_before_save(count, tmp_path):
+    parameters = ArrayParameters(elements=count)
+    settings = FeedSettings(topology="symmetric_series")
+    with pytest.raises(ValueError, match="偶数"):
+        synthesize_impedance(parameters, settings)
+    path = tmp_path / "config.json"
+    path.write_text("original", encoding="utf-8")
+    with pytest.raises(ValueError, match="偶数"):
+        save_feed_configuration(path, parameters, settings)
+    assert path.read_text() == "original"
+
+
+def test_symmetric_series_invalid_loaded_count_and_cli_override(tmp_path):
+    path = tmp_path / "config.json"
+    save_feed_configuration(path, ArrayParameters(), FeedSettings(topology="symmetric_series"))
+    original = path.read_bytes()
+    output = tmp_path / "output"
+    process = run_cli("--feed-config", path, "--elements", 5, "--output-dir", output, guard=True)
+    assert process.returncode == 2 and not process.stdout and not output.exists()
+    assert path.read_bytes() == original
+    doc = json.loads(original)
+    doc["array_parameters"]["elements"] = 5
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(ValueError, match="偶数"):
+        load_feed_configuration(path)
+
+
+def test_symmetric_series_cli_option(tmp_path):
+    result = run_cli("--feed-network", "symmetric_series", "--elements", 8, guard=True)
+    assert result.returncode == 0, result.stderr
+    network = json.loads(result.stdout)["feed_network"]
+    assert network["routing"]["left_ports"] == [4, 3, 2, 1]
+    assert network["metrics"]["line_max_ohm"] == 100

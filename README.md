@@ -1,8 +1,8 @@
 # ArrayLab 阵列分析
 
-用于均匀直线阵分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.5.0，原创源码采用MIT许可。
+用于均匀直线阵分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.6.0，原创源码采用MIT许可。
 
-桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.5.0新增并联/串行馈电网络阻抗设计，支持λ/4变换线综合、连接图、设置保存和无头导出。阵列分析模型仍为均匀直线阵；馈电设计保持独立。
+桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.6.0新增“1分2后对称串馈”，与原并联、单臂串行一起支持λ/4变换线综合、连接图、设置保存和无头导出。阵列分析模型仍为均匀直线阵；馈电设计保持独立。
 
 ![ArrayLab工作台](docs/images/workbench.png)
 
@@ -24,7 +24,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.5.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.6.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。
 
 ## 无头运行
 
@@ -37,7 +37,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.5.0/ArrayLab.e
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.5.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.6.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -100,17 +100,22 @@ python -m arraylab --headless --config "examples/analysis.json" --scan-deg 30 --
 
 ## 馈电网络阻抗设计
 
-从“分析 → 馈电网络／阻抗设计”或F6进入。支持并联树形和串行逐级抽头，先按等功率分配计算各支路输入阻抗及λ/4变换线特性阻抗。输入端、内部节点和阵元负载默认50 Ω，均可编辑。
+从“分析 → 馈电网络／阻抗设计”或F6进入。支持并联树形、串行逐级抽头、1分2后对称串馈，按等功率分配计算各支路输入阻抗及λ/4变换线特性阻抗。输入端、内部节点和阵元负载默认50 Ω，均可编辑。
 
 ![馈电网络阻抗设计](docs/images/feed-series.png)
 
 8路、各参考阻抗均50 Ω时，并联二等分变换线为70.710678 Ω；串行首级抽头为141.421356 Ω、续传支路为53.452248 Ω。超出用户所设提示范围的线段会突出显示。端口页另列未经补偿的路径相位。
+
+新增对称串馈先将输入等分到左右两臂，再从中心向外抽头，仅支持偶数阵元。8路、各参考阻抗50 Ω时，首级等分线为70.710678 Ω，每臂首级抽头线100 Ω、续传线57.735027 Ω。左右镜像端口相位相同，不代表全部端口已等相。
+
+![1分2后对称串馈](docs/images/feed-symmetric.png)
 
 可保存/加载馈电设置，导出JSON、CSV与SVG。修改输入不改变已有设计快照；本阶段仅进行中心频点、纯电阻负载、无损T型网络的阻抗综合。扫描相位、相位均衡、实际隔离、损耗、基板、线宽与物理尺寸未设计；现有理想阵列方向图不代表该馈电网络的实际辐射结果。
 
 ```powershell
 python -m arraylab --headless --elements 8 --feed-network corporate --output-dir results/feed-parallel
 python -m arraylab --headless --feed-config examples/feed-series.json --output-dir results/feed-series
+python -m arraylab --headless --feed-network symmetric_series --elements 8 --output-dir results/feed-symmetric
 ```
 
 `--feed-input-ohm`、`--feed-junction-ohm`和`--feed-load-ohm`设置阻抗；`--feed-min-line-ohm`与`--feed-max-line-ohm`设置提示范围。`--feed-config`与原有`--config`互斥。详见[计算公式、拓扑定义与导出约定](docs/feed-impedance.md)。
@@ -142,7 +147,7 @@ python -m arraylab --headless --feed-config examples/feed-series.json --output-d
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.5.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.6.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。
