@@ -256,7 +256,6 @@ class SparsePanel(QWidget):
 
     def set_state(self, message):
         self.state.setText(message)
-        if self.host.tabs.currentWidget() is self and hasattr(self.host, 'state_label'): self.host.state_label.setText(message)
 
     def update_controls(self):
         if self._initializing: return
@@ -277,6 +276,7 @@ class SparsePanel(QWidget):
         if hasattr(self.host, 'save_button') and self.host.tabs.currentWidget() is self:
             self.host.save_button.setEnabled(ready)
             if hasattr(self.host, 'save_action'): self.host.save_action.setEnabled(ready)
+        self.host.refresh_actions()
 
     def start(self):
         if self.thread is not None or self._busy: return

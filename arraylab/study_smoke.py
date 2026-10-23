@@ -81,13 +81,27 @@ def exercise_scan_dialogs(app, window, output, report, check):
                 if isinstance(dialog, ScanStudyDialog):
                     dialog.reject()
 
-        QTimer.singleShot(150, exercise)
         window.tabs.setCurrentIndex(4 if kind == "linear" else 5)
         if kind == "linear":
             window.inputs["scan_deg"].setText("17")
         else:
             panel.geometry_fields["scan_theta_deg"].setText("10")
         app.processEvents()
-        QTest.mouseClick(panel.study_button, Qt.MouseButton.LeftButton)
+        window.ribbon.setCurrentIndex(0)
+        QTimer.singleShot(150, exercise)
+        QTest.mouseClick(window.scan_button, Qt.MouseButton.LeftButton)
         if errors:
             raise AssertionError(errors[0])
+        cached=panel.study_dialog
+        def reopen():
+            modal=QApplication.activeModalWidget()
+            try:
+                check(modal is cached,f"{kind}_scan_reopens_same_design_window")
+                check(modal.report is report['scan_results'][kind],f"{kind}_scan_reopen_keeps_completed_result")
+                check(not modal._close_pending,f"{kind}_scan_reopen_clears_previous_close_request")
+            except Exception:errors.append(traceback.format_exc())
+            finally:
+                if isinstance(modal,ScanStudyDialog):modal.reject()
+        QTimer.singleShot(150,reopen)
+        QTest.mouseClick(window.scan_button,Qt.MouseButton.LeftButton)
+        if errors:raise AssertionError(errors[0])

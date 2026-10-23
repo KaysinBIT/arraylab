@@ -30,23 +30,28 @@ def schedule_smoke_test(app, window, output: Path):
             app.processEvents()
 
         try:
+            check(window.active_task()=='home' and not window.datasets and window.feed_panel.report is None and window.planar_panel.report is None,
+                  'startup_home_does_not_calculate')
+            click(window.task_cards['linear'])
             click(window.compute_button)
             check(abs(window.selected_dataset().result.directivity_dbi - 9.03089987) < 1e-7, "default_8_element_directivity")
             sequence = window.sequence
             QTest.keyClick(window, Qt.Key.Key_F5)
             app.processEvents()
             check(window.sequence == sequence + 1, "F5_shortcut_works_in_workbench")
+            window.ribbon.setCurrentIndex(1)
             click(window.model_button)
             check(window.tabs.currentIndex() == 3 and window.geometry.isVisible(), "ribbon_opens_model_view")
             window.tree.setCurrentItem(window.data_tree_item)
             app.processEvents()
             check(window.tabs.currentIndex() == 1, "navigation_tree_opens_data_table")
+            window.ribbon.setCurrentIndex(1)
             click(window.result_button)
             check(window.tabs.currentIndex() == 0, "ribbon_returns_to_pattern")
             window.inspector_dock.hide()
             window.nav_dock.hide()
             window.messages_dock.hide()
-            window.ribbon.setCurrentIndex(3)
+            window.ribbon.setCurrentIndex(1)
             click(window.restore_layout_button)
             check(all(d.isVisible() and not d.isFloating() for d in
                       (window.inspector_dock, window.nav_dock, window.messages_dock)), "closed_docks_restore_without_losing_results")
@@ -142,6 +147,7 @@ def schedule_smoke_test(app, window, output: Path):
             app.processEvents()
             check(window.plot.axes.name == "polar", "polar_plot_switch")
             check(window.grab().save(str(output / "polar.png")), "polar_screenshot_saved")
+            window.ribbon.setCurrentIndex(1)
             click(window.example_button)
             check(abs(window.selected_dataset().result.directivity_dbi - 7.06756660928) < 1e-8, "manual_page48_example")
             window.keep_history.setChecked(True)
@@ -180,6 +186,7 @@ def schedule_smoke_test(app, window, output: Path):
             click(window.remove_button)
             check(window.selected_dataset() is None and not window.save_button.isEnabled(), "last_result_removal_disables_save")
             window.plot_type.setCurrentIndex(0)
+            window.ribbon.setCurrentIndex(1)
             click(window.example_button)
             window.plot.canvas.draw()
             app.processEvents()
@@ -187,8 +194,10 @@ def schedule_smoke_test(app, window, output: Path):
             report["example_directivity_dbi"] = window.selected_dataset().result.directivity_dbi
             window.reset_parameters()
             retained = window.selected_dataset()
-            window.ribbon.setCurrentIndex(1)
+            window.activate_task('home')
             click(window.feed_button)
+            check(window.feed_panel.report is None,'feed_task_entry_does_not_auto_generate')
+            click(window.compute_button)
             feed = window.feed_panel
             check(window.tabs.currentIndex() == 4 and feed.report["metrics"]["ports"] == 8,
                   "feed_ribbon_opens_impedance_panel_with_current_inputs")
@@ -198,11 +207,11 @@ def schedule_smoke_test(app, window, output: Path):
             report["feed_results"] = {}
             for topology in ("corporate", "series"):
                 feed.topology.setCurrentIndex(feed.topology.findData(topology))
-                click(feed.design_button)
+                click(window.compute_button)
                 dialog_path = output.resolve() / f"feed-{topology}.json"
                 dialog_path.unlink(missing_ok=True)
                 QTimer.singleShot(200, accept_file_dialog)
-                click(feed.save_button)
+                click(window.save_scheme_button)
                 check(dialog_path.exists(), f"feed_{topology}_settings_save_dialog")
                 report["feed_results"][topology] = feed.report
             check(len(feed.report["metrics"]["out_of_range_sections"]) == 3,
@@ -214,7 +223,7 @@ def schedule_smoke_test(app, window, output: Path):
             check(exported == old_feed and "尚未重新生成" in feed.state.text(),
                   "feed_export_uses_displayed_snapshot_not_pending_inputs")
             QTimer.singleShot(200, accept_file_dialog)
-            click(feed.open_button)
+            click(window.load_scheme_button)
             check(feed.read_settings().load_ohm == 50 and "请重新生成" in feed.state.text(),
                   "feed_settings_open_dialog_restores_parameters_pending_regeneration")
             bad_scheme.write_text('{"format":"arraylab.feed_impedance","schema_version":99}', encoding="utf-8")
@@ -229,14 +238,14 @@ def schedule_smoke_test(app, window, output: Path):
                   "invalid_feed_settings_preserve_inputs_and_result")
             feed.fields["input_ohm"].setText("0")
             QTimer.singleShot(150, close_warning)
-            click(feed.design_button)
+            click(window.compute_button)
             check(feed.report is old_feed and len(dismissed) == 2, "invalid_feed_input_dialog_preserves_result")
             feed.fields["input_ohm"].setText("50")
-            click(feed.design_button)
+            click(window.compute_button)
             app.processEvents()
             check(window.grab().save(str(output / "feed-series.png")), "feed_series_screenshot_saved")
             feed.topology.setCurrentIndex(feed.topology.findData("symmetric_series"))
-            click(feed.design_button)
+            click(window.compute_button)
             check(feed.report["metrics"]["line_max_ohm"] == 100 and feed.ports.horizontalHeaderItem(feed.ports.columnCount() - 1).text() == "镜像端口",
                   "symmetric_series_impedances_and_mirror_columns")
             check(feed.report["routing"]["left_ports"] == [4, 3, 2, 1]
@@ -245,13 +254,13 @@ def schedule_smoke_test(app, window, output: Path):
             dialog_path = output.resolve() / "feed-symmetric_series.json"
             dialog_path.unlink(missing_ok=True)
             QTimer.singleShot(200, accept_file_dialog)
-            click(feed.save_button)
+            click(window.save_scheme_button)
             check(dialog_path.exists(), "symmetric_series_settings_save_dialog")
             original_bytes = dialog_path.read_bytes()
             old_symmetric = feed.report
             window.inputs["elements"].setText("5")
             QTimer.singleShot(150, close_warning)
-            click(feed.design_button)
+            click(window.compute_button)
             check(feed.report is old_symmetric and len(dismissed) == 3 and "偶数" in dismissed[-1],
                   "symmetric_series_odd_count_dialog_preserves_result")
             try:
@@ -273,10 +282,10 @@ def schedule_smoke_test(app, window, output: Path):
             check(window.read_parameters().elements == 5 and feed.report is old_symmetric,
                   "odd_symmetric_load_preserves_inputs_and_result")
             QTimer.singleShot(200, accept_file_dialog)
-            click(feed.open_button)
+            click(window.load_scheme_button)
             check(window.read_parameters().elements == 8 and feed.read_settings().topology == "symmetric_series",
                   "symmetric_series_settings_open_dialog")
-            click(feed.design_button)
+            click(window.compute_button)
             report["feed_results"]["symmetric_series"] = feed.report
             feed.export_path(output / "feed-symmetric-export")
             check(json.loads((output / "feed-symmetric-export/feed-network.json").read_text(encoding="utf-8")) == feed.report,
@@ -289,15 +298,13 @@ def schedule_smoke_test(app, window, output: Path):
             electrical.phase_mode.setCurrentIndex(electrical.phase_mode.findData("scan"))
             electrical.weighting.setCurrentIndex(electrical.weighting.findData("taylor"))
             electrical.fields["sidelobe_db"].setText("30")
-            click(feed.design_button)
+            click(window.compute_button)
             metrics = feed.report["electrical"]["patterns"]["output"]["metrics"]
             check(abs(metrics["main_lobe_angle_deg"] - 30) < 1e-7 and feed.report["electrical"]["metrics"]["max_active_phase_error_deg"] < 1e-9,
                   "taylor_weighted_scan_compensation_reaches_target")
             feed.result_tabs.setCurrentIndex(3)
             check(len(feed.pattern_plot.datasets) == 3, "electrical_target_raw_output_patterns_displayed")
             feed.result_tabs.setCurrentIndex(2)
-            if not feed.settings_tabs.isVisible():
-                click(feed.toggle_settings)
             previewed = []
             def accept_preview():
                 modal = QApplication.activeModalWidget()
@@ -325,14 +332,14 @@ def schedule_smoke_test(app, window, output: Path):
             else:
                 raise AssertionError("incomplete_excitation_imported")
             check(electrical.custom_amplitudes == previous_values, "bad_excitation_preserves_previous_inputs")
-            click(feed.design_button)
+            click(window.compute_button)
             electrical.fields["phase_bits"].setText("3")
             electrical.fields["amplitude_error_db"].setText("0.5")
             electrical.fields["phase_error_deg"].setText("2")
             electrical.fields["seed"].setText("23"); electrical.failed.setText("2")
-            click(feed.design_button)
+            click(window.compute_button)
             first_realization = feed.report
-            click(feed.design_button)
+            click(window.compute_button)
             check(feed.report == first_realization and feed.report["ports"][1]["output_amplitude"] == 0
                   and feed.report["ports"][1]["output_phase_deg"] is None,
                   "seeded_error_quantization_and_matched_failure_reproducible")
@@ -365,21 +372,22 @@ def schedule_smoke_test(app, window, output: Path):
                   "electrical_comparison_export_contains_full_snapshots")
             window.inputs["scan_deg"].setText("30")
             feed.compare_history.setChecked(False)
-            click(feed.design_button)
+            click(window.compute_button)
             dialog_path = output.resolve() / "feed-electrical.json"
             dialog_path.unlink(missing_ok=True)
             QTimer.singleShot(200, accept_file_dialog)
-            click(feed.save_button)
+            click(window.save_scheme_button)
             report["electrical_result"] = feed.report
             check(dialog_path.exists(), "electrical_settings_save_dialog")
-            if feed.settings_tabs.isVisible():
-                click(feed.toggle_settings)
             feed.result_tabs.setCurrentIndex(3)
-            check(not feed.settings_tabs.isVisible(), "electrical_settings_collapse_for_plot")
+            check(feed.settings_tabs.isVisible() and feed.parameters_in_sidebar, "electrical_parameters_stay_in_dedicated_sidebar")
             app.processEvents()
             check(window.grab().save(str(output / "electrical.png")), "electrical_workbench_screenshot")
             line_parameters = window.read_parameters()
+            window.activate_task('home')
             click(window.planar_button)
+            check(window.planar_panel.report is None,'planar_task_entry_does_not_auto_generate')
+            click(window.compute_button)
             planar = window.planar_panel
             check(window.tabs.currentIndex() == 5 and len(planar.report["network"]["ports"]) == 16,
                   "planar_ribbon_opens_rectangular_design")
@@ -387,7 +395,7 @@ def schedule_smoke_test(app, window, output: Path):
             planar.geometry_fields["scan_theta_deg"].setText("33")
             planar.geometry_fields["scan_phi_deg"].setText("47")
             planar.geometry_fields["cut_phi_deg"].setText("47")
-            click(planar.design_button)
+            click(window.compute_button)
             pm = planar.report["electrical"]["patterns"]["output"]["metrics"]
             check(abs(pm["representative_peak_theta_deg"] - 33) < 1e-8 and abs(pm["representative_peak_phi_deg"] - 47) < 1e-8,
                   "rectangular_scan_theta_phi_compensation")
@@ -405,7 +413,6 @@ def schedule_smoke_test(app, window, output: Path):
                     QTest.mouseRelease(planar.canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point + QPoint(45,20))
                     app.processEvents()
                     check(before_view != (axes.azim, axes.elev), "planar_3d_mouse_rotation")
-            if not planar.settings_tabs.isVisible(): click(planar.toggle_settings)
             planar.settings_tabs.setCurrentIndex(0)
             dialog_path = output.resolve() / "arbitrary-coordinates.csv"
             dialog_path.write_text("element,x,y\n1,-1,-0.3\n2,-0.3,0.6\n3,0.2,-0.5\n4,0.8,0.7\n5,0.5,0.1\n6,-0.7,-0.8\n", encoding="utf-8")
@@ -413,12 +420,12 @@ def schedule_smoke_test(app, window, output: Path):
             click(planar.import_coordinates_button)
             check(planar.geometry.currentData() == "arbitrary" and len(planar.coordinates) == 6,
                   "arbitrary_planar_coordinate_import_dialog")
-            click(planar.design_button)
+            click(window.compute_button)
             arbitrary_report = planar.report
             dialog_path = output.resolve() / "planar-gui.json"
             dialog_path.unlink(missing_ok=True)
             QTimer.singleShot(200, accept_file_dialog)
-            click(planar.save_button)
+            click(window.save_scheme_button)
             check(dialog_path.exists(), "planar_settings_save_dialog")
             planar.geometry_fields["scan_theta_deg"].setText("10")
             planar.export_path(output / "planar-selected-export")
@@ -431,7 +438,7 @@ def schedule_smoke_test(app, window, output: Path):
                       and np.allclose(db, pattern["cut_db"], rtol=0, atol=1e-8),
                       f"planar_{key}_DAT_matches_generated_snapshot_JSON")
             QTimer.singleShot(200, accept_file_dialog)
-            click(planar.open_button)
+            click(window.load_scheme_button)
             check(planar.read_parameters().scan_theta_deg == 33 and len(planar.coordinates) == 6,
                   "planar_settings_load_restores_geometry")
             bad_planar = json.loads(dialog_path.read_text(encoding="utf-8"))
@@ -448,11 +455,10 @@ def schedule_smoke_test(app, window, output: Path):
                   "invalid_planar_geometry_preserves_inputs_and_result")
             planar.geometry_fields["frequency_ghz"].setText("0")
             QTimer.singleShot(150, close_warning)
-            click(planar.design_button)
+            click(window.compute_button)
             check(planar.report is arbitrary_report and len(dismissed) == 4, "planar_invalid_input_dialog")
             planar.geometry_fields["frequency_ghz"].setText("3")
             report["planar_result"] = arbitrary_report
-            if planar.settings_tabs.isVisible(): click(planar.toggle_settings)
             planar.view.setCurrentIndex(planar.view.findData("3d")); app.processEvents(); planar.canvas.draw()
             check(window.grab().save(str(output / "planar.png")), "planar_workbench_screenshot")
             for filename, values in [
@@ -471,6 +477,10 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_pointing(app, window, output, report, check)
             from .multicore_smoke import exercise_multicore
             exercise_multicore(app, window, output, report, check)
+            from .history_smoke import exercise_history
+            exercise_history(app, window, output, report, check)
+            from .workflow_smoke import exercise_workflow
+            exercise_workflow(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

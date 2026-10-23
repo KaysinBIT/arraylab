@@ -14,7 +14,7 @@ from .sparse2d.runtime_paths import resource_path
 
 
 def exercise_sparse(app, window, output, report, check):
-    window.ribbon.setCurrentIndex(1)
+    window.activate_task("home")
     QTest.mouseClick(window.sparse_button, Qt.MouseButton.LeftButton); app.processEvents()
     sparse = window.sparse_panel
     check(sparse.isVisible() and sparse.bundle is None, 'sparse_workbench_opens_without_auto_calculation')
@@ -116,14 +116,14 @@ def exercise_sparse(app, window, output, report, check):
     planar=window.planar_panel;p,s=planar.read_parameters(),planar.read_settings()
     check(not sparse.isVisible() and window.tabs.currentIndex()==5 and planar.report is old_planar,
           'sparse_handoff_loads_inputs_preserving_previous_electrical_result')
-    check(window.inspector_stack.currentIndex()==0 and not window.result_bar.isVisible(),
+    check(window.inspector_stack.currentIndex()==2 and not window.result_bar.isVisible(),
           'leaving_sparse_restores_inspector_and_planar_result_context')
     np.testing.assert_allclose(np.array(p.coordinates),row['xy']*299.792458/config.reference_ghz,atol=1e-12)
     check(p.elements==8 and p.coordinate_unit=='mm' and p.frequency_ghz==10
           and p.scan_theta_deg==30 and p.scan_phi_deg==35 and s.phase_bits==0 and s.weighting=='custom',
           'sparse_handoff_coordinates_case_and_continuous_new_network')
     planar.save_path(output/'sparse-planar-config.json')
-    QTest.mouseClick(planar.design_button,Qt.MouseButton.LeftButton);app.processEvents()
+    QTest.mouseClick(window.compute_button,Qt.MouseButton.LeftButton);app.processEvents()
     check(planar.report is not old_planar and len(planar.report['network']['ports'])==8,
           'sparse_layout_generates_planar_feed_design')
     report['sparse_planar_result']=planar.report

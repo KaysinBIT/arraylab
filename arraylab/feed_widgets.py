@@ -147,7 +147,6 @@ class FeedPanel(QWidget):
         rename = QPushButton("改名"); rename.clicked.connect(self.rename_history); history_row.addWidget(rename)
         self.compare_history = QCheckBox("比较历史输出"); self.compare_history.toggled.connect(self.redraw_patterns)
         history_row.addWidget(self.compare_history)
-        export_history = QPushButton("导出比较"); export_history.clicked.connect(self.export_history_dialog); history_row.addWidget(export_history)
         layout.addLayout(history_row)
         self.result_tabs = QTabWidget()
         self.sections = QTableWidget()
@@ -207,8 +206,8 @@ class FeedPanel(QWidget):
 
     def update_beam_hint(self):
         mode = self.electrical.phase_mode.currentData()
-        self.beam_mode_hint.setText({"scan": "沿x轴直线阵 · θ从+z朝+x；按目标补偿。", "equalize": "当前为正侧向0°；“按目标生成”可切换为指定指向。",
-                                     "none": "当前不补偿；“按目标生成”将启用指向补偿。"}[mode])
+        self.beam_mode_hint.setText({"scan": "θ从+z朝+x；按目标指向补偿。", "equalize": "当前为正侧向0°；在“幅相加权”中切换指向补偿。",
+                                     "none": "当前不补偿；可在“幅相加权”中启用指向补偿。"}[mode])
 
     def read_settings(self, phase_mode=None):
         values = {key: float(edit.text().strip()) for key, edit in self.fields.items()}
@@ -223,7 +222,10 @@ class FeedPanel(QWidget):
             QMessageBox.warning(self, "扫描评估", "请先生成并选择一项电气设计。")
             return
         from .study_widgets import ScanStudyDialog
-        self.study_dialog = ScanStudyDialog(self.report, self)
+        if getattr(self,'_study_source_report',None) is not self.report:
+            self.study_dialog = ScanStudyDialog(self.report, self)
+            self._study_source_report = self.report
+        if self.study_dialog.worker is None:self.study_dialog._close_pending=False
         self.study_dialog.exec()
 
     def mark_dirty(self):
@@ -282,6 +284,7 @@ class FeedPanel(QWidget):
         if not matches:
             self.state.setText(self.state.text() + "；与当前输入不同。")
         self.window.statusBar().showMessage(self.state.text())
+        self.window.refresh_actions()
 
     def toggle_controls(self):
         visible = not self.settings_tabs.isVisible()
@@ -291,8 +294,9 @@ class FeedPanel(QWidget):
     def result_tab_changed(self, index):
         if index == 1 and self.report:
             self.diagram.readable_view()
-        elif index == 3 and self.settings_tabs.isVisible():
+        elif index == 3 and self.settings_tabs.isVisible() and not getattr(self,'parameters_in_sidebar',False):
             self.toggle_controls()
+        self.window.refresh_actions()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -305,7 +309,7 @@ class FeedPanel(QWidget):
         if not force and compact == self._compact_mode:
             return
         self._compact_mode = compact
-        self.intro.setVisible(not compact)
+        self.intro.setVisible(not compact and not getattr(self,'parameters_in_sidebar',False))
         self.pattern_plot.toolbar.setVisible(not compact)
         self.pattern_hint.setVisible(not compact)
         self.pattern_plot.setToolTip(self.pattern_hint.text() + " 放大窗口可显示完整图形工具栏。")
@@ -352,7 +356,7 @@ class FeedPanel(QWidget):
                     for key, label in [("target", "目标激励"), ("uncompensated", "网络原始输出"), ("output", "电气模型输出")]]
             selected = 2
             self.pattern_hint.setText("共同0 dB参考：该设计目标激励的相干幅度和；未单独抬高各曲线峰值。")
-        self.pattern_plot.draw_sets(data, selected, floor=-60)
+        self.pattern_plot.draw_sets(data, selected, polar=getattr(self,'pattern_polar',False), floor=-60)
         target, output = patterns["target"]["metrics"], patterns["output"]["metrics"]
         def number(value):
             return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"

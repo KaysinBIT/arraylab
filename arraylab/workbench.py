@@ -100,6 +100,27 @@ def dock(window, title, name, area, content):
     return result
 
 
+def sidebar_grid(page):
+    """Stack label/control pairs into one column before using a former wide form."""
+    grid=page.layout();items=[]
+    if not hasattr(grid,'getItemPosition'):return
+    for i in range(grid.count()):
+        row,col,rs,cs=grid.getItemPosition(i);items.append((row,col,rs,cs,grid.itemAt(i).widget()))
+    while grid.count():grid.takeAt(0)
+    for col in range(4):grid.setColumnStretch(col,0);grid.setColumnMinimumWidth(col,0)
+    items.sort(key=lambda item:(item[0],item[1]));row=0;i=0
+    while i<len(items):
+        old_r,col,rs,cs,widget=items[i]
+        if cs==1 and col%2==0 and i+1<len(items) and items[i+1][0]==old_r and items[i+1][1]==col+1:
+            if isinstance(widget,QLabel):widget.setWordWrap(True)
+            grid.addWidget(widget,row,0);grid.addWidget(items[i+1][4],row,1);i+=2
+        else:
+            if isinstance(widget,QLabel):widget.setWordWrap(True)
+            grid.addWidget(widget,row,0,1,2);i+=1
+        row+=1
+    grid.setColumnStretch(1,1);grid.setVerticalSpacing(5)
+
+
 def build_workbench(w):
     w.setDockNestingEnabled(True)
     w.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
@@ -122,50 +143,46 @@ def build_workbench(w):
     menu_layout.addWidget(header)
     w.ribbon = QTabWidget()
     w.ribbon.setObjectName("ribbon")
-    w.ribbon.setFixedHeight(121)
+    w.ribbon.setFixedHeight(112)
     w.ribbon.setAccessibleName("工作台功能区")
     menu_layout.addWidget(w.ribbon)
     w.setMenuWidget(menu_host)
 
     pages = []
-    for name in ("主页", "分析", "后处理", "视图"):
-        page = QWidget()
-        row = QHBoxLayout(page)
-        row.setContentsMargins(4, 2, 4, 1)
-        row.setSpacing(0)
-        w.ribbon.addTab(page, name)
-        pages.append(row)
-    w.save_button = ribbon_button("保存数据", "save", w.save_dialog)
-    w.compute_button = ribbon_button("开始计算\nF5", "run", w.compute)
-    w.compute_button.setObjectName("compute")
-    w.compute_button.setAccessibleName("计算阵列")
-    w.example_button = ribbon_button("说明书\n验证例题", "open", w.load_example)
-    w.model_button = ribbon_button("模型视图", "model", lambda: w.show_view(3))
-    w.result_button = ribbon_button("方向图", "plot", lambda: w.show_view(0))
-    w.load_scheme_button = ribbon_button("打开方案", "open", w.open_configuration_dialog)
-    w.save_scheme_button = ribbon_button("保存方案", "save", w.save_configuration_dialog)
-    w.load_scheme_button.setToolTip("加载分析参数，保留已有结果；加载后请重新计算（Ctrl+Shift+O）")
-    w.save_scheme_button.setToolTip("保存右侧当前输入参数为JSON分析方案（Ctrl+Shift+S）")
-    ribbon_group(pages[0], "分析方案", [w.load_scheme_button, w.save_scheme_button])
-    ribbon_group(pages[0], "数据", [ribbon_button("读取数据", "open", w.open_dialog), w.save_button])
-    ribbon_group(pages[0], "模型与参数", [w.model_button, ribbon_button("分析参数", "parameters", w.focus_parameters), ribbon_button("重置参数", "reset", w.reset_parameters)])
-    ribbon_group(pages[0], "分析", [w.compute_button, w.example_button])
-    ribbon_group(pages[0], "结果", [w.result_button, ribbon_button("数据列表", "table", lambda: w.show_view(1))])
-    ribbon_group(pages[1], "计算设置", [ribbon_button("分析参数", "parameters", w.focus_parameters), ribbon_button("开始计算\nF5", "run", w.compute)])
-    ribbon_group(pages[1], "模型检查", [ribbon_button("模型视图", "model", lambda: w.show_view(3)), ribbon_button("阵元激励", "table", lambda: w.show_view(2)), ribbon_button("验证例题", "open", w.load_example)])
-    w.feed_button = ribbon_button("馈电网络\n电气设计", "parameters", lambda: w.show_view(4))
-    ribbon_group(pages[1], "馈电设计", [w.feed_button])
-    w.planar_button = ribbon_button("平面阵\n电气设计", "array", lambda: w.show_view(5))
-    ribbon_group(pages[1], "平面阵", [w.planar_button])
-    w.sparse_button = ribbon_button("二维稀疏\n阵列", "array", w.open_sparse)
-    ribbon_group(pages[1], "稀疏综合", [w.sparse_button])
-    ribbon_group(pages[2], "方向图", [ribbon_button("直角坐标", "plot", lambda: w.set_plot_view(0)), ribbon_button("极坐标", "polar", lambda: w.set_plot_view(1)), ribbon_button("完整范围", "reset", w.reset_plot_view)])
-    ribbon_group(pages[2], "输出", [ribbon_button("保存数据", "save", w.save_dialog), ribbon_button("保存图片", "plot", w.save_plot), ribbon_button("复制图形", "copy", w.copy_plot)])
-    w.restore_layout_button = ribbon_button("恢复布局", "layout", w.restore_workbench)
-    ribbon_group(pages[3], "面板", [ribbon_button("导航树", "model", lambda: w.nav_dock.show()), ribbon_button("参数面板", "parameters", w.focus_parameters), ribbon_button("消息窗口", "table", lambda: w.messages_dock.show()), w.restore_layout_button])
-    ribbon_group(pages[3], "说明", [ribbon_button("使用帮助\nF1", "help", w.show_help), ribbon_button("关于", "help", w.show_about)])
-    for row in pages:
-        row.addStretch()
+    for name in ('工作', '图形与布局'):
+        page=QWidget();row=QHBoxLayout(page);row.setContentsMargins(4,2,4,1);row.setSpacing(0)
+        w.ribbon.addTab(page,name);pages.append(row)
+    w.home_button=ribbon_button('开始','model',lambda:w.activate_task('home'))
+    w.compute_button=ribbon_button('运行计算\nF5','run',w.compute)
+    w.compute_button.setObjectName('compute');w.compute_button.setAccessibleName('运行当前任务')
+    w.load_scheme_button=ribbon_button('打开参数','open',w.open_configuration_dialog)
+    w.save_scheme_button=ribbon_button('保存参数','save',w.save_configuration_dialog)
+    w.load_scheme_button.setToolTip('打开当前任务的参数文件；不恢复计算结果')
+    w.save_scheme_button.setToolTip('只保存当前输入，下次打开需重新计算')
+    w.history_open_button=ribbon_button('打开记录','open',w.load_history_dialog)
+    w.history_save_button=ribbon_button('保存记录','save',w.save_history_dialog)
+    w.history_open_button.setToolTip('恢复直线阵或直线阵馈电的完整计算记录')
+    w.history_save_button.setToolTip('保存已有计算记录、标签及选中项；不含未计算的输入')
+    w.save_button=ribbon_button('导出当前结果','save',w.save_dialog)
+    w.scan_button=ribbon_button('多角度评估','array',w.run_scan)
+    w.cancel_button=ribbon_button('取消计算','reset',lambda:w.sparse_panel.cancel())
+    ribbon_group(pages[0],'任务',[w.home_button])
+    ribbon_group(pages[0],'1. 参数',[w.load_scheme_button,w.save_scheme_button])
+    ribbon_group(pages[0],'2. 计算',[w.compute_button,w.cancel_button,w.scan_button])
+    ribbon_group(pages[0],'3. 保存与继续',[w.history_save_button,w.history_open_button,w.save_button])
+    w.result_button=ribbon_button('方向图','plot',lambda:w.show_view(0))
+    w.model_button=ribbon_button('模型视图','model',lambda:w.show_view(3))
+    w.rect_button=ribbon_button('直角坐标','plot',lambda:w.set_plot_view(0))
+    w.polar_button=ribbon_button('极坐标','polar',lambda:w.set_plot_view(1))
+    w.reset_view_button=ribbon_button('重置图形','reset',w.reset_plot_view)
+    w.image_button=ribbon_button('保存当前图','plot',w.save_plot)
+    w.copy_button=ribbon_button('复制当前图','copy',w.copy_plot)
+    w.restore_layout_button=ribbon_button('恢复布局','layout',w.restore_workbench)
+    w.example_button=ribbon_button('直线阵例题','open',w.load_example)
+    ribbon_group(pages[1],'直线阵视图',[w.result_button,w.model_button,w.rect_button,w.polar_button])
+    ribbon_group(pages[1],'当前图形',[w.reset_view_button,w.image_button,w.copy_button])
+    ribbon_group(pages[1],'布局与帮助',[ribbon_button('显示参数','parameters',w.focus_parameters),w.restore_layout_button,w.example_button,ribbon_button('本页帮助','help',w.show_help)])
+    for row in pages:row.addStretch()
 
     central = QWidget()
     central.setObjectName("central")
@@ -173,6 +190,10 @@ def build_workbench(w):
     layout = QVBoxLayout(central)
     layout.setContentsMargins(2, 2, 2, 0)
     layout.setSpacing(4)
+    w.task_header=QWidget();task_layout=QVBoxLayout(w.task_header);task_layout.setContentsMargins(10,5,10,3);task_layout.setSpacing(3)
+    w.task_title=QLabel();w.task_title.setStyleSheet('font-size:18px;font-weight:600;color:#185986;')
+    w.task_hint=QLabel();w.task_hint.setWordWrap(True);w.task_hint.setObjectName('scope')
+    task_layout.addWidget(w.task_title);task_layout.addWidget(w.task_hint);layout.addWidget(w.task_header)
     controls = QHBoxLayout()
     controls.addWidget(QLabel("结果"))
     w.selection = QComboBox()
@@ -180,7 +201,7 @@ def build_workbench(w):
     w.selection.setMinimumWidth(130)
     w.selection.currentIndexChanged.connect(w.update_selection)
     controls.addWidget(w.selection, 1)
-    w.keep_history = QCheckBox("叠加比较（最多5条）")
+    w.keep_history = QCheckBox("保留并比较（最多5条）")
     controls.addWidget(w.keep_history)
     w.remove_button = QPushButton("移除")
     w.remove_button.clicked.connect(w.remove_selected)
@@ -254,42 +275,36 @@ def build_workbench(w):
     w.sparse_panel = SparsePanel(w)
     w.sparse_panel.planar_requested.connect(w.receive_sparse_layout)
     w.tabs.addTab(w.sparse_panel, workbench_icon("array"), "二维稀疏")
+    from .start_page import build_start_page
+    w.start_page=build_start_page(w);w.tabs.addTab(w.start_page,'开始')
+    w.feed_button=w.task_cards['feed'];w.planar_button=w.task_cards['planar'];w.sparse_button=w.task_cards['sparse']
     layout.addWidget(w.tabs, 1)
 
-    w.tree = QTreeWidget()
-    w.tree.setHeaderHidden(True)
-    w.tree.setAccessibleName("工程导航树")
-    w.tree.setIndentation(17)
-    root = QTreeWidgetItem(w.tree, ["当前分析 · 均匀直线阵"])
-    w.project_tree_root = root
-    root.setIcon(0, workbench_icon("model"))
-    def node(parent, text, kind, data):
-        item = QTreeWidgetItem(parent, [text])
-        item.setIcon(0, workbench_icon(kind))
-        item.setData(0, Qt.ItemDataRole.UserRole, data)
-        return item
-    model = node(root, "模型", "model", ("view", 3))
-    w.model_tree_item = node(model, "均匀直线阵 / 各向同性", "array", ("view", 3))
-    node(root, "分析参数", "parameters", ("parameters", 0))
-    w.feed_tree_item = node(root, "馈电网络 · 电气设计", "parameters", ("view", 4))
-    w.planar_tree_item = node(root, "平面阵 · 电气设计", "array", ("view", 5))
-    w.sparse_tree_item = node(root, "二维稀疏阵列", "array", ("sparse", 0))
-    results = node(root, "结果", "open", ("view", 0))
-    w.plot_tree_item = node(results, "1D 方向图", "plot", ("view", 0))
-    w.data_tree_item = node(results, "方向图采样数据", "table", ("view", 1))
-    node(results, "阵元激励列表", "table", ("view", 2))
-    w.history_tree_item = node(root, "计算记录", "open", None)
-    w.tree.expandAll()
-    w.tree.currentItemChanged.connect(w.select_result_tab)
-    w.nav_dock = dock(w, "导航树", "navigationDock", Qt.DockWidgetArea.LeftDockWidgetArea, w.tree)
-    w.nav_dock.setMinimumWidth(210)
+    w.tree=QTreeWidget();w.tree.setHeaderHidden(True);w.tree.setAccessibleName('工作任务导航');w.tree.setIndentation(13)
+    root=QTreeWidgetItem(w.tree,['工作任务']);w.project_tree_root=root
+    def node(parent,text,kind,data):
+        item=QTreeWidgetItem(parent,[text]);item.setIcon(0,workbench_icon(kind));item.setData(0,Qt.ItemDataRole.UserRole,data);return item
+    w.home_tree_item=node(root,'开始与操作流程','open',('view',7))
+    w.linear_tree_item=node(root,'直线阵分析','array',('view',0))
+    w.plot_tree_item=node(w.linear_tree_item,'方向图','plot',('view',0))
+    w.data_tree_item=node(w.linear_tree_item,'方向图数据','table',('view',1))
+    node(w.linear_tree_item,'阵元激励','table',('view',2))
+    w.model_tree_item=node(w.linear_tree_item,'阵列模型','model',('view',3))
+    w.history_tree_item=node(w.linear_tree_item,'当前计算记录','open',None)
+    w.feed_tree_item=node(root,'直线阵馈电','parameters',('view',4))
+    w.planar_tree_item=node(root,'平面阵馈电','array',('view',5))
+    w.sparse_tree_item=node(root,'二维稀疏设计','array',('view',6))
+    root.setExpanded(True);w.tree.currentItemChanged.connect(w.select_result_tab)
+    w.nav_dock=dock(w,'选择任务','navigationDock',Qt.DockWidgetArea.LeftDockWidgetArea,w.tree)
+    w.nav_dock.setMinimumWidth(175)
 
     inspector = QWidget()
     iv = QVBoxLayout(inspector)
     iv.setContentsMargins(7, 4, 7, 7)
     iv.setSpacing(7)
     parameters_box = QGroupBox("分析参数")
-    form = QFormLayout(parameters_box)
+    w.parameters_box=parameters_box
+    form = QFormLayout(parameters_box);w.parameter_form=form
     form.setContentsMargins(8, 12, 8, 8)
     form.setVerticalSpacing(6)
     w.inputs = {}
@@ -319,7 +334,7 @@ def build_workbench(w):
     w.phase_mode.addItems(["正侧向（0°）", "指定扫描角"])
     w.phase_mode.currentIndexChanged.connect(w.phase_mode_changed)
     form.insertRow(3, "相位设置", w.phase_mode)
-    form.addRow("单元 / 幅度", QLabel("各向同性 / 均匀"))
+    w.linear_element_label=QLabel("各向同性 / 均匀");form.addRow("单元 / 幅度",w.linear_element_label)
     iv.addWidget(parameters_box)
     w.physical = QLabel()
     w.physical.setObjectName("scope"); w.physical.setWordWrap(True)
@@ -341,16 +356,43 @@ def build_workbench(w):
     scope = QLabel("模型范围：无互耦、无地平面。\n方向性按全空间积分计算。")
     scope.setObjectName("scope"); scope.setWordWrap(True)
     iv.addWidget(scope)
+    w.linear_only_widgets=[w.physical,metrics,w.notice,w.phase_export,scope]
+    w.feed_parameter_host=QWidget();feed_layout=QVBoxLayout(w.feed_parameter_host);feed_layout.setContentsMargins(0,0,0,0)
+    w.feed_panel.parameters_in_sidebar=True
+    w.feed_panel.layout().removeWidget(w.feed_panel.beam_row);w.feed_panel.layout().removeWidget(w.feed_panel.settings_tabs)
+    w.feed_panel.beam_row.layout().removeWidget(w.feed_panel.beam_mode_hint)
+    feed_layout.addWidget(QLabel('2. 馈电与目标指向'));feed_layout.addWidget(w.feed_panel.beam_row)
+    feed_layout.addWidget(w.feed_panel.beam_mode_hint);feed_layout.addWidget(w.feed_panel.settings_tabs)
+    w.feed_panel.settings_tabs.setMinimumHeight(210);w.feed_panel.settings_tabs.setMaximumHeight(260)
+    for i,title in enumerate(('馈电网络','幅相加权','误差失效')):w.feed_panel.settings_tabs.setTabText(i,title)
+    iv.addWidget(w.feed_parameter_host)
     iv.addStretch()
     scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(inspector)
     w.inspector_stack = QStackedWidget(); w.inspector_stack.addWidget(scroll); w.inspector_stack.addWidget(w.sparse_panel.parameter_widget)
-    w.inspector_dock = dock(w, "参数与结果", "inspectorDock", Qt.DockWidgetArea.RightDockWidgetArea, w.inspector_stack)
-    w.inspector_dock.setMinimumWidth(265)
+    planar_parameters=QWidget();pv=QVBoxLayout(planar_parameters);pv.setContentsMargins(7,4,7,7)
+    label=QLabel('平面阵参数独立设置；可先选布局，再设置目标角与馈电。');label.setWordWrap(True);pv.addWidget(label)
+    w.planar_panel.parameters_in_sidebar=True
+    w.planar_panel.layout().removeWidget(w.planar_panel.beam_row);w.planar_panel.layout().removeWidget(w.planar_panel.settings_tabs)
+    w.planar_panel.beam_row.layout().removeWidget(w.planar_panel.beam_mode_hint)
+    pv.addWidget(w.planar_panel.beam_row);pv.addWidget(w.planar_panel.beam_mode_hint);pv.addWidget(w.planar_panel.settings_tabs);pv.addStretch()
+    w.planar_panel.settings_tabs.setMinimumHeight(230);w.planar_panel.settings_tabs.setMaximumHeight(290)
+    for i,title in enumerate(('布局','切面','阻抗','幅相','误差')):w.planar_panel.settings_tabs.setTabText(i,title)
+    planar_scroll=QScrollArea();planar_scroll.setWidgetResizable(True);planar_scroll.setWidget(planar_parameters)
+    w.inspector_stack.addWidget(planar_scroll)
+    for panel in (w.feed_panel,w.planar_panel):
+        for i in range(panel.settings_tabs.count()):sidebar_grid(panel.settings_tabs.widget(i))
+        for widget in (panel.intro,panel.pointing_button,panel.design_button,panel.open_button,panel.save_button,panel.export_button,panel.toggle_settings,panel.study_button):widget.hide()
+    w.feed_panel.state.setText('设置右侧参数后，点击顶部“生成馈电设计”。')
+    w.planar_panel.state.setText('设置右侧参数后，点击顶部“生成平面阵设计”。')
+    for widget in (w.sparse_panel.run_button,w.sparse_panel.cancel_button,w.sparse_panel.export_button,w.sparse_panel.load_settings_button,w.sparse_panel.save_settings_button):widget.hide()
+    w.sparse_panel.planar_button.setText('下一步：设计馈电')
+    w.inspector_dock = dock(w, "当前任务参数", "inspectorDock", Qt.DockWidgetArea.RightDockWidgetArea, w.inspector_stack)
+    w.inspector_dock.setMinimumWidth(340)
 
     messages = QWidget(); mv = QVBoxLayout(messages)
     mv.setContentsMargins(0, 0, 0, 0); mv.setSpacing(0)
     w.state_label = QLabel("准备就绪"); w.state_label.setObjectName("state"); w.state_label.setWordWrap(True)
-    mv.addWidget(w.state_label)
+    w.task_header.layout().addWidget(w.state_label)
     w.message_log = QPlainTextEdit()
     w.message_log.setReadOnly(True); w.message_log.setMaximumBlockCount(300)
     w.message_log.setAccessibleName("计算消息日志")
@@ -368,6 +410,7 @@ def build_workbench(w):
     w.worker_choice.currentIndexChanged.connect(lambda:set_workers(w.worker_choice.currentData()))
     w.statusBar().addPermanentWidget(w.worker_choice)
     w.statusBar().showMessage("就绪。可设置参数，或载入说明书例题。")
-    w.resizeDocks([w.nav_dock, w.inspector_dock], [235, 285], Qt.Orientation.Horizontal)
+    w.resizeDocks([w.nav_dock, w.inspector_dock], [190, 360], Qt.Orientation.Horizontal)
     w.resizeDocks([w.messages_dock], [135], Qt.Orientation.Vertical)
     w.tabs.currentChanged.connect(w.change_workbench_context)
+    w._workflow_ready=True

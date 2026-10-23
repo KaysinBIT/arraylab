@@ -25,6 +25,7 @@ class PlanarPanel(QWidget):
         self.window=window;self.report=None;self.coordinates=();self._changing=False;self.last_export=None
         layout=QVBoxLayout(self);layout.setContentsMargins(8,6,8,6)
         title=QLabel("独立平面阵参数 · 各向同性点源 · z=0 · 最多200阵元、最大孔径40λ")
+        self.intro=title
         title.setWordWrap(True);layout.addWidget(title)
         self.settings_tabs=QTabWidget();self.settings_tabs.setMaximumHeight(178)
         geometry=QWidget();grid=QGridLayout(geometry);grid.setContentsMargins(6,3,6,3)
@@ -106,8 +107,8 @@ class PlanarPanel(QWidget):
         for key in ("nx","ny","spacing_x","spacing_y"):self.geometry_fields[key].setEnabled(regular)
 
     def update_beam_hint(self):
-        self.beam_mode_hint.setText({"scan":"θ从+z轴；φ从+x朝+y。", "equalize":"当前为正侧向0°；按目标生成可切换。",
-                                     "none":"当前不补偿；按目标生成将启用补偿。"}[self.electrical.phase_mode.currentData()])
+        self.beam_mode_hint.setText({"scan":"θ从+z轴；φ从+x朝+y。", "equalize":"当前为正侧向0°；在“幅相”中切换。",
+                                     "none":"当前不补偿；在“幅相”中启用指向补偿。"}[self.electrical.phase_mode.currentData()])
 
     open_study = FeedPanel.open_study
 
@@ -154,12 +155,14 @@ class PlanarPanel(QWidget):
         self.report=report;self.export_button.setEnabled(True)
         self.state.setText(f"已生成：{p.geometry} · {p.elements}阵元 · {s.topology} · {self.electrical.phase_mode.currentText()} · {report['execution']['workers']}路计算")
         self.window.statusBar().showMessage(self.state.text())
-        if self.view.currentData() not in ("ports","sections") and self.settings_tabs.isVisible():self.toggle_controls()
+        if not getattr(self,'parameters_in_sidebar',False) and self.view.currentData() not in ("ports","sections") and self.settings_tabs.isVisible():self.toggle_controls()
         self.redraw()
+        self.window.refresh_actions()
 
     def change_view(self):
-        if self.report and self.view.currentData() in ("cut","map","3d") and self.settings_tabs.isVisible():self.toggle_controls()
+        if not getattr(self,'parameters_in_sidebar',False) and self.report and self.view.currentData() in ("cut","map","3d") and self.settings_tabs.isVisible():self.toggle_controls()
         self.redraw()
+        self.window.refresh_actions()
 
     def redraw(self):
         if self.report is None:return

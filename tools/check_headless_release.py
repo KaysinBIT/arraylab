@@ -96,7 +96,7 @@ def main():
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
         process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
-                                 cwd=work, env=gui_env, timeout=120)
+                                 cwd=work, env=gui_env, timeout=180)
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
         report["gui_checks_passed"] = len(gui_report["checks"])
