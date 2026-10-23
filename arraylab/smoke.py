@@ -353,6 +353,12 @@ def schedule_smoke_test(app, window, output: Path):
             feed.export_path(output / "electrical-selected-export")
             check(json.loads((output / "electrical-selected-export/feed-network.json").read_text(encoding="utf-8")) == selected_report,
                   "electrical_export_follows_selected_history")
+            for key in ("target", "uncompensated", "output"):
+                theta, db, phase = read_pattern(output / f"electrical-selected-export/feed-{key}.dat")
+                pattern = selected_report["electrical"]["patterns"][key]
+                check(phase is None and np.allclose(theta, pattern["angles_deg"], rtol=0, atol=1e-9)
+                      and np.allclose(db, pattern["pattern_db"], rtol=0, atol=1e-8),
+                      f"electrical_{key}_DAT_matches_selected_history_JSON")
             feed.export_history_path(output / "electrical-comparison.json")
             comparison = json.loads((output / "electrical-comparison.json").read_text(encoding="utf-8"))
             check(len(comparison["records"]) == 5 and comparison["records"][0]["report"] == selected_report,
@@ -418,6 +424,12 @@ def schedule_smoke_test(app, window, output: Path):
             planar.export_path(output / "planar-selected-export")
             check(json.loads((output / "planar-selected-export/planar-report.json").read_text(encoding="utf-8")) == arbitrary_report,
                   "planar_export_uses_generated_snapshot")
+            for key in ("target", "uncompensated", "output"):
+                theta, db, phase = read_pattern(output / f"planar-selected-export/planar-cut-{key}.dat")
+                pattern = arbitrary_report["electrical"]["patterns"][key]
+                check(phase is None and np.allclose(theta, pattern["cut_angles_deg"], rtol=0, atol=1e-9)
+                      and np.allclose(db, pattern["cut_db"], rtol=0, atol=1e-8),
+                      f"planar_{key}_DAT_matches_generated_snapshot_JSON")
             QTimer.singleShot(200, accept_file_dialog)
             click(planar.open_button)
             check(planar.read_parameters().scan_theta_deg == 33 and len(planar.coordinates) == 6,
@@ -443,6 +455,14 @@ def schedule_smoke_test(app, window, output: Path):
             if planar.settings_tabs.isVisible(): click(planar.toggle_settings)
             planar.view.setCurrentIndex(planar.view.findData("3d")); app.processEvents(); planar.canvas.draw()
             check(window.grab().save(str(output / "planar.png")), "planar_workbench_screenshot")
+            for filename, values in [
+                ("electrical-selected-export/feed-output.dat", selected_report["electrical"]["patterns"]["output"]["pattern_db"]),
+                ("planar-selected-export/planar-cut-output.dat", arbitrary_report["electrical"]["patterns"]["output"]["cut_db"]),
+            ]:
+                window.import_path(output / filename)
+                dataset = window.selected_dataset()
+                check(dataset.result is None and np.allclose(dataset.db, values, rtol=0, atol=1e-8),
+                      f"{Path(filename).name}_desktop_import_without_inferred_directivity")
             report["success"] = True
             code = 0
         except Exception:

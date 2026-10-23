@@ -1,4 +1,4 @@
-# 馈电电气设计（0.7.0）
+# 馈电电气设计（0.7.1）
 
 本阶段完成F02及P04–P07的电气功能。按用户选择，基板、线宽和实际馈线路径尺寸暂缓。所有结果属于中心频点、各向同性点源、同一纯电阻负载的理想模型，不是全波结果或实测硬件性能。
 
@@ -78,4 +78,6 @@ python -m arraylab --headless --elements 16 --scan-deg 30 --feed-network symmetr
 python -m arraylab --headless --feed-config examples/feed-electrical.json --feed-phase-bits 3 --feed-phase-error-deg 5 --feed-amplitude-error-db 0.5 --feed-failed-ports 3 --feed-seed 42 --output-dir results/errors --plot both
 ```
 
-除原阻抗文件外，新增`feed-patterns.csv`、目标/输出激励CSV及按需的`feed-rectangular.png`、`feed-polar.png`。顶层原有`pattern.dat`等仍表示独立的均匀阵基准，馈电结果位于`feed_network.electrical`及feed前缀文件，避免两类结果混用。
+除原阻抗文件外，导出包括`feed-patterns.csv`、目标/输出激励CSV及按需的`feed-rectangular.png`、`feed-polar.png`。0.7.1另提供`feed-target.dat`、`feed-uncompensated.dat`、`feed-output.dat`，分别对应所选记录的目标、未补偿及模型输出曲线。DAT为无表头的角度°、幅度dB两列，保留三条曲线的共同参考和−300 dB数值下限，与完整JSON使用同一快照，文本精度为12位有效数字。可通过主工作台“读取数据”重新读入；单切面导入不生成方向性指标。相位和模型信息保留在完整JSON中。
+
+顶层原有`pattern.dat`等仍表示独立的均匀阵基准，馈电结果位于`feed_network.electrical`及feed前缀文件。`--include-phase`只控制均匀阵基准DAT的第三列，不改变上述馈电DAT的两列格式。

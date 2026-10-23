@@ -70,4 +70,6 @@ python -m arraylab --headless --planar-config examples/planar-arbitrary.json --o
 
 导出包括`planar-config.json`、完整报告、端口/网络阻抗CSV、可往返读取的坐标CSV、三条切面CSV、球面采样CSV、逻辑馈电SVG及按需的三类PNG。导出新目录，不覆盖已有目录；全部生成成功后才显示目标目录。
 
+0.7.1另导出`planar-cut-target.dat`、`planar-cut-uncompensated.dat`、`planar-cut-output.dat`，对应上次成功生成的目标、未补偿及模型输出切面。每份DAT为无表头的有符号θ°、幅度dB两列，使用12位有效数字；不重新归一化，也不从尚未计算的新输入生成曲线。可在主工作台“读取数据”作比较。DAT不包含切面φ、坐标单位、相位或全空间指标，需与同目录的`planar-report.json`一起保留；不能由导入切面反推方向性。
+
 验证采用球面独立求积、2×2阵闭式结果、退化直线阵、坐标平移/旋转不变性、同一方向的二维/三维交叉核对及最大200阵元案例。实际基板、馈线路径、极化、互耦、损耗和目标电脑的运行验收仍不由这些数值测试替代。

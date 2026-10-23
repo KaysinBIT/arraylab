@@ -9,6 +9,7 @@ import pytest
 from scipy.integrate import quad
 
 from arraylab.core import ArrayParameters, calculate
+from arraylab.dataio import read_pattern
 from arraylab.feed import (FeedSettings, LEGACY_SETTINGS, design_feed, synthesize_impedance,
                            load_feed_configuration, save_feed_configuration, export_feed_directory)
 from arraylab.excitation import target_amplitudes, read_excitation_csv, excitation_csv, wrap_phase
@@ -175,7 +176,7 @@ def test_errors_seed_and_zero_limit():
     assert zero["electrical"]["patterns"] == ideal["electrical"]["patterns"]
 
 
-def test_quantization_and_all_failed_are_explicit():
+def test_quantization_and_all_failed_are_explicit(tmp_path):
     p = ArrayParameters(scan_deg=17)
     report = design_feed(p,FeedSettings(phase_mode="scan",phase_bits=3))
     for port in report["ports"]:
@@ -186,6 +187,10 @@ def test_quantization_and_all_failed_are_explicit():
     assert out["metrics"]["directivity_dbi"] is None and out["metrics"]["peak_angles_deg"] == []
     assert all(value == -300 for value in out["pattern_db"])
     json.dumps(failed,allow_nan=False)
+    export_feed_directory(tmp_path / "failed-output", failed)
+    angles, db, phase = read_pattern(tmp_path / "failed-output/feed-output.dat")
+    assert np.all(db == -300) and phase is None
+    np.testing.assert_allclose(angles, out["angles_deg"], rtol=0, atol=1e-9)
 
 
 def test_legacy_v1_read_as_uncompensated_and_v2_roundtrip(tmp_path):

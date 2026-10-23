@@ -2,10 +2,22 @@
 import argparse
 import hashlib
 import json
+import math
 import os
+import platform
 from pathlib import Path
 import subprocess
 import uuid
+
+
+def check_dat(path, angles, values):
+    """Compare the published exchange file to the actual EXE JSON result."""
+    rows = [line.split() for line in path.read_text(encoding="ascii").splitlines()]
+    assert len(rows) == len(angles) == len(values), path.name
+    for row, angle, value in zip(rows, angles, values):
+        assert len(row) == 2, path.name
+        assert math.isclose(float(row[0]), angle, rel_tol=0, abs_tol=1e-9), path.name
+        assert math.isclose(float(row[1]), value, rel_tol=0, abs_tol=1e-8), path.name
 
 
 def main():
@@ -19,9 +31,12 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     work = output / ("无头 验收-" + uuid.uuid4().hex[:8])
     work.mkdir()
+    (work / "temp").mkdir()
     env = os.environ.copy()
-    env.update({"PATH": r"C:\Windows\System32", "QT_QPA_PLATFORM": "invalid-test-platform",
-                "DISPLAY": "", "MPLBACKEND": "QtAgg"})
+    env.update({"PATH": str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"),
+                "QT_QPA_PLATFORM": "invalid-test-platform", "DISPLAY": "", "MPLBACKEND": "QtAgg",
+                "TEMP": str(work / "temp"), "TMP": str(work / "temp"),
+                "MPLCONFIGDIR": str(work / "mpl"), "PYTHONNOUSERSITE": "1"})
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
     checks = []
@@ -68,10 +83,12 @@ def main():
     assert "--output-dir" in run("--help").stdout
     assert sample_doc["app_version"] in run("--version").stdout
     checks.append("help_and_version")
-    report = {"success": True, "checks": checks, "work_directory": str(work), "app_version": sample_doc["app_version"]}
+    report = {"success": True, "checks": checks, "work_directory": str(work), "app_version": sample_doc["app_version"],
+              "host": platform.platform(), "release_directory": str(release),
+              "environment_scope": "Existing host; system-only PATH, no PYTHONHOME/PYTHONPATH, fresh temp and plotting cache. Not a clean OS image."}
     if args.gui_smoke:
-        gui_env = os.environ.copy()
-        gui_env.pop("QT_QPA_PLATFORM", None)
+        gui_env = env.copy()
+        gui_env["QT_QPA_PLATFORM"] = "windows"
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
         process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
@@ -84,15 +101,24 @@ def main():
         assert scheme_result["metrics"] == gui_report["scheme_result"]["metrics"]
         checks.append("desktop_saved_scheme_matches_headless_EXE_parameters_and_metrics")
         for topology in ("corporate", "series", "symmetric_series"):
-            feed = json.loads(run("--feed-config", smoke / f"feed-{topology}.json").stdout)["feed_network"]
+            directory = work / f"cli-{topology}"
+            feed = json.loads(run("--feed-config", smoke / f"feed-{topology}.json", "--output-dir", directory).stdout)["feed_network"]
             assert feed == gui_report["feed_results"][topology]
-            checks.append(f"{topology}_feed_impedance_GUI_and_headless_EXE_match")
-        electrical = json.loads(run("--feed-config", smoke / "feed-electrical.json").stdout)["feed_network"]
+            for key, pattern in feed["electrical"]["patterns"].items():
+                check_dat(directory / f"feed-{key}.dat", pattern["angles_deg"], pattern["pattern_db"])
+            checks.append(f"{topology}_feed_GUI_headless_EXE_and_DAT_match")
+        electrical_directory = work / "cli-electrical"
+        electrical = json.loads(run("--feed-config", smoke / "feed-electrical.json", "--output-dir", electrical_directory).stdout)["feed_network"]
         assert electrical == gui_report["electrical_result"]
-        checks.append("weighted_compensated_perturbed_electrical_GUI_and_CLI_match")
-        planar = json.loads(run("--planar-config", smoke / "planar-gui.json").stdout)["planar"]
+        for key, pattern in electrical["electrical"]["patterns"].items():
+            check_dat(electrical_directory / f"feed-{key}.dat", pattern["angles_deg"], pattern["pattern_db"])
+        checks.append("weighted_compensated_perturbed_electrical_GUI_CLI_and_DAT_match")
+        planar_directory = work / "cli-planar"
+        planar = json.loads(run("--planar-config", smoke / "planar-gui.json", "--output-dir", planar_directory).stdout)["planar"]
         assert planar == gui_report["planar_result"]
-        checks.append("arbitrary_planar_GUI_and_headless_EXE_match")
+        for key, pattern in planar["electrical"]["patterns"].items():
+            check_dat(planar_directory / f"planar-cut-{key}.dat", pattern["cut_angles_deg"], pattern["cut_db"])
+        checks.append("arbitrary_planar_GUI_headless_EXE_and_DAT_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

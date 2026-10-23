@@ -12,6 +12,7 @@ import numpy as np
 from . import __version__
 from .core import ArrayParameters
 from .configuration import MAX_BYTES, _unique_keys, _invalid_constant
+from .dataio import write_pattern
 from .excitation import finite_number, target_amplitudes, electrical_excitation
 from .feed import FeedSettings, settings_payload, synthesize_impedance, write_text_atomic
 
@@ -220,6 +221,8 @@ def write_planar_files(directory, report):
     patterns = report["electrical"]["patterns"]
     cut = np.column_stack([patterns["target"]["cut_angles_deg"], *[patterns[k]["cut_db"] for k in ("target", "uncompensated", "output")]])
     np.savetxt(directory / "planar-cut.csv", cut, delimiter=",", header="signed_theta_deg,target_db,uncompensated_db,output_db", comments="", fmt="%.12g")
+    for key in ("target", "uncompensated", "output"):
+        write_pattern(directory / f"planar-cut-{key}.dat", patterns[key]["cut_angles_deg"], patterns[key]["cut_db"])
     output = patterns["output"]
     theta, phi = np.meshgrid(output["sphere_theta_deg"], output["sphere_phi_deg"], indexing="ij")
     grid = np.column_stack([theta.ravel(), phi.ravel(), np.array(output["sphere_db"]).ravel()])

@@ -14,6 +14,7 @@ import numpy as np
 
 from . import __version__
 from .configuration import FIELDS, MAX_BYTES, _invalid_constant, _unique_keys, parameters_from_values
+from .dataio import write_pattern
 from .excitation import target_amplitudes, validate_electrical, electrical_excitation, excitation_csv
 
 LEGACY_SETTINGS = {"topology", "input_ohm", "junction_ohm", "load_ohm", "min_line_ohm", "max_line_ohm"}
@@ -274,6 +275,10 @@ def write_feed_files(directory, report):
         patterns = report["electrical"]["patterns"]
         data = np.column_stack([patterns["target"]["angles_deg"], *[patterns[key]["pattern_db"] for key in ("target", "uncompensated", "output")]])
         np.savetxt(directory / "feed-patterns.csv", data, delimiter=",", header="theta_deg,target_db,uncompensated_db,output_db", comments="", fmt="%.12g")
+        for key in ("target", "uncompensated", "output"):
+            filename = f"feed-{key}.dat"
+            write_pattern(directory / filename, patterns[key]["angles_deg"], patterns[key]["pattern_db"])
+            files[f"feed_{key}_dat"] = filename
         amplitude = target_amplitudes(p, settings)
         phases = settings.custom_phases_deg if settings.weighting == "custom" else np.zeros(p.elements)
         (directory / "feed-target-excitation.csv").write_text(excitation_csv(amplitude, phases), encoding="utf-8")

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from arraylab.core import ArrayParameters,calculate
+from arraylab.dataio import read_pattern
 from arraylab.feed import FeedSettings
 from arraylab.planar import (PlanarParameters,design_planar,planar_amplitudes,read_coordinates_csv,
                             save_planar_configuration,load_planar_configuration,export_planar_directory)
@@ -105,7 +106,7 @@ def test_invalid_geometry(changes):
     with pytest.raises(ValueError):PlanarParameters(**changes).validate()
 
 
-def test_planar_single_and_all_failed():
+def test_planar_single_and_all_failed(tmp_path):
     single=design_planar(PlanarParameters(nx=1,ny=1),FeedSettings())
     metric=single["electrical"]["patterns"]["output"]["metrics"]
     assert metric["directivity_dbi"]==pytest.approx(0)
@@ -115,6 +116,10 @@ def test_planar_single_and_all_failed():
     assert out["metrics"]["directivity_dbi"] is None
     assert np.all(np.array(out["sphere_db"])==-300)
     json.dumps(failed,allow_nan=False)
+    export_planar_directory(tmp_path / "failed-output", failed)
+    angles, db, phase = read_pattern(tmp_path / "failed-output/planar-cut-output.dat")
+    assert np.all(db == -300) and phase is None
+    np.testing.assert_allclose(angles, out["cut_angles_deg"], rtol=0, atol=1e-9)
 
 
 def test_small_aperture_opposed_phase_peak_search_scale():
@@ -155,6 +160,12 @@ def test_planar_config_csv_and_cli_no_gui(tmp_path):
     assert process.returncode==0,process.stderr
     doc=json.loads(process.stdout)["planar"]
     assert json.loads((output/"planar-report.json").read_text(encoding="utf-8"))==doc
+    for key in ("target", "uncompensated", "output"):
+        angles, db, phase = read_pattern(output / f"planar-cut-{key}.dat")
+        pattern = doc["electrical"]["patterns"][key]
+        np.testing.assert_allclose(angles, pattern["cut_angles_deg"], rtol=0, atol=1e-9)
+        np.testing.assert_allclose(db, pattern["cut_db"], rtol=0, atol=1e-8)
+        assert phase is None
     coords=read_coordinates_csv(output/"planar-coordinates.csv")
     np.testing.assert_allclose(coords,p.positions())
     for name in ("planar-cut.png","planar-map.png","planar-3d.png"):assert (output/name).read_bytes().startswith(b"\x89PNG")

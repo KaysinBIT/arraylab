@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from arraylab.core import ArrayParameters
+from arraylab.dataio import read_pattern
 from arraylab.feed import (FeedSettings, synthesize_impedance, design_feed, save_feed_configuration,
                            load_feed_configuration, export_feed_directory)
 from arraylab.feed_diagram import diagram_svg
@@ -119,6 +120,13 @@ def test_configuration_export_and_headless_roundtrip(topology, tmp_path):
     actual = json.loads(process.stdout)
     assert actual["feed_network"] == expected
     assert json.loads((out / "feed-network.json").read_text(encoding="utf-8")) == expected
+    for key in ("target", "uncompensated", "output"):
+        filename = actual["files"][f"feed_{key}_dat"]
+        angles, db, phase = read_pattern(out / filename)
+        pattern = expected["electrical"]["patterns"][key]
+        np.testing.assert_allclose(angles, pattern["angles_deg"], rtol=0, atol=1e-9)
+        np.testing.assert_allclose(db, pattern["pattern_db"], rtol=0, atol=1e-8)
+        assert phase is None
     assert load_feed_configuration(out / "feed-config.json") == (p, settings)
     assert config.read_bytes() == original
     assert len((out / "feed-sections.csv").read_text(encoding="utf-8-sig").splitlines()) == 2 * (count - 1) + 1
