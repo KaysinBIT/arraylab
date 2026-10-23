@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget, QFrame, QToolButton,
     QGroupBox, QFormLayout, QLineEdit, QComboBox, QCheckBox, QPushButton,
-    QDockWidget, QScrollArea, QTreeWidget, QTreeWidgetItem, QPlainTextEdit,
+    QDockWidget, QScrollArea, QTreeWidget, QTreeWidgetItem, QPlainTextEdit, QStackedWidget,
 )
 from .icons import workbench_icon
 from .widgets import GeometryView, PatternPlot
@@ -185,7 +185,7 @@ def build_workbench(w):
     w.remove_button = QPushButton("移除")
     w.remove_button.clicked.connect(w.remove_selected)
     controls.addWidget(w.remove_button)
-    layout.addLayout(controls)
+    w.result_bar = QWidget(); w.result_bar.setLayout(controls); layout.addWidget(w.result_bar)
     w.tabs = QTabWidget()
     w.tabs.setObjectName("documents")
     w.tabs.setAccessibleName("结果视图")
@@ -250,6 +250,10 @@ def build_workbench(w):
     from .planar_widgets import PlanarPanel
     w.planar_panel = PlanarPanel(w)
     w.tabs.addTab(w.planar_panel, workbench_icon("array"), "平面阵电气")
+    from .sparse_widgets import SparsePanel
+    w.sparse_panel = SparsePanel(w)
+    w.sparse_panel.planar_requested.connect(w.receive_sparse_layout)
+    w.tabs.addTab(w.sparse_panel, workbench_icon("array"), "二维稀疏")
     layout.addWidget(w.tabs, 1)
 
     w.tree = QTreeWidget()
@@ -257,6 +261,7 @@ def build_workbench(w):
     w.tree.setAccessibleName("工程导航树")
     w.tree.setIndentation(17)
     root = QTreeWidgetItem(w.tree, ["当前分析 · 均匀直线阵"])
+    w.project_tree_root = root
     root.setIcon(0, workbench_icon("model"))
     def node(parent, text, kind, data):
         item = QTreeWidgetItem(parent, [text])
@@ -266,9 +271,9 @@ def build_workbench(w):
     model = node(root, "模型", "model", ("view", 3))
     w.model_tree_item = node(model, "均匀直线阵 / 各向同性", "array", ("view", 3))
     node(root, "分析参数", "parameters", ("parameters", 0))
-    node(root, "馈电网络 · 电气设计", "parameters", ("view", 4))
-    node(root, "平面阵 · 电气设计", "array", ("view", 5))
-    node(root, "二维稀疏阵列", "array", ("sparse", 0))
+    w.feed_tree_item = node(root, "馈电网络 · 电气设计", "parameters", ("view", 4))
+    w.planar_tree_item = node(root, "平面阵 · 电气设计", "array", ("view", 5))
+    w.sparse_tree_item = node(root, "二维稀疏阵列", "array", ("sparse", 0))
     results = node(root, "结果", "open", ("view", 0))
     w.plot_tree_item = node(results, "1D 方向图", "plot", ("view", 0))
     w.data_tree_item = node(results, "方向图采样数据", "table", ("view", 1))
@@ -338,7 +343,8 @@ def build_workbench(w):
     iv.addWidget(scope)
     iv.addStretch()
     scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(inspector)
-    w.inspector_dock = dock(w, "参数与结果", "inspectorDock", Qt.DockWidgetArea.RightDockWidgetArea, scroll)
+    w.inspector_stack = QStackedWidget(); w.inspector_stack.addWidget(scroll); w.inspector_stack.addWidget(w.sparse_panel.parameter_widget)
+    w.inspector_dock = dock(w, "参数与结果", "inspectorDock", Qt.DockWidgetArea.RightDockWidgetArea, w.inspector_stack)
     w.inspector_dock.setMinimumWidth(265)
 
     messages = QWidget(); mv = QVBoxLayout(messages)
@@ -352,7 +358,8 @@ def build_workbench(w):
     w.messages_dock = dock(w, "消息", "messagesDock", Qt.DockWidgetArea.BottomDockWidgetArea, messages)
     w.messages_dock.setMinimumHeight(95)
     w.statusBar().messageChanged.connect(w.record_message)
-    w.statusBar().addPermanentWidget(QLabel("均匀直线阵  |  本地计算"))
+    w.context_caption = QLabel("均匀直线阵  |  本地计算"); w.statusBar().addPermanentWidget(w.context_caption)
     w.statusBar().showMessage("就绪。可设置参数，或载入说明书例题。")
     w.resizeDocks([w.nav_dock, w.inspector_dock], [235, 285], Qt.Orientation.Horizontal)
     w.resizeDocks([w.messages_dock], [135], Qt.Orientation.Vertical)
+    w.tabs.currentChanged.connect(w.change_workbench_context)

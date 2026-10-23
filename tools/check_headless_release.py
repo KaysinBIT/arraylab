@@ -169,6 +169,10 @@ def main():
         converted = json.loads(run("--planar-config", handoff / "planar-config.json").stdout)["planar"]
         assert same_numbers(converted, gui_report["sparse_planar_result"])
         checks.append("sparse_selected_layout_handoff_and_planar_electrical_GUI_CLI_match")
+        saved_native = smoke / "native-sparse-settings.json"
+        validated = json.loads(run("--sparse", "validate", "--config", saved_native).stdout)
+        assert validated["ok"] and validated["request"]["config"]["seed"] == 2**32 - 1
+        checks.append("native_sparse_toolbar_saved_settings_accepted_by_CLI_with_uint32_seed")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

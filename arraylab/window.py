@@ -39,7 +39,7 @@ class MainWindow(QMainWindow):
         self.reset_parameters()
         self.update_selection()
         if auto_compute:
-            QTimer.singleShot(60, self.compute)
+            QTimer.singleShot(60, lambda: self.compute() if self.tabs.currentIndex() == 0 else None)
 
     def build_ui(self):
         build_workbench(self)
@@ -52,11 +52,39 @@ class MainWindow(QMainWindow):
             self.planar_panel.generate()
 
     def open_sparse(self):
-        if not hasattr(self, 'sparse_window'):
-            from .sparse_widgets import SparseWindow
-            self.sparse_window = SparseWindow(self)
-            self.sparse_window.planar_requested.connect(self.receive_sparse_layout)
-        self.sparse_window.show(); self.sparse_window.raise_(); self.sparse_window.activateWindow()
+        self.tabs.setCurrentWidget(self.sparse_panel)
+        self.inspector_dock.show()
+
+    def sparse_active(self):
+        return hasattr(self, 'sparse_panel') and self.tabs.currentWidget() is self.sparse_panel
+
+    def change_workbench_context(self, index):
+        active = self.sparse_active()
+        self.project_tree_root.setText(0, '当前分析 · ' + ('二维稀疏阵列' if active else {4: '馈电电气设计', 5: '平面阵电气'}.get(index, '均匀直线阵')))
+        was_sparse = getattr(self, '_sparse_context_active', False)
+        if active and not getattr(self, '_sparse_context_active', False):
+            self._before_sparse_messages_height = self.messages_dock.height()
+            self.resizeDocks([self.messages_dock], [100], Qt.Orientation.Vertical)
+        elif not active and getattr(self, '_sparse_context_active', False):
+            self.resizeDocks([self.messages_dock], [self._before_sparse_messages_height], Qt.Orientation.Vertical)
+        self._sparse_context_active = active
+        if active or was_sparse:
+            item = self.sparse_tree_item if active else {0: self.plot_tree_item, 1: self.data_tree_item, 3: self.model_tree_item,
+                                                        4: self.feed_tree_item, 5: self.planar_tree_item}.get(index)
+            if item is not None:
+                self.tree.blockSignals(True); self.tree.setCurrentItem(item); self.tree.blockSignals(False)
+        self.inspector_stack.setCurrentIndex(1 if active else 0)
+        self.inspector_dock.setWindowTitle('稀疏参数' if active else '参数与结果')
+        self.result_bar.setVisible(not active)
+        self.compute_button.setText('开始综合\nF5' if active else '开始计算\nF5')
+        self.save_button.setText('导出稀疏' if active else '保存数据')
+        self.save_button.setEnabled(bool(self.sparse_panel.bundle) if active else self.selected_dataset() is not None)
+        if hasattr(self, 'save_action'):
+            self.save_action.setText('导出稀疏结果…' if active else '保存所选方向图…')
+            self.save_action.setEnabled(bool(self.sparse_panel.bundle) if active else self.selected_dataset() is not None)
+        self.context_caption.setText('二维稀疏  |  本地计算' if active else '阵列分析  |  本地计算')
+        if active: self.state_label.setText(self.sparse_panel.state.text())
+        else: self.update_selection()
 
     def receive_sparse_layout(self, parameters, settings, provenance):
         self.planar_panel.apply_configuration(parameters, settings)
@@ -68,12 +96,10 @@ class MainWindow(QMainWindow):
         self.show(); self.raise_(); self.activateWindow()
 
     def closeEvent(self, event):
-        sparse = getattr(self, 'sparse_window', None)
+        sparse = getattr(self, 'sparse_panel', None)
         if sparse is not None and (sparse.thread is not None or sparse._busy):
             self.statusBar().showMessage('二维稀疏任务仍在计算或导出，请完成后关闭。')
             event.ignore(); return
-        if sparse is not None:
-            sparse.close()
         super().closeEvent(event)
 
     def set_plot_view(self, kind):
@@ -85,6 +111,8 @@ class MainWindow(QMainWindow):
         self.show_view(0)
 
     def save_plot(self):
+        if self.sparse_active():
+            self.sparse_panel.tabs.setCurrentIndex(0); self.sparse_panel.toolbar.save_figure(); return
         if self.selected_dataset() is not None:
             self.show_view(0)
             self.plot.toolbar.save_figure()
@@ -94,7 +122,7 @@ class MainWindow(QMainWindow):
     def focus_parameters(self):
         self.inspector_dock.show()
         self.inspector_dock.raise_()
-        self.inputs["frequency_ghz"].setFocus()
+        (self.sparse_panel.inputs['nx'] if self.sparse_active() else self.inputs['frequency_ghz']).setFocus()
 
     def restore_workbench(self):
         for item, area in [(self.nav_dock, Qt.DockWidgetArea.LeftDockWidgetArea),
@@ -160,7 +188,7 @@ class MainWindow(QMainWindow):
         action(plot_menu, "直角坐标方向图", lambda: self.plot_type.setCurrentIndex(0))
         action(plot_menu, "极坐标方向图", lambda: self.plot_type.setCurrentIndex(1))
         action(plot_menu, "复制当前图形", self.copy_plot)
-        action(array_menu, "计算均匀直线阵", self.compute, "F5")
+        action(array_menu, "开始计算", self.compute, "F5")
         action(array_menu, "馈电网络电气设计", lambda: self.show_view(4), "F6")
         action(array_menu, "平面阵电气设计", lambda: self.show_view(5), "F7")
         action(array_menu, "二维稀疏阵列", self.open_sparse, "F8")
@@ -219,6 +247,8 @@ class MainWindow(QMainWindow):
         self.record_message(f"已保存分析方案：{Path(path).name}（当前输入参数）。")
 
     def open_configuration_dialog(self):
+        if self.sparse_active():
+            self.sparse_panel.open_settings_dialog(); return
         path, _ = QFileDialog.getOpenFileName(self, "打开分析方案（加载后需重新计算）", self.last_directory,
                                             "分析方案 (*.json)", options=QFileDialog.Option.DontUseNativeDialog)
         if path:
@@ -228,6 +258,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "方案加载失败", str(exc))
 
     def save_configuration_dialog(self):
+        if self.sparse_active():
+            self.sparse_panel.save_settings_dialog(); return
         # A default suffix lets Qt check the exact destination for overwrite confirmation.
         dialog = QFileDialog(self, "保存当前输入参数为分析方案", self.last_directory, "分析方案 (*.json)")
         dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
@@ -284,6 +316,8 @@ class MainWindow(QMainWindow):
             self.state_label.setText("设置参数后点击“计算”。扫描角从 +z 朝 +x 为正。")
 
     def compute(self):
+        if self.sparse_active():
+            self.sparse_panel.start(); return
         try:
             p = self.read_parameters()
             start = time.perf_counter()
@@ -441,6 +475,8 @@ class MainWindow(QMainWindow):
         self.last_directory = str(Path(path).parent)
 
     def save_dialog(self):
+        if self.sparse_active():
+            self.sparse_panel.export(); return
         if self.selected_dataset() is None:
             return
         path, _ = QFileDialog.getSaveFileName(self, "保存所选方向图", str(Path(self.last_directory) / "pattern.dat"),
@@ -454,11 +490,15 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "保存失败", str(exc))
 
     def copy_plot(self):
+        if self.sparse_active():
+            QApplication.clipboard().setPixmap(self.sparse_panel.canvas.grab()); self.statusBar().showMessage('稀疏图形已复制到剪贴板。'); return
         if self.selected_dataset():
             QApplication.clipboard().setPixmap(self.plot.canvas.grab())
             self.statusBar().showMessage("当前图形已复制到剪贴板。")
 
     def show_help(self):
+        if self.sparse_active():
+            self.sparse_panel.tabs.setCurrentIndex(self.sparse_panel.manual_tab); return
         QMessageBox.information(self, "均匀直线阵 · 使用帮助",
             "1. 输入频率、阵元数、间距和绘图步长。间距可用 λ 或 mm。\n"
             "2. 选择正侧向或指定扫描角，点击计算（F5）。\n"

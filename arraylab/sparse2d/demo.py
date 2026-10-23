@@ -184,9 +184,7 @@ def main():
         try: settings.validate(config)
         except ValueError as exc: p.error(str(exc))
     if args.gui:
-        if args.weight_method!='none': p.error('Use the desktop post-weighting tab; --weight-method applies to batch runs')
-        from .gui import launch
-        return launch(config)
+        p.error('Open the native ArrayLab workbench and press F8 for sparse synthesis; no standalone sparse GUI is provided.')
     target=args.output or data_directory()/datetime.now().strftime('run_%Y%m%d_%H%M%S_%f')
     if target.exists():
         print(f'Output already exists: {target}',file=sys.stderr); return 3

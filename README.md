@@ -1,8 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.9.0，原创源码采用MIT许可。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前版本0.10.0，原创源码采用MIT许可。
 
-桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.7.0完成相位补偿、幅度加权、自定义激励、误差/失效/量化分析和设计比较，并加入规则矩形及任意坐标平面阵、二维切面与可旋转三维阵因子。0.7.1补齐馈电及平面阵切面DAT导出；0.8.0新增多扫描角电气评估、逐点相位表、扫描方向图总览和可取消的后台计算。0.9.0合并二维稀疏选点、禁布/间距约束、稀疏后加权、角频联合综合和量化复核，并连接到平面阵电气设计。物理尺寸设计按用户要求暂缓。
+桌面采用参考CST的工程工作台布局：顶部功能区、左侧导航树、中央模型与结果视图、右侧参数与指标、底部消息窗口。图标和模型示意独立绘制。0.7.0完成相位补偿、幅度加权、自定义激励、误差/失效/量化分析和设计比较，并加入规则矩形及任意坐标平面阵、二维切面与可旋转三维阵因子。0.7.1补齐馈电及平面阵切面DAT导出；0.8.0新增多扫描角电气评估、逐点相位表、扫描方向图总览和可取消的后台计算。0.9.0合并二维稀疏选点、禁布/间距约束、稀疏后加权、角频联合综合和量化复核，并连接到平面阵电气设计。0.10.0将稀疏界面重做为主工作台内置页面，删除原独立稀疏窗口代码。物理尺寸设计按用户要求暂缓。
 
 ![ArrayLab工作台](docs/images/workbench.png)
 
@@ -24,7 +24,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.9.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
+Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.10.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。移动时须保留整个目录及`_internal`；运行包用户无需另装Python。本轮目标按用户确认采用现有Windows 10主机验收，具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -37,7 +37,7 @@ Windows运行包构建成功后，桌面入口为`dist/ArrayLab-0.9.0/ArrayLab.e
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.9.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.10.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -151,7 +151,9 @@ python -m arraylab --headless --study-config examples/scan-linear.json --output-
 
 ## 二维稀疏阵列
 
-从“分析 → 二维稀疏阵列”或F8进入同一程序内的稀疏工作窗口。支持规则/随机对称抽稀、贪心交换、模拟退火、重加权ℓ1、中心禁布区、最小中心距及同一布局的minimax/Taylor/Chebyshev/Gaussian加权。保留多角度/多频率共同综合、标量单元模型、相位量化复核及完整离线报告。
+![ArrayLab原生稀疏页面](docs/images/sparse-native-workbench.png)
+
+从“分析 → 二维稀疏阵列”或F8切换到ArrayLab原生“二维稀疏”页：右侧设置参数，中央选择方案、图形和幅相表，底部查看统一消息。支持规则/随机对称抽稀、贪心交换、模拟退火、重加权ℓ1、中心禁布区、最小中心距及同一布局的minimax/Taylor/Chebyshev/Gaussian加权。保留多角度/多频率共同综合、标量单元模型、相位量化复核及完整离线报告。
 
 选择方案和工况后，可将理想布局与相对幅度送入平面阵电气页，载入毫米坐标、频率和扫描角，并从可编辑的50 Ω并联网络初值继续设计。仅兼容各向同性、最多200阵元及电气页孔径/幅度范围的方案；不截断阵元或静默替换单元模型。原相位量化码不迁移，新网络重新设计补偿相位。
 
@@ -190,7 +192,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.9.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.10.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。
