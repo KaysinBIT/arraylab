@@ -465,6 +465,8 @@ def schedule_smoke_test(app, window, output: Path):
                       f"{Path(filename).name}_desktop_import_without_inferred_directivity")
             from .study_smoke import exercise_scan_dialogs
             exercise_scan_dialogs(app, window, output, report, check)
+            from .sparse_smoke import exercise_sparse
+            exercise_sparse(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

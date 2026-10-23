@@ -37,14 +37,18 @@ def main():
                 "QT_QPA_PLATFORM": "invalid-test-platform", "DISPLAY": "", "MPLBACKEND": "QtAgg",
                 "TEMP": str(work / "temp"), "TMP": str(work / "temp"),
                 "MPLCONFIGDIR": str(work / "mpl"), "PYTHONNOUSERSITE": "1"})
+    env.update(OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
     checks = []
 
     def run(*flags, gui=False, expected=0):
         exe = release / ("ArrayLab.exe" if gui else "ArrayLab-cli.exe")
-        result = subprocess.run([str(exe), *map(str, flags)], cwd=work, env=env,
-                                capture_output=True, text=True, encoding="utf-8", timeout=45)
+        captured = subprocess.run([str(exe), *map(str, flags)], cwd=work, env=env,
+                                  capture_output=True, timeout=45)
+        # Decode on this thread so a bad Windows encoding cannot be hidden by a reader-thread error.
+        result = subprocess.CompletedProcess(captured.args, captured.returncode,
+                                              captured.stdout.decode("utf-8"), captured.stderr.decode("utf-8"))
         assert result.returncode == expected, (result.returncode, result.stdout, result.stderr)
         return result
 
@@ -129,6 +133,42 @@ def main():
             for row in scan["records"]:
                 check_dat(directory / f"study-{row['index']:03d}.dat", scan["angles_deg"], row["pattern_db"])
             checks.append(f"{kind}_scan_GUI_headless_EXE_DAT_PNG_and_saved_configuration_match")
+        def same_numbers(a, b):
+            if isinstance(a, dict):
+                return isinstance(b, dict) and a.keys() == b.keys() and all(same_numbers(a[k], b[k]) for k in a)
+            if isinstance(a, list):
+                return isinstance(b, list) and len(a) == len(b) and all(same_numbers(x, y) for x, y in zip(a, b))
+            if isinstance(a, (float, int)) and not isinstance(a, bool):
+                return isinstance(b, (float, int)) and math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
+            return a == b
+        sparse_out = work / "cli-sparse"
+        run("--sparse", "run", "--config", smoke / "sparse-gui-config.json", "--output", sparse_out)
+        sparse = json.loads((sparse_out / "summary.json").read_text(encoding="utf-8"))
+        reference = gui_report["sparse_results"]["unweighted"]
+        assert sparse["config"] == reference["config"]
+        assert len(sparse["results"]) == len(reference["results"])
+        for actual, expected in zip(sparse["results"], reference["results"]):
+            for key in ("name", "indices", "xy", "weights", "metrics", "phase_quantization"):
+                assert same_numbers(actual[key], expected[key]), key
+        checks.append("sparse_GUI_CLI_joint_hole_spacing_weights_and_quantization_match")
+        reference = gui_report["sparse_results"]["weighted"]["results"][-1]
+        settings = {k: reference["weighting"][k] for k in ("method", "dr_db", "sll_db", "nbar", "sigma")}
+        weight_file = work / "sparse-weighting.json"
+        weight_file.write_text(json.dumps(settings), encoding="utf-8")
+        weighted_out = work / "cli-sparse-weighted"
+        run("--sparse", "weight", "--input", sparse_out, "--source", "annealing", "--settings", weight_file,
+            "--output", weighted_out)
+        weighted = json.loads((weighted_out / "summary.json").read_text(encoding="utf-8"))
+        for key in ("indices", "weights", "metrics", "phase_quantization"):
+            assert same_numbers(weighted["results"][-1][key], reference[key]), key
+        checks.append("sparse_reweight_GUI_and_CLI_preserve_same_support_and_amplitudes")
+        handoff = work / "cli-sparse-handoff"
+        transfer = json.loads(run("--sparse", "planar", "--input", weighted_out, "--index", len(weighted["results"]) - 1,
+                                  "--case-index", 3, "--output", handoff).stdout)
+        assert transfer["ok"] and transfer["source"]["notes"][0].startswith("保持选中方案")
+        converted = json.loads(run("--planar-config", handoff / "planar-config.json").stdout)["planar"]
+        assert same_numbers(converted, gui_report["sparse_planar_result"])
+        checks.append("sparse_selected_layout_handoff_and_planar_electrical_GUI_CLI_match")
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

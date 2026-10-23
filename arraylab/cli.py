@@ -31,6 +31,7 @@ def port_list(value):
 def parser(planar=False):
     p = Parser(description="ArrayLab headless uniform linear-array analysis", allow_abbrev=False)
     if not planar:
+        p.add_argument("--sparse", action="store_true", help="Sparse planar arrays: --sparse --help (or --sparse planar --help)")
         p.add_argument("--study", choices=["scan"], help="Electrical multi-angle scan: use --study scan --help")
         p.add_argument("--study-config", type=Path, help="Saved multi-angle electrical scan configuration")
         p.add_argument("--planar", action="store_true", help="Planar arrays: use --planar --help for geometry and plot options")
@@ -234,6 +235,11 @@ def feed_settings_from_args(args, parameters, base=None):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--sparse" in argv:
+        from .sparse_cli import main as sparse_main
+        args = [value for value in argv if value != "--headless"]
+        args.remove("--sparse")
+        return sparse_main(args)
     if any(value in ("--study", "--study-config") or value.startswith(("--study=", "--study-config=")) for value in argv):
         from .study_cli import main as study_main
         return study_main(argv)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arraylab-desktop"
-version = "0.8.0"
+version = "0.9.0"
 description = "Desktop and headless electrical feed design for isotropic linear and planar arrays"
 requires-python = ">=3.11"
 dependencies = [
@@ -25,6 +25,9 @@ arraylab-cli = "arraylab.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["arraylab*"]
+
+[tool.setuptools.package-data]
+"arraylab.sparse2d" = ["resources/*.md", "resources/examples/*.csv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

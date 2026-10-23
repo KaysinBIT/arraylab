@@ -23,6 +23,7 @@ def main():
     sources = [ROOT / p for p in ["README.md", "ROADMAP.md", "CONTRIBUTING.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "pyproject.toml", "requirements-lock.txt", ".gitignore", ".gitattributes", "launch.py", "launch_cli.py", "ArrayLab.spec", "启动 ArrayLab.cmd"]]
     for directory in ["arraylab", "tests", "tools"]:
         sources.extend((ROOT / directory).rglob("*.py"))
+    sources.extend(p for p in (ROOT / "arraylab/sparse2d/resources").rglob("*") if p.is_file() and p.suffix in {".md", ".csv"})
     sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
     sources.extend((ROOT / ".github").rglob("*.yml"))
     sources.extend(p for p in (ROOT / "docs").rglob("*") if p.is_file() and p.suffix in {".md", ".png"})

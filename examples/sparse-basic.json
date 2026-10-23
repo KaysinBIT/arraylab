@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "config": {
+    "nx": 8,
+    "ny": 8,
+    "k": 24,
+    "iterations": 200,
+    "opt_grid": 31,
+    "eval_grid": 101,
+    "reference_ghz": 10,
+    "theta": 30,
+    "phi": 35,
+    "min_spacing": 0.5
+  },
+  "weighting": []
+}

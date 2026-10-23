@@ -5,15 +5,17 @@ import re
 ROOT = Path(SPECPATH)
 version = re.search(r'__version__ = "([^"]+)"', (ROOT / "arraylab/__init__.py").read_text()).group(1)
 common = ["tkinter", "PyQt5", "PyQt6", "PySide2", "pytest"]
+sparse_resources = [(str(ROOT / "arraylab/sparse2d/resources"), "arraylab/sparse2d/resources")]
 
 desktop = Analysis(
     [str(ROOT / "launch.py")], pathex=[str(ROOT)],
-    hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "PySide6.QtTest"],
+    datas=sparse_resources,
+    hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "arraylab.sparse_smoke", "PySide6.QtTest"],
     excludes=common, hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
 )
 headless = Analysis(
     [str(ROOT / "launch_cli.py")], pathex=[str(ROOT)],
-    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.smoke"],
+    excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.sparse_widgets", "arraylab.sparse_smoke", "arraylab.sparse2d.gui", "arraylab.sparse2d.detail_view", "arraylab.smoke"],
     hooksconfig={"matplotlib": {"backends": ["Agg"]}},
 )
 gui = EXE(PYZ(desktop.pure), desktop.scripts, [], exclude_binaries=True,

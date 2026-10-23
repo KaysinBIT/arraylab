@@ -51,6 +51,31 @@ class MainWindow(QMainWindow):
         elif index == 5 and self.planar_panel.report is None:
             self.planar_panel.generate()
 
+    def open_sparse(self):
+        if not hasattr(self, 'sparse_window'):
+            from .sparse_widgets import SparseWindow
+            self.sparse_window = SparseWindow(self)
+            self.sparse_window.planar_requested.connect(self.receive_sparse_layout)
+        self.sparse_window.show(); self.sparse_window.raise_(); self.sparse_window.activateWindow()
+
+    def receive_sparse_layout(self, parameters, settings, provenance):
+        self.planar_panel.apply_configuration(parameters, settings)
+        self.planar_panel.sparse_source = provenance
+        self.tabs.setCurrentIndex(5)
+        note = (f"已接收稀疏方案：{provenance['source_method']} · {parameters.elements}阵元。"
+                "坐标/相对幅度已载入；50 Ω并联初值、连续扫描补偿，尚未重新生成。旧结果保持不变。")
+        self.planar_panel.state.setText(note); self.record_message(note)
+        self.show(); self.raise_(); self.activateWindow()
+
+    def closeEvent(self, event):
+        sparse = getattr(self, 'sparse_window', None)
+        if sparse is not None and (sparse.thread is not None or sparse._busy):
+            self.statusBar().showMessage('二维稀疏任务仍在计算或导出，请完成后关闭。')
+            event.ignore(); return
+        if sparse is not None:
+            sparse.close()
+        super().closeEvent(event)
+
     def set_plot_view(self, kind):
         self.plot_type.setCurrentIndex(kind)
         self.show_view(0)
@@ -138,6 +163,7 @@ class MainWindow(QMainWindow):
         action(array_menu, "计算均匀直线阵", self.compute, "F5")
         action(array_menu, "馈电网络电气设计", lambda: self.show_view(4), "F6")
         action(array_menu, "平面阵电气设计", lambda: self.show_view(5), "F7")
+        action(array_menu, "二维稀疏阵列", self.open_sparse, "F8")
         action(array_menu, "载入说明书验证例题", self.load_example)
         action(help_menu, "本例程帮助", self.show_help, "F1")
         action(help_menu, "关于 ArrayLab", self.show_about)
@@ -384,6 +410,8 @@ class MainWindow(QMainWindow):
             self.show_view(index)
         elif kind == "parameters":
             self.focus_parameters()
+        elif kind == "sparse":
+            self.open_sparse()
         elif kind == "result":
             self.selection.setCurrentIndex(index)
             self.show_view(0)
@@ -444,6 +472,8 @@ class MainWindow(QMainWindow):
             "保留最近5项独立设计记录，支持标签和比较导出；物理尺寸暂缓。\n\n"
             "平面阵电气设计（F7）：规则矩形阵或element,x,y坐标CSV，最多200阵元、最大孔径40λ。"
             "本页具有独立参数，支持切面、上半球图及可拖动旋转的全空间三维阵因子；峰值数值估计会明确标记。\n\n"
+            "二维稀疏阵列（F8）：在同一程序中打开稀疏工作窗口，支持禁布、间距、稀疏后加权、角频联合和量化复核。"
+            "选中方案及工况可送入平面阵电气页，传递理想几何和幅度；非点源或超限方案明确拒绝。\n\n"
             "坐标：阵列沿x轴，以阵列中心为相位参考。图为x-z前半空间切面，θ从+z向+x为正，范围−90°至90°。"
             "各向同性单元没有极化；不提供同/交叉极化标识。\n"
             "方向性采用全空间功率积分，不等于增益。半功率宽度按功率峰值的一半计算（−3.0103 dB）。"
@@ -455,8 +485,8 @@ class MainWindow(QMainWindow):
             "面板关闭或拖动后，可通过“视图 → 恢复工作台布局”恢复；模型示意可切换视角、网格和缩放。")
 
     def show_about(self):
-        QMessageBox.about(self, "关于 ArrayLab", f"ArrayLab {__version__}\n均匀直线阵分析 · 本地桌面版\n\n"
+        QMessageBox.about(self, "关于 ArrayLab", f"ArrayLab {__version__}\n直线阵 / 平面阵 / 二维稀疏 / 馈电电气设计\n\n"
                           "Python / PySide6 / NumPy / SciPy / Matplotlib\n"
-                          "本版范围：各向同性单元、均匀幅度、无互耦。\n"
+                          "各页保留各自模型边界；无互耦、无全波求解，馈线物理尺寸暂缓。\n"
                           "本软件为独立实现，与PCAAD原软件无隶属关系。\n"
                           "项目源码按MIT许可；依赖许可见随包THIRD_PARTY_NOTICES。")

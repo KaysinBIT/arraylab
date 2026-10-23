@@ -193,6 +193,11 @@ class PlanarPanel(QWidget):
 
     def load_path(self,path):
         p,s=load_planar_configuration(path)
+        self.apply_configuration(p,s)
+
+    def apply_configuration(self,p,s):
+        from .planar import validate_planar_design
+        validate_planar_design(p,s)
         self._changing=True
         try:
             self.geometry.setCurrentIndex(self.geometry.findData(p.geometry));self.unit.setCurrentIndex(self.unit.findData(p.coordinate_unit))
