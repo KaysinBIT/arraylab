@@ -5,6 +5,13 @@ from matplotlib.patches import Circle, Rectangle
 from .core import Config, available_mask, candidates, coarray, db, field, response_field, scan_uv, structured_arrays
 from .scenarios import case_config,scenarios
 from .elements import build_element
+from ..parallel import ordered_map
+
+
+def _plot_response(*args):
+    """Plot entrypoints run after synthesis, outside a numerical worker batch."""
+    rows, _ = ordered_map(lambda _: response_field(*args), [None], workers=1)
+    return rows[0]
 
 NAMES = {
     'Dense reference':'满阵参考', 'Regular thinning':'规则抽稀',
@@ -73,7 +80,7 @@ def _draw_detail_axes(fig,ax,kind,bundle,result,case_index=None,view_mode='total
         element=build_element(c,bundle.get('element_pattern'))
         axis=np.linspace(-1,1,181); uu,vv=np.meshgrid(axis,axis)
         uv=np.column_stack((uu.ravel(),vv.ravel())); visible=np.sum(uv**2,axis=1)<=1
-        values=np.full(len(uv),np.nan); values[visible]=db(response_field(xy,w,uv[visible],c,case,element,view_mode,phase_mode))
+        values=np.full(len(uv),np.nan); values[visible]=db(_plot_response(xy,w,uv[visible],c,case,element,view_mode,phase_mode))
         im=ax.imshow(values.reshape(uu.shape),origin='lower',extent=(-1,1,-1,1),vmin=-40,vmax=max(0.,float(np.nanmax(values))),cmap='viridis')
         rx,ry=1/(c.nx*cc.spacing),1/(c.ny*cc.spacing)
         if view_mode!='element': ax.add_patch(Rectangle(center-[rx,ry],2*rx,2*ry,fill=False,edgecolor='white',linestyle='--',linewidth=1))
@@ -87,12 +94,12 @@ def _draw_detail_axes(fig,ax,kind,bundle,result,case_index=None,view_mode='total
         for along,color,label in [(0,'#00998b','u cut, v=v0'),(1,'#2978b8','v cut, u=u0')]:
             extent=np.sqrt(1-center[1-along]**2)
             axis=np.linspace(-extent,extent,1401); uv=np.tile(center,(len(axis),1)); uv[:,along]=axis
-            ax.plot(axis,db(response_field(xy,w,uv,c,case,element,view_mode,phase_mode)),color=color,label=label,lw=1.3)
+            ax.plot(axis,db(_plot_response(xy,w,uv,c,case,element,view_mode,phase_mode)),color=color,label=label,lw=1.3)
             if phase_mode=='quantized' and c.phase_bits and view_mode!='element':
-                ax.plot(axis,db(response_field(xy,w,uv,c,case,element,view_mode)),color=color,ls=':',alpha=.7,lw=1,label=('u ideal' if along==0 else 'v ideal'))
+                ax.plot(axis,db(_plot_response(xy,w,uv,c,case,element,view_mode)),color=color,ls=':',alpha=.7,lw=1,label=('u ideal' if along==0 else 'v ideal'))
             if 'weighting' in result:
                 source=bundle['results'][result['weighting']['source_index']]
-                ax.plot(axis,db(response_field(source['xy'],source['weights'],uv,c,case,element,view_mode,phase_mode)),color=color,ls='--',alpha=.5,lw=.9)
+                ax.plot(axis,db(_plot_response(source['xy'],source['weights'],uv,c,case,element,view_mode,phase_mode)),color=color,ls='--',alpha=.5,lw=.9)
         if view_mode=='array_factor' or element.model=='isotropic': ax.axhline(-3.0103,color='#adb6c1',ls=':',lw=.8)
         maximum=result['scenario_metrics'][case['index']].get('total_peak_db',0) if view_mode=='total' else 0
         if phase_mode=='quantized' and c.phase_bits and view_mode=='total':
@@ -196,7 +203,7 @@ def draw_weight_comparison(fig,bundle,result,case_index=None):
         extent=np.sqrt(1-center[1-along]**2)
         axis=np.linspace(-extent,extent,1601); uv=np.tile(center,(len(axis),1)); uv[:,along]=axis
         for r,color,label,ls in [(source,'#8b96a5','Original','--'),(result,'#00998b','Weighted','-')]:
-            ax.plot(axis,db(response_field(r['xy'],r['weights'],uv,c,case,element)),color=color,label=label,ls=ls,lw=1.4)
+            ax.plot(axis,db(_plot_response(r['xy'],r['weights'],uv,c,case,element)),color=color,label=label,ls=ls,lw=1.4)
         maximum=max(r['scenario_metrics'][case['index']].get('total_peak_db',0) for r in (source,result))
         ax.set(xlabel='u' if along==0 else 'v',ylabel='Total field / steering dB',ylim=(-45,max(1,maximum+1)),title='u cut, v=v0' if along==0 else 'v cut, u=u0')
         ax.grid(alpha=.6); ax.legend(fontsize=8)
@@ -268,7 +275,7 @@ def draw_phase_comparison(fig,bundle,result,case_index=None):
         extent=np.sqrt(max(0.,1-center[1-along]**2)); axis=np.linspace(-extent,extent,1601)
         uv=np.tile(center,(len(axis),1)); uv[:,along]=axis
         for mode,label,color,ls in [('ideal','Ideal','#8795a5','--'),('quantized',f'{c.phase_bits}-bit','#00998b','-')]:
-            ax.plot(axis,db(response_field(result['xy'],result['weights'],uv,c,case,element,'total',mode)),color=color,ls=ls,label=label,lw=1.3)
+            ax.plot(axis,db(_plot_response(result['xy'],result['weights'],uv,c,case,element,'total',mode)),color=color,ls=ls,label=label,lw=1.3)
         ax.axvline(center[along],color='#a6b3c0',ls=':',lw=.7)
         maximum=max(result['scenario_metrics'][case['index']]['total_peak_db'],result['phase_quantization']['scenarios'][case['index']]['total_peak_db'])
         ax.set(xlabel='u' if along==0 else 'v',ylabel='Field / ideal steering dB',ylim=(-45,max(1.,maximum+1)),title='u cut' if along==0 else 'v cut')

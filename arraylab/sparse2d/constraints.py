@@ -2,6 +2,8 @@
 import numpy as np
 from scipy.optimize import Bounds,LinearConstraint,milp
 from scipy.sparse import coo_array
+from ..parallel import check_cancelled
+from .numerics import solve_milp
 
 
 def pair_conflicts(xy,pairs,minimum):
@@ -22,26 +24,32 @@ def spacing_stats(xy,minimum):
             'spacing_violations':int(np.count_nonzero(values<minimum-1e-10))}
 
 
-def feasible_groups(conflicts,target,rng):
+def feasible_groups(conflicts,target,rng,*,progress=None,cancelled=None):
+    check_cancelled(cancelled)
     n=len(conflicts)
     if target>n: raise ValueError('对称配对及最小间距约束下可用位置不足，请减小 K 或间距。')
     if not conflicts.any():
         return np.sort(rng.choice(n,target,replace=False)),np.arange(n),{'initializer':'no inter-group conflicts','pool_is_global_optimum':False}
     best=[]
-    for _ in range(64):
+    for iteration in range(64):
+        check_cancelled(cancelled)
+        if progress and iteration%8==0:progress(f'间距可行布局搜索：{iteration}/64')
         chosen=[]
         for index in rng.permutation(n):
+            check_cancelled(cancelled)
             if not chosen or not conflicts[index,chosen].any(): chosen.append(int(index))
         if len(chosen)>len(best): best=chosen
     solver_status=None
     if len(best)<target:
+        check_cancelled(cancelled)
+        if progress:progress('间距整数可行性检查：最多 10 秒')
         a,b=np.nonzero(np.triu(conflicts,1)); rows=np.repeat(np.arange(len(a)),2)
         cols=np.column_stack((a,b)).ravel()
         adjacency=coo_array((np.ones(len(cols)),(rows,cols)),shape=(len(a),n)).tocsc()
         constraints=[LinearConstraint(adjacency,-np.inf,np.ones(len(a))),
                      LinearConstraint(np.ones((1,n)),target,np.inf)]
-        solution=milp(np.zeros(n),integrality=np.ones(n),bounds=Bounds(0,1),
-                      constraints=constraints,options={'time_limit':10.0,'presolve':True})
+        solution=solve_milp(milp,np.zeros(n),integrality=np.ones(n),bounds=Bounds(0,1),
+                      constraints=constraints,cancelled=cancelled)
         solver_status=int(solution.status)
         if solution.x is None:
             if solution.status==2:
@@ -51,9 +59,13 @@ def feasible_groups(conflicts,target,rng):
         if len(best)<target or conflicts[np.ix_(best,best)].any():
             raise RuntimeError('Spacing feasibility solver returned an invalid support')
         for index in rng.permutation(n):
+            check_cancelled(cancelled)
             if index not in best and not conflicts[index,best].any(): best.append(int(index))
     pool=np.sort(best)
     initial=np.sort(rng.choice(pool,target,replace=False))
+    check_cancelled(cancelled)
+    if progress:progress('间距可行布局搜索完成')
     return initial,pool,{'initializer':'64 randomized maximal packings; MILP fallback if needed',
-        'milp_status':solver_status,'pool_groups':len(pool),'pool_is_global_optimum':False,
+        'milp_status':solver_status,'milp_native_threads':1,'milp_time_limit_seconds':10.,
+        'pool_groups':len(pool),'pool_is_global_optimum':False,
         'lp_search_scope':'reweighted L1 uses this feasible pool; greedy/SA search all admissible pairs with hard conflict checks'}

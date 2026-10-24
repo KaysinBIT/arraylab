@@ -8,6 +8,7 @@ from .core import (Config,admissible_pairs,amplitude_minimax,available_mask,
     evaluate_layouts,evaluation_domains,joint_matrix)
 from ..parallel import requested_workers,check_cancelled
 from .elements import build_element
+from .numerics import bounded_call
 
 METHODS={'minimax':'副瓣优化 LP','taylor':'Taylor','chebyshev':'Chebyshev',
          'gaussian':'Gaussian','uniform':'均匀'}
@@ -71,7 +72,10 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,worke
     element=build_element(c,bundle.get('element_pattern'))
     if type(source_index) is not int or not 0<=source_index<len(bundle['results']):
         raise ValueError('请选择一项已计算的布局。')
-    tell=progress or (lambda message:None)
+    def tell(message):
+        check_cancelled(cancelled)
+        if progress:progress(message)
+        check_cancelled(cancelled)
     source=bundle['results'][source_index]
     indices=np.asarray(source['indices'],dtype=int)
     integer=np.asarray(source['integer'],dtype=int)
@@ -79,18 +83,20 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,worke
     if not np.all(allowed[indices]): raise ValueError('源布局包含中心禁布位置。')
     start=time.perf_counter()
     if settings.method=='minimax':
-        tell('Fixed sparse-support amplitude optimization')
+        tell('固定稀疏布局幅度优化')
         pair_lookup={int(index):position for position,index in enumerate(indices)}
         pairs=admissible_pairs(c)
         selected=np.array([j for j,(a,b) in enumerate(pairs) if a in pair_lookup and b in pair_lookup])
         if len(selected)*2!=len(indices):
             raise ValueError('当前受限 LP 需要完整的中心对称位置对。')
-        gw,info=amplitude_minimax(joint_matrix(c,element)[:,selected],settings.dr_db)
+        matrix=bounded_call(lambda:joint_matrix(c,element,progress=tell,cancelled=cancelled),cancelled=cancelled)
+        gw,info=amplitude_minimax(matrix[:,selected],settings.dr_db,lp_solver=c.lp_solver,
+                                 progress=tell,cancelled=cancelled)
         weights=np.zeros(len(indices))
         for pair,g in zip(pairs[selected],gw):
             for index in pair: weights[pair_lookup[int(index)]]=g/2
     else:
-        tell('Sample window on retained physical positions')
+        tell('在保留阵元位置上采样窗函数')
         weights,info=window_weights(c,integer,settings)
     if np.any(weights<=0): raise RuntimeError('加权必须保留全部源阵元。')
     weights=weights/weights.sum()
@@ -104,7 +110,7 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,worke
         'indices':indices.copy(),'integer':integer.copy(),'xy':np.array(source['xy'],copy=True),
         'weights':weights,'notes':'Post-weighting: original positions/count preserved; original result retained. Window SLL is a reference, not a guarantee on sparse PSL.',
         'history':[],'weighting':metadata,'seconds':time.perf_counter()-start}
-    tell('Validate weighted pattern on dense and shifted grids')
+    tell('在密网格及偏移网格上验证加权方向图')
     evaluated,execution=evaluate_layouts([result],c,evaluation_domains(c),element,workers=workers,cancelled=cancelled)
     result=evaluated[0];execution['scope']='sparse_weighted_validation'
     return {**bundle,'results':[*bundle['results'],result],'last_weighted_index':len(bundle['results']),'execution':execution,

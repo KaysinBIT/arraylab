@@ -3,7 +3,12 @@
 Imported scalar element snapshots cover only the front hemisphere. Their
 backside is never invented to infer full-sphere directivity.
 """
+from collections import OrderedDict
+import copy
+import hashlib
+import json
 import math
+import threading
 import numpy as np
 
 from .core import Config, response_field, scan_uv, sidelobe_mask, sample_domain, db
@@ -12,24 +17,130 @@ from .scenarios import scenarios, case_config
 from .phase_quantization import excitation_phases, angular_distance
 from ..pattern_metrics import spherical_beamwidths
 from ..planar_pattern import integrated_power
+from ..parallel import ordered_map
+
+
+_CACHE_LIMIT = 8
+_summary_cache = OrderedDict()
+_metric_sources = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _fingerprint(*values):
+    """Hash contents, never object ids, including mutable numerical arrays."""
+    digest = hashlib.sha256()
+    def add(value):
+        if isinstance(value, np.ndarray):
+            array = np.ascontiguousarray(value)
+            digest.update(b'array')
+            add(array.dtype.str); add(array.shape)
+            digest.update(array.tobytes())
+        elif isinstance(value, dict):
+            digest.update(b'dict')
+            for key in sorted(value): add(key); add(value[key])
+        elif isinstance(value, (tuple, list)):
+            digest.update(b'list')
+            add(len(value))
+            for item in value: add(item)
+        else:
+            if isinstance(value, np.generic): value = value.item()
+            digest.update(json.dumps(value, sort_keys=True, ensure_ascii=False).encode('utf-8'))
+            digest.update(b'\0')
+    for value in values: add(value)
+    return digest.digest()
+
+
+def _saved_peak(result, c, case, view_mode, phase_mode, element, source_unchanged):
+    """Reuse the report's dense/shifted-grid measurements on its own snapshot."""
+    if not source_unchanged or view_mode == 'element': return None
+    if view_mode == 'array_factor' and element.model != 'isotropic': return None
+    if phase_mode == 'quantized' and c.phase_bits:
+        quantization = result.get('phase_quantization', {})
+        if quantization.get('bits') != c.phase_bits: return None
+        rows = quantization.get('scenarios', [])
+    else:
+        rows = result.get('scenario_metrics', [])
+    index = case['index']
+    if not 0 <= index < len(rows): return None
+    row = rows[index]
+    if any(row.get(key) != case[key] for key in ('frequency_ghz', 'frequency_ratio', 'theta', 'phi')):
+        return None
+    try:
+        chosen = np.asarray(row['mainlobe_peak_uv'], dtype=float)
+        values = np.asarray([row['mainlobe_peak_db'], row['total_peak_db'],
+                             row['relative_to_main_peak_psl_db']], dtype=float)
+        if chosen.shape != (2,) or not np.isfinite(chosen).all() or not np.isfinite(values).all(): return None
+        if np.sum(chosen**2) > 1 + 1e-10 or sidelobe_mask(chosen[None, :], case_config(c, case))[0]: return None
+        level, maximum = 10**(values[:2] / 20)
+        return chosen, float(level), float(maximum), float(values[2])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def sparse_pattern_summary(bundle, result, case_index=0, view_mode='total', phase_mode='ideal'):
+    """Measure once per scientific snapshot, outside any numerical worker batch.
+
+    Plot callers run after synthesis/validation. A single-task ordered_map shares
+    the numerical lock and BLAS limit with other calculations. Cached entries
+    contain only small summaries; no cache fields enter the exported bundle.
+    """
+    if view_mode not in ('total', 'array_factor', 'element'): raise ValueError('Unknown pattern view')
+    if phase_mode not in ('ideal', 'quantized'): raise ValueError('Unknown phase mode')
+    c = Config(**bundle['config'])
+    case = (bundle.get('scenarios') or scenarios(c))[case_index]
+    source = _fingerprint(bundle['config'], bundle.get('element_pattern'), result['xy'], result['weights'])
+    key = _fingerprint(source.hex(), case, view_mode, phase_mode,
+                       result.get('scenario_metrics'), result.get('phase_quantization'))
+    with _cache_lock:
+        # Keep at most eight result references, not their containing bundles.
+        # The reference prevents id reuse. If a caller edits geometry/weights in
+        # place, unchanged stored measurements must not override the new inputs.
+        identity = id(result)
+        previous = _metric_sources.get(identity)
+        unchanged = previous is None or (previous[0] is result and previous[1] == source)
+        if previous is None:
+            _metric_sources[identity] = (result, source)
+        _metric_sources.move_to_end(identity)
+        while len(_metric_sources) > _CACHE_LIMIT: _metric_sources.popitem(last=False)
+        if key in _summary_cache:
+            _summary_cache.move_to_end(key)
+            return copy.deepcopy(_summary_cache[key])
+    rows, _ = ordered_map(lambda _: _measure_summary(bundle, result, case_index, view_mode, phase_mode, unchanged),
+                          [None], workers=1)
+    summary = rows[0]
+    with _cache_lock:
+        _summary_cache[key] = copy.deepcopy(summary)
+        _summary_cache.move_to_end(key)
+        while len(_summary_cache) > _CACHE_LIMIT: _summary_cache.popitem(last=False)
+    return summary
+
+
+def _measure_summary(bundle, result, case_index, view_mode, phase_mode, source_unchanged):
     c = Config(**bundle['config']); case = (bundle.get('scenarios') or scenarios(c))[case_index]
     cc = case_config(c, case); element = build_element(c, bundle.get('element_pattern'))
     points = np.asarray(result['xy']) * case['frequency_ratio']
     weights = np.asarray(result['weights']); center = scan_uv(cc)
     def response(uv):
         return response_field(result['xy'], weights, uv, c, case, element, view_mode, phase_mode)
-    # Same two meshes, exclusion boundaries and disk rim as stored case metrics.
-    uv = np.vstack([sample_domain(cc, c.eval_grid), sample_domain(cc, c.eval_grid+2, True)])
-    magnitude = abs(response(uv))
-    main = ~sidelobe_mask(uv, cc)
-    indices = np.flatnonzero(main) if view_mode != 'element' else np.arange(len(uv))
-    level = float(np.max(magnitude[indices]))
-    ties = indices[magnitude[indices] >= level - max(1e-12, level * 1e-9)]
-    index = int(ties[np.argmin(np.sum((uv[ties]-center)**2, axis=1))])
-    chosen = uv[index]; radial = min(1., float(np.linalg.norm(chosen)))
+    saved = _saved_peak(result, c, case, view_mode, phase_mode, element, source_unchanged)
+    if saved is None:
+        # Legacy/inapplicable metrics use the original full meshes, never a
+        # smaller display grid. Element-only and non-isotropic AF views differ
+        # from the total-field measurements saved by the synthesis engine.
+        uv = np.vstack([sample_domain(cc, c.eval_grid), sample_domain(cc, c.eval_grid+2, True)])
+        magnitude = abs(response(uv))
+        main = ~sidelobe_mask(uv, cc)
+        indices = np.flatnonzero(main) if view_mode != 'element' else np.arange(len(uv))
+        level = float(np.max(magnitude[indices]))
+        ties = indices[magnitude[indices] >= level - max(1e-12, level * 1e-9)]
+        index = int(ties[np.argmin(np.sum((uv[ties]-center)**2, axis=1))])
+        chosen = uv[index]
+        maximum = float(np.max(magnitude))
+        outside = ~main
+        psl = float(db(np.max(magnitude[outside])/level)) if outside.any() and level > 1e-12 and view_mode != 'element' else None
+    else:
+        chosen, level, maximum, psl = saved
+    radial = min(1., float(np.linalg.norm(chosen)))
     theta = math.degrees(math.asin(radial)); phi = math.degrees(math.atan2(chosen[1], chosen[0])) if radial > 1e-10 else case['phi']
     diameter = float(np.max(np.linalg.norm(points[:, None] - points[None, :], axis=2)))
     step = max(.001, min(.125, 2 / max(1, diameter)))
@@ -58,11 +169,9 @@ def sparse_pattern_summary(bundle, result, case_index=0, view_mode='total', phas
     if full_sphere and view_mode != 'element':
         phases = excitation_phases(result['xy'], case, c.phase_bits if phase_mode == 'quantized' else 0)
         w = weights * np.exp(1j * np.deg2rad(phases['command_phase_deg']))
-        directivity = float(10*np.log10(float(np.max(magnitude))**2/integrated_power(points, w)))
+        directivity = float(10*np.log10(maximum**2/integrated_power(points, w)))
     elif full_sphere:
         directivity = 0.
-    outside = ~main
-    psl = float(db(np.max(magnitude[outside])/level)) if outside.any() and level > 1e-12 and view_mode != 'element' else None
     return {'frequency_ghz': case['frequency_ghz'], 'theta_deg': theta, 'phi_deg': phi if radial > 1e-10 else None,
             'pointing_offset_deg': angular_distance(center, chosen), 'orthogonal_beamwidths_deg': widths,
             'directivity_dbi': directivity, 'gain_dbi': None, 'peak_sidelobe_db': psl,

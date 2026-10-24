@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import copy
 import json
+import time
 import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
@@ -14,8 +15,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, Q
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QDialog, QTextBrowser)
 from . import __version__
 from .parallel import ComputationCancelled, requested_workers
-from .sparse2d.core import Config, run, available_mask
-from .sparse2d.weighting import METHODS, Weighting, add_weighting
+from .sparse2d.core import Config, available_mask
+from .sparse2d.weighting import METHODS, Weighting
+from .sparse_process import run_sparse_process
 from .sparse2d.elements import MODELS, build_element, write_example_csv
 from .sparse2d.scenarios import scenarios
 from .sparse2d.headless import save_bundle, read_json, validate_request
@@ -45,7 +47,8 @@ class SparseWorker(QThread):
 
     def run(self):
         try:
-            self.result = run(self.config, self.tell, workers=self.workers, cancelled=self.isInterruptionRequested) if self.weighting is None else add_weighting(*self.weighting, progress=self.tell, workers=self.workers, cancelled=self.isInterruptionRequested)
+            self.result = run_sparse_process(self.config, self.weighting, workers=self.workers,
+                progress=self.tell, cancelled=self.isInterruptionRequested)
             self.tell('完成')
         except SparseCancelled: self.cancelled = True
         except Exception as exc: self.error = f'{type(exc).__name__}: {exc}'
@@ -59,6 +62,9 @@ class SparsePanel(QWidget):
         self.host = host; self.bundle = None; self.thread = None; self.last_export = None
         self._busy = False; self._last_error = None; self._initializing = True; self._last_selected_row = None
         self._cancel_pending = False; self._job_kind = None; self.inputs = {}
+        self._job_started = None; self._progress_stage = ''
+        self.progress_timer = QTimer(self); self.progress_timer.setInterval(250)
+        self.progress_timer.timeout.connect(self.refresh_progress)
         self.build_parameters()
         layout = QVBoxLayout(self); layout.setContentsMargins(8, 6, 8, 6)
         actions = QHBoxLayout()
@@ -179,6 +185,8 @@ class SparsePanel(QWidget):
         for spec in [('seed', '随机种子', 0, 2147483647, 1), ('iterations', '退火步数', 1, 20000, 100),
                      ('opt_grid', '优化网格', 25, 101, 2), ('eval_grid', '复核网格', 81, 401, 20),
                      ('amplitude_dr_db', '调幅范围dB', 0, 40, 5)]: number(form, *spec)
+        self.lp_solver = combo(form, '线性规划', [('自动（大网格内点法）', 'auto'), ('原求解器', 'highs'), ('内点法', 'highs-ipm')])
+        self.lp_solver.setToolTip('自动模式在候选对不少于128时使用内点法。约束和采样不变；多重最优解可能使L1布局不同。需要原算法时选择原求解器。')
         label = QLabel('PSL为固定主瓣掩膜外采样峰值，不是连续角域保证。HPBW采用方向余弦宽度。误差统计及馈线尺寸暂缓。')
         label.setWordWrap(True); body.addWidget(label); body.addStretch()
         self.restore_button = QPushButton('恢复已计算参数'); self.restore_button.clicked.connect(self.restore_parameters); layout.addWidget(self.restore_button)
@@ -205,7 +213,7 @@ class SparsePanel(QWidget):
         return Config(**{key: int(box.text()) if key == 'seed' else box.value() for key, box in self.inputs.items()}, hole_shape=self.hole_shape.currentData(),
             element_model=self.element_model.currentData(), element_dipole_axis=self.element_axis.currentData(),
             element_import_mode=self.element_import_mode.currentData(), element_file=self.element_file.text().strip(),
-            scan_angles=self.joint_scans.text(), frequencies_ghz=self.joint_frequencies.text())
+            scan_angles=self.joint_scans.text(), frequencies_ghz=self.joint_frequencies.text(), lp_solver=self.lp_solver.currentData())
 
     def set_config(self, config):
         if self._busy: return
@@ -215,7 +223,8 @@ class SparsePanel(QWidget):
                 if key == 'seed': box.setText(str(config.seed))
                 else: box.setValue(getattr(config, key))
             for box, value in [(self.hole_shape, config.hole_shape), (self.element_model, config.element_model),
-                               (self.element_axis, config.element_dipole_axis), (self.element_import_mode, config.element_import_mode)]: box.setCurrentIndex(box.findData(value))
+                               (self.element_axis, config.element_dipole_axis), (self.element_import_mode, config.element_import_mode),
+                               (self.lp_solver, config.lp_solver)]: box.setCurrentIndex(box.findData(value))
             self.element_file.setText(config.element_file); self.joint_scans.setText(config.scan_angles); self.joint_frequencies.setText(config.frequencies_ghz)
         finally: self._initializing = False
         self.mark_stale()
@@ -289,22 +298,60 @@ class SparsePanel(QWidget):
 
     def begin_worker(self, worker, kind):
         self._last_error = None; self._cancel_pending = False; self._job_kind = kind; self.thread = worker; self.set_busy(True)
-        self.set_state('正在计算，可取消；上一份结果保留。'); worker.progress.connect(self.progress_message); worker.finished.connect(self.complete); worker.start()
+        self._job_started = time.monotonic(); self._progress_stage = '正在启动后台计算'
+        self.refresh_progress(); self.progress_timer.start()
+        worker.progress.connect(self.progress_message); worker.finished.connect(self.complete); worker.start()
 
     def progress_message(self, text):
-        self.set_state('正在计算 · ' + text); self.host.statusBar().showMessage('稀疏 · ' + text)
+        self._progress_stage = text; self.refresh_progress()
+
+    def refresh_progress(self):
+        if self._job_started is None: return
+        elapsed = time.monotonic() - self._job_started
+        stage = '正在停止后台计算并回收资源' if self._cancel_pending else self._progress_stage
+        text = f'{stage} · 已用 {elapsed:.1f} 秒' + ('。' if self._cancel_pending else ' · 可取消；上一份结果保留。')
+        self.set_state(text); self.host.statusBar().showMessage('稀疏 · ' + text)
 
     def cancel(self):
         if self.thread is not None:
-            self._cancel_pending = True; self.thread.requestInterruption(); self.set_state('已请求取消，当前计算阶段结束后停止。')
+            self._cancel_pending = True; self.thread.requestInterruption(); self.refresh_progress()
 
     def complete(self):
-        worker = self.thread; self.thread = None
-        if worker.cancelled or self._cancel_pending: self.set_state('已取消，保留上一份结果。')
-        elif worker.error:
-            self._last_error = worker.error; self.set_state('计算失败，保留上一份结果：' + worker.error)
-        else: self.receive(worker.result)
-        worker.deleteLater(); self._job_kind = None; self.set_busy(False)
+        worker = self.thread
+        if worker is None: return
+        self.progress_timer.stop(); self._job_started = None
+        previous = self.bundle
+        selection = (self.table.currentRow(), self.case_selector.currentIndex(), self.phase_view.currentIndex())
+        previous_view, previous_tab = self.view.currentIndex(), self.tabs.currentIndex()
+        previous_figure = self.figure
+        try:
+            if worker.cancelled or self._cancel_pending: self.set_state('已取消，保留上一份结果。')
+            elif worker.error:
+                self._last_error = worker.error; self.set_state('计算失败，保留上一份结果：' + worker.error)
+            else: self.receive(worker.result)
+        except Exception as exc:
+            self._last_error = f'{type(exc).__name__}: {exc}'
+            self.bundle = previous
+            try:
+                self.view.blockSignals(True); self.view.setCurrentIndex(previous_view); self.view.blockSignals(False)
+                self.tabs.setCurrentIndex(previous_tab)
+                if previous is not None:
+                    self.receive(previous, draw=False, selected_index=selection[0], case_index=selection[1])
+                    self.phase_view.blockSignals(True); self.phase_view.setCurrentIndex(selection[2]); self.phase_view.blockSignals(False)
+                    self.redraw()
+                else:
+                    self.table.setRowCount(0); self.scheme_selector.clear(); self.case_selector.clear()
+                    self.summary.setText('尚无稀疏方案。'); self.port_table.setRowCount(0); self.case_table.setRowCount(0)
+                    self.install_figure(previous_figure)
+            except Exception:
+                # A renderer failure must never strand the application in its busy state.
+                self.port_table.setRowCount(0); self.case_table.setRowCount(0)
+                self.summary.setText('结果显示失败；已保留上一份计算数据。')
+            self.set_state('结果显示失败，保留上一份结果：' + self._last_error)
+        finally:
+            self.thread = None; worker.deleteLater(); self._job_kind = None; self.set_busy(False)
+            if getattr(self.host, '_sparse_close_pending', False):
+                self.host._sparse_close_pending = False; QTimer.singleShot(0, self.host.close)
 
     def open_weighting(self): self.tabs.setCurrentIndex(self.weight_tab)
     def apply_weighting(self):
@@ -322,19 +369,27 @@ class SparsePanel(QWidget):
                 value = row.get(key); text = '—' if value is None else (f'{value:.6g}' if isinstance(value, (float, np.floating)) else str(value)); table.setItem(i, j, QTableWidgetItem(text))
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
-    def receive(self, bundle):
+    def receive(self, bundle, *, draw=True, selected_index=None, case_index=None):
         bundle['integration'] = {'arraylab_version': __version__, 'source_engine': 'Sparse2D 1.3.0'}; self.bundle = bundle; self._last_selected_row = None
-        self.table.blockSignals(True); rows = [{'name': result_name(r), **r['metrics']} for r in bundle['results']]
-        self.fill_table(self.table, [('name', '方案'), ('elements', '阵元'), ('validation_psl_db', '理想PSL/dB'), ('amplitude_dynamic_range_db', '幅度范围/dB'),
-            ('hpbw_u', 'HPBW u'), ('hpbw_v', 'HPBW v'), ('min_distance_lambda_ref', '最小距/λ0'), ('spacing_violations', '间距违规'), ('unique_lags', '不同lag')], rows)
-        self.scheme_selector.blockSignals(True); self.scheme_selector.clear(); self.scheme_selector.addItems([r['name'] for r in rows]); self.scheme_selector.blockSignals(False)
-        self.table.blockSignals(False); self.case_selector.blockSignals(True); self.case_selector.clear()
-        for case in bundle['scenarios']: self.case_selector.addItem(case['label'], case['index'])
-        self.case_selector.blockSignals(False); self.phase_view.blockSignals(True)
-        self.phase_view.setCurrentIndex(1 if bundle['config']['phase_bits'] else 0); self.phase_view.blockSignals(False)
-        index = bundle.get('last_weighted_index')
-        if index is None: index = min((i for i, r in enumerate(bundle['results']) if r['metrics']['elements'] == bundle['config']['k'] and r['name'] != 'L1 weighted solution'), key=lambda i: bundle['results'][i]['metrics']['validation_psl_db'])
-        self.table.selectRow(index); self.select_result()
+        controls = (self.table, self.scheme_selector, self.case_selector, self.phase_view, self.view)
+        blocked = [control.blockSignals(True) for control in controls]
+        try:
+            rows = [{'name': result_name(r), **r['metrics']} for r in bundle['results']]
+            self.fill_table(self.table, [('name', '方案'), ('elements', '阵元'), ('validation_psl_db', '理想PSL/dB'), ('amplitude_dynamic_range_db', '幅度范围/dB'),
+                ('hpbw_u', 'HPBW u'), ('hpbw_v', 'HPBW v'), ('min_distance_lambda_ref', '最小距/λ0'), ('spacing_violations', '间距违规'), ('unique_lags', '不同lag')], rows)
+            self.scheme_selector.clear(); self.scheme_selector.addItems([r['name'] for r in rows]); self.case_selector.clear()
+            for case in bundle['scenarios']: self.case_selector.addItem(case['label'], case['index'])
+            self.phase_view.setCurrentIndex(1 if bundle['config']['phase_bits'] else 0)
+            index = selected_index if selected_index is not None and selected_index >= 0 else bundle.get('last_weighted_index')
+            if index is None: index = min((i for i, r in enumerate(bundle['results']) if r['metrics']['elements'] == bundle['config']['k'] and r['name'] != 'L1 weighted solution'), key=lambda i: bundle['results'][i]['metrics']['validation_psl_db'])
+            self.table.selectRow(index); self.scheme_selector.setCurrentIndex(index)
+            if case_index is not None and case_index >= 0:
+                self.case_selector.setCurrentIndex(case_index); self._last_selected_row = index
+            if draw and self._job_kind == 'weight':
+                self.view.setCurrentIndex(self.view.findData('weights')); self.tabs.setCurrentIndex(0)
+        finally:
+            for control, previous in zip(controls, blocked): control.blockSignals(previous)
+        if draw: self.select_result()
         try: dirty = self.config_from_inputs() != Config(**bundle['config'])
         except ValueError: dirty = True
         suffix = '当前输入尚未综合，本次结果仍对应已计算参数。' if dirty else '结果与当前参数一致。'
@@ -342,7 +397,6 @@ class SparsePanel(QWidget):
         resources=f" · 复核{execution['workers']}路" if execution.get('scope')=='sparse_layout_validation' else ''
         self.set_state(f"已完成 {len(bundle['results'])} 个方案、{len(bundle['scenarios'])} 个工况{resources}；" + suffix)
         self.host.statusBar().showMessage('稀疏结果已更新；选中方案可送入平面阵电气设计。')
-        if self._job_kind == 'weight': self.view.setCurrentIndex(self.view.findData('weights')); self.tabs.setCurrentIndex(0)
 
     def select_result(self):
         row = self.table.currentRow()

@@ -72,7 +72,11 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
             event.ignore(); return
         sparse = getattr(self, 'sparse_panel', None)
         if sparse is not None and (sparse.thread is not None or sparse._busy):
-            self.statusBar().showMessage('二维稀疏任务仍在计算或导出，请完成后关闭。')
+            if sparse.thread is not None:
+                self._sparse_close_pending = True; sparse.cancel()
+                self.statusBar().showMessage('正在停止二维稀疏计算并回收资源，随后关闭窗口。')
+            else:
+                self.statusBar().showMessage('二维稀疏结果正在导出，请完成后关闭。')
             event.ignore(); return
         super().closeEvent(event)
 

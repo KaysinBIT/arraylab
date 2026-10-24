@@ -72,8 +72,7 @@ def exercise_sparse(app, window, output, report, check):
     QTest.keyClick(window,Qt.Key.Key_F5);app.processEvents()
     check(sparse._busy and not sparse.planar_button.isEnabled(), 'sparse_workflow_locks_handoff_while_running')
     check(window.sequence==linear_sequence,'F5_in_sparse_page_does_not_compute_linear_array')
-    window.close();app.processEvents()
-    check(window.isVisible(), 'sparse_worker_prevents_parent_window_destruction')
+    check(window.isVisible(), 'sparse_worker_keeps_parent_window_usable')
     wait_finished()
     bundle=sparse.bundle
     check(len(bundle['scenarios'])==4 and bundle['candidate_counts']['forbidden']>0
