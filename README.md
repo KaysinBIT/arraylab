@@ -1,12 +1,12 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版本0.20.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.20.0) · [发行说明](docs/releases/0.20.0.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版本0.21.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.21.0) · [发行说明](docs/releases/0.21.0.md)。
 
-当前源码进入 **0.21.0.dev0 开发版**：新增线阵及线阵馈电三维方向图、图下主要指标，以及固定内部模板的连续子阵中心优化。已有正式版0.20.0不包含这些新增功能；开发版与正式版文件分别保留。[方向图与指标](docs/pattern-metrics.md) · [子阵中心优化](docs/subarray-centers.md)。
+**0.21.0 正式版**新增线阵及线阵馈电三维方向图、图下主要指标，以及固定内部模板的连续子阵中心优化。[方向图与指标](docs/pattern-metrics.md) · [子阵中心优化](docs/subarray-centers.md)。
 
-本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
+本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计、子阵中心优化各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
 
-直线阵与直线阵馈电现在支持保存并重新打开完整计算记录，恢复曲线、标签、选中项及已有结果，不重新计算；也能打开旧版馈电比较文件。保存参数、保存记录、导出结果各有明确入口，详见[计算记录与文件选择](docs/calculation-history.md)。平面阵和二维稀疏设计尚不支持这项完整多次历史恢复。
+直线阵与直线阵馈电现在支持保存并重新打开完整计算记录，恢复曲线、标签、选中项及已有结果，不重新计算；也能打开旧版馈电比较文件。保存参数、保存记录、导出结果各有明确入口，详见[计算记录与文件选择](docs/calculation-history.md)。平面阵、二维稀疏设计和子阵中心优化尚不支持这项完整多次历史恢复。
 
 原有有界多核及无头功能保留：扫描点、平面阵三组方向图、稀疏方案复核可并行。右下角可选自动（最多4路）、单核或2–8路；小任务自动串行。无头使用`--workers`，详见[多核范围与资源控制](docs/multicore.md)。物理尺寸和误差统计继续暂缓。
 
@@ -18,7 +18,7 @@
 
 ## 启动
 
-Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.20.0)下载`ArrayLab-0.20.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
+Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.21.0)下载`ArrayLab-0.21.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
 
 源码用户可在Windows PowerShell中创建环境并启动桌面版：
 
@@ -32,7 +32,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.21.0.dev0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本轮开发版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.21.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -45,7 +45,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.20.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.21.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -60,7 +60,7 @@ python -m venv .venv
 | `--config` | UTF-8 JSON分析方案，例如`examples/analysis.json`；兼容旧版`examples/ula.json`，显式命令行参数覆盖文件值 |
 | `--output-dir` | 创建一个新结果目录；已有目录（包括空目录）不覆盖，退出码3 |
 | `--include-phase` | DAT文件增加相位列 |
-| `--plot` | `none`、`rectangular`、`polar`、`both`、`3d`或`all`，默认none；需要同时指定输出目录；开发版增加3d/all |
+| `--plot` | `none`、`rectangular`、`polar`、`both`、`3d`或`all`，默认none；需要同时指定输出目录；支持3d/all |
 | `--help`、`--version` | 查看帮助或版本，不启动界面 |
 | `--workers` | 0自动、1单路、2–8指定上限；用于扫描、平面阵方向图及稀疏复核；普通直线阵计算仍串行 |
 
@@ -69,7 +69,7 @@ python -m venv .venv
 - `summary.json`：参数、模型/坐标约定、方向性、主瓣指向、HPBW、采样数、提示信息和输出文件名。
 - `pattern.dat`：角度°、幅度dB、可选相位°，可在桌面版直接读入。
 - `excitation.csv`：阵元编号、x坐标mm、相对幅度、激励相位°。
-- `sphere-pattern.csv`：开发版额外输出完整球面方向图，默认2°显示网格；该采样不代替指标搜索。
+- `sphere-pattern.csv`：额外输出完整球面方向图，默认2°显示网格；该采样不代替指标搜索。
 - `rectangular.png`和/或`polar.png`：按需生成，使用无交互Agg渲染；显示下限−40 dB不影响数据文件。图中文字使用通用英文字体，避免依赖系统中文字体。
 
 结果先在临时目录内全部生成，成功后再发布为目标目录。不要让多项任务共用一个输出目录；批处理脚本为每次调用分配不同路径即可。配置文件的格式及6项参数见[分析方案约定](docs/analysis-format.md)；未知字段、重复字段、错误类型、未知版本和非有限数值会被拒绝。
@@ -221,7 +221,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.20.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.21.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。
