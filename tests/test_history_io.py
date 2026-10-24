@@ -163,6 +163,66 @@ def test_feed_comparison_v1_compatibility_uses_saved_metrics(feed_report, app_ve
     assert path.read_bytes() == source_bytes
 
 
+@pytest.mark.parametrize("schema_version", [2, 3])
+def test_complete_feed_result_opens_as_one_saved_design(schema_version, feed_report, tmp_path, monkeypatch):
+    report = deepcopy(feed_report)
+    if schema_version == 2:
+        from arraylab.feed import BRANCH_DELAY_FIELDS
+        report["schema_version"] = 2
+        report["app_version"] = "0.21.0"
+        for field in BRANCH_DELAY_FIELDS:
+            report["settings"].pop(field)
+        for section in report["sections"]:
+            for field in ("matched_delay_deg", "matched_delay_ohm", "total_electrical_length_deg"):
+                section.pop(field)
+        for port in report["ports"]:
+            for field in ("transform_path_deg", "branch_delay_path_deg", "network_electrical_length_deg", "total_electrical_length_deg"):
+                port.pop(field)
+    path = tmp_path / "中文 馈电结果.json"
+    write_document(path, report)
+    before = path.read_bytes()
+
+    def no_recompute(*args, **kwargs):
+        raise AssertionError("opening an exported result must not recalculate")
+
+    for name in ("arraylab.feed.design_feed", "arraylab.feed.synthesize_impedance",
+                 "arraylab.feed.target_amplitudes", "arraylab.complex_pattern.pattern_analysis"):
+        monkeypatch.setattr(name, no_recompute)
+    loaded = load_history(path)
+    assert loaded == document(kind="feed", records=[{"label": "中文 馈电结果 · 导出设计", "report": report}])
+    assert path.read_bytes() == before
+    saved = tmp_path / "restored-history.arraylab.json"
+    save_history(saved, loaded["kind"], loaded["records"], loaded["selected"])
+    assert load_history(saved) == loaded
+
+
+@pytest.mark.parametrize("damage", ["ports", "patterns", "schema", "delays"])
+def test_incomplete_or_corrupt_feed_export_is_not_opened_as_a_history(damage, feed_report, tmp_path):
+    report = deepcopy(feed_report)
+    if damage == "ports":
+        report["ports"].pop()
+    elif damage == "patterns":
+        report["electrical"]["patterns"]["output"]["pattern_db"].pop()
+    elif damage == "schema":
+        report["schema_version"] = 1
+    else:
+        report["sections"][0]["matched_delay_deg"] += 1
+    path = tmp_path / "feed-network.json"
+    write_document(path, report)
+    before = path.read_bytes()
+    with pytest.raises(ValueError):
+        load_history(path)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("format", ["arraylab.feed_impedance", "arraylab.analysis"])
+def test_opening_parameters_as_results_explains_the_correct_action(format, tmp_path):
+    path = tmp_path / "config.json"
+    write_document(path, {"format": format, "schema_version": 1})
+    with pytest.raises(ValueError, match="这是参数设置.*打开参数"):
+        load_history(path)
+
+
 @pytest.mark.parametrize("changes", [
     {"schema_version": 2}, {"schema_version": True}, {"schema_version": 1.0}, {"format": "other.app"},
     {"kind": "planar"}, {"kind": {}}, {"selected": True}, {"selected": 1}, {"selected": -1},

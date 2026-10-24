@@ -6,8 +6,6 @@ import numpy as np
 from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from .core import ArrayParameters
-from .feed import FeedSettings
 from .history_io import array_result_from_snapshot, load_history, save_history
 from .widgets import PatternSet
 
@@ -58,7 +56,7 @@ class HistoryActions:
         # Complete validation and object construction before touching live widgets.
         document = load_history(path)
         kind, selected = document["kind"], document["selected"]
-        parameters = settings = None
+        parameters = prepared = None
         if kind == "linear":
             records = []
             for record in document["records"]:
@@ -73,10 +71,7 @@ class HistoryActions:
         elif kind == "feed":
             records = document["records"]
             selected_report = records[selected]["report"]
-            parameters = ArrayParameters(**selected_report["array_parameters"])
-            settings = FeedSettings(**selected_report["settings"])
-            parameters.validate()
-            settings.validate()
+            prepared = self.feed_panel.prepare_restore_report(selected_report)
         else:
             raise ValueError("此文件没有可恢复的直线阵或馈电历史。")
         sequence = _history_sequence(records)
@@ -97,20 +92,15 @@ class HistoryActions:
             panel = self.feed_panel
             panel._changing = True
             try:
-                self.apply_parameters(parameters)
-                panel.topology.setCurrentIndex(panel.topology.findData(settings.topology))
-                for key, edit in panel.fields.items():
-                    edit.setText(str(getattr(settings, key)))
-                panel.electrical.apply(settings)
-                panel.apply_branch_delays(settings)
                 panel.history = records
                 panel.sequence = sequence
                 with QSignalBlocker(panel.history_selection):
                     panel.history_selection.clear()
                     panel.history_selection.addItems([record["label"] for record in records])
                     panel.history_selection.setCurrentIndex(selected)
+                panel.update_history_available()
                 self.activate_task(kind)
-                panel.display_report(selected_report)
+                panel.restore_report(selected_report, prepared=prepared)
             finally:
                 panel._changing = False
         self.last_directory = str(Path(path).parent)
@@ -118,8 +108,6 @@ class HistoryActions:
         message = f"已恢复{len(records)}条历史快照：{Path(path).name}；显示保存时的结果，未重新计算。"
         if kind == "linear":
             self.state_label.setText(message + (" 所选外部曲线不含参数，当前输入已保留。" if parameters is None else ""))
-        else:
-            self.feed_panel.state.setText(self.feed_panel.state.text() + "；已恢复历史快照，未重新计算。")
         self.statusBar().showMessage(message)
         self.record_message(message)
 
@@ -147,8 +135,8 @@ class HistoryActions:
             self.statusBar().showMessage(str(exc))
             self.record_message(str(exc))
             return
-        path, _ = QFileDialog.getOpenFileName(self, "恢复历史快照（不重新计算）", self.last_directory,
-                                            "ArrayLab历史或旧馈电对比 (*.json)",
+        path, _ = QFileDialog.getOpenFileName(self, "打开记录或馈电结果（不重新计算）", self.last_directory,
+                                            "ArrayLab历史、馈电结果或旧对比 (*.json)",
                                             options=QFileDialog.Option.DontUseNativeDialog)
         if path:
             try:

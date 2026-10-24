@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget, QFrame, QToolButton,
     QGroupBox, QFormLayout, QLineEdit, QComboBox, QCheckBox, QPushButton,
     QDockWidget, QScrollArea, QTreeWidget, QTreeWidgetItem, QPlainTextEdit, QStackedWidget,
+    QSizePolicy,
 )
 from .icons import workbench_icon
 from .widgets import GeometryView, PatternPlot
@@ -121,6 +122,35 @@ def sidebar_grid(page):
     grid.setColumnStretch(1,1);grid.setVerticalSpacing(5)
 
 
+class TaskTabs(QTabWidget):
+    """Only the visible result page contributes to the scrollable minimum."""
+    def __init__(self):
+        super().__init__()
+        self.currentChanged.connect(self._sync_page_sizes)
+
+    def tabInserted(self, index):
+        super().tabInserted(index)
+        self._sync_page_sizes()
+
+    def setCurrentIndex(self, index):
+        super().setCurrentIndex(index)
+        # Task routing deliberately blocks signals while changing visible tabs.
+        self._sync_page_sizes()
+
+    def _sync_page_sizes(self, *_):
+        for index in range(self.count()):
+            page = self.widget(index)
+            if not hasattr(page, '_task_tab_size_policy'):
+                page._task_tab_size_policy = page.sizePolicy()
+            page.setSizePolicy(page._task_tab_size_policy if index == self.currentIndex()
+                               else QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored))
+        stack = self.findChild(QStackedWidget)
+        if stack is not None:
+            stack.layout().invalidate()
+            stack.updateGeometry()
+        self.updateGeometry()
+
+
 def build_workbench(w):
     w.setDockNestingEnabled(True)
     w.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
@@ -143,7 +173,9 @@ def build_workbench(w):
     menu_layout.addWidget(header)
     w.ribbon = QTabWidget()
     w.ribbon.setObjectName("ribbon")
-    w.ribbon.setFixedHeight(112)
+    # Let Windows font metrics and the two-line run button determine the height.
+    # A fixed ribbon height clips buttons into their group captions at native DPI.
+    w.ribbon.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     w.ribbon.setAccessibleName("工作台功能区")
     menu_layout.addWidget(w.ribbon)
     w.setMenuWidget(menu_host)
@@ -161,7 +193,7 @@ def build_workbench(w):
     w.save_scheme_button.setToolTip('只保存当前输入，下次打开需重新计算')
     w.history_open_button=ribbon_button('打开记录','open',w.load_history_dialog)
     w.history_save_button=ribbon_button('保存记录','save',w.save_history_dialog)
-    w.history_open_button.setToolTip('恢复直线阵或直线阵馈电的完整计算记录')
+    w.history_open_button.setToolTip('恢复直线阵/馈电计算记录，或打开馈电导出的feed-network.json')
     w.history_save_button.setToolTip('保存已有计算记录、标签及选中项；不含未计算的输入')
     w.save_button=ribbon_button('导出当前结果','save',w.save_dialog)
     w.scan_button=ribbon_button('多角度评估','array',w.run_scan)
@@ -207,7 +239,7 @@ def build_workbench(w):
     w.remove_button.clicked.connect(w.remove_selected)
     controls.addWidget(w.remove_button)
     w.result_bar = QWidget(); w.result_bar.setLayout(controls); layout.addWidget(w.result_bar)
-    w.tabs = QTabWidget()
+    w.tabs = TaskTabs()
     w.tabs.setObjectName("documents")
     w.tabs.setAccessibleName("结果视图")
     plot_page = QWidget()
@@ -278,7 +310,11 @@ def build_workbench(w):
     from .start_page import build_start_page
     w.start_page=build_start_page(w);w.tabs.addTab(w.start_page,'开始')
     w.feed_button=w.task_cards['feed'];w.planar_button=w.task_cards['planar'];w.sparse_button=w.task_cards['sparse']
-    layout.addWidget(w.tabs, 1)
+    # Result controls and plots keep their readable minimum sizes when the
+    # work area is short or a dock is widened. The viewport scrolls instead.
+    w.results_scroll=QScrollArea();w.results_scroll.setWidgetResizable(True)
+    w.results_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    w.results_scroll.setWidget(w.tabs);layout.addWidget(w.results_scroll, 1)
 
     w.tree=QTreeWidget();w.tree.setHeaderHidden(True);w.tree.setAccessibleName('工作任务导航');w.tree.setIndentation(13)
     root=QTreeWidgetItem(w.tree,['工作任务']);w.project_tree_root=root
@@ -363,7 +399,8 @@ def build_workbench(w):
     w.feed_panel.beam_row.layout().removeWidget(w.feed_panel.beam_mode_hint)
     feed_layout.addWidget(QLabel('2. 馈电与目标指向'));feed_layout.addWidget(w.feed_panel.beam_row)
     feed_layout.addWidget(w.feed_panel.beam_mode_hint);feed_layout.addWidget(w.feed_panel.settings_tabs)
-    w.feed_panel.settings_tabs.setMinimumHeight(210);w.feed_panel.settings_tabs.setMaximumHeight(260)
+    w.feed_panel.settings_tabs.setMaximumHeight(16777215)
+    w.feed_panel.settings_tabs.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
     for i,title in enumerate(('馈电网络','幅相加权','误差失效')):w.feed_panel.settings_tabs.setTabText(i,title)
     iv.addWidget(w.feed_parameter_host)
     iv.addStretch()
@@ -375,7 +412,8 @@ def build_workbench(w):
     w.planar_panel.layout().removeWidget(w.planar_panel.beam_row);w.planar_panel.layout().removeWidget(w.planar_panel.settings_tabs)
     w.planar_panel.beam_row.layout().removeWidget(w.planar_panel.beam_mode_hint)
     pv.addWidget(w.planar_panel.beam_row);pv.addWidget(w.planar_panel.beam_mode_hint);pv.addWidget(w.planar_panel.settings_tabs);pv.addStretch()
-    w.planar_panel.settings_tabs.setMinimumHeight(230);w.planar_panel.settings_tabs.setMaximumHeight(290)
+    w.planar_panel.settings_tabs.setMaximumHeight(16777215)
+    w.planar_panel.settings_tabs.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
     for i,title in enumerate(('布局','切面','阻抗','幅相','误差')):w.planar_panel.settings_tabs.setTabText(i,title)
     planar_scroll=QScrollArea();planar_scroll.setWidgetResizable(True);planar_scroll.setWidget(planar_parameters)
     w.inspector_stack.addWidget(planar_scroll)

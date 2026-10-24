@@ -2,17 +2,19 @@
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 import json
+import time
 import traceback
 from unittest.mock import patch
 
 import numpy as np
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QPoint
+from PySide6.QtGui import QCursor
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QFileDialog, QLineEdit
 
 from .core import ArrayParameters
 from .dataio import write_pattern
-from .feed import FeedSettings, settings_payload
+from .feed import FeedSettings, settings_payload, with_branch_delays
 from .history_io import array_result_snapshot, load_history
 
 
@@ -229,6 +231,34 @@ def exercise_history(app, window, output, report, check):
                   "legacy_feed_comparison_restores_and_upgrades_saved_pointing")
             check(settings_payload(restored.read_settings()) == legacy["records"][2]["report"]["settings"],
                   "legacy_feed_history_restores_selected_settings")
+            # The normal result-export action produces feed-network.json rather
+            # than a history envelope. Open that real export through the same
+            # visible file dialog, retaining every saved electrical result.
+            exported_report = deepcopy(restored.report)
+            exported_directory = output / "history-exported-feed"
+            restored.export_path(exported_directory)
+            exported_path = exported_directory / "feed-network.json"
+            exported_bytes = exported_path.read_bytes()
+            file_dialog(reopened, exported_path, False)
+            check(len(restored.history) == 1 and restored.history_selection.currentIndex() == 0
+                  and restored.report == exported_report and restored.history[0]["report"] is restored.report,
+                  "feed_result_export_reopens_as_one_complete_saved_design")
+            check(restored.ports.rowCount() == len(exported_report["ports"])
+                  and restored.sections.rowCount() == len(exported_report["sections"])
+                  and settings_payload(restored.read_settings()) == exported_report["settings"]
+                  and "未重新计算" in restored.state.text(),
+                  "feed_result_export_restores_tables_settings_and_snapshot_status")
+            imported_history = output / "history-from-feed-export.arraylab.json"
+            file_dialog(reopened, imported_history, True)
+            check(load_history(imported_history)["records"][0]["report"] == exported_report
+                  and exported_path.read_bytes() == exported_bytes,
+                  "feed_result_export_can_be_saved_as_history_without_altering_original")
+            bad_export = deepcopy(exported_report)
+            bad_export["sections"][0].pop("line_ohm")
+            bad_export_path = output / "history-invalid-feed-export.json"
+            bad_export_path.write_text(json.dumps(bad_export), encoding="utf-8")
+            reject_without_changes(reopened, bad_export_path, "invalid_exported_feed_report")
+            reject_without_changes(reopened, exported_directory / "feed-config.json", "settings_are_not_saved_results")
         finally:
             reopened.close(); reopened.deleteLater()
 
@@ -250,3 +280,134 @@ def exercise_history(app, window, output, report, check):
         "feed": {"records": 3, "selected": feed_expected["selected"]},
         "legacy_feed": {"records": 3, "selected": 2},
     }
+    exercise_feed_record_selection(app, output, report, check)
+
+
+def exercise_feed_record_selection(app, output, report, check):
+    """Qt event-driven checks; these are not a human OS-mouse acceptance test."""
+    from .window import MainWindow
+
+    probe = MainWindow(auto_compute=False)
+    probe.show(); probe.activate_task("feed"); app.processEvents()
+    panel = probe.feed_panel
+    combo = panel.history_selection
+    old_cursor = QCursor.pos()
+    selection_times = []
+
+    def select_with_events(index, opener="text", mouse=True):
+        if opener == "space":
+            combo.setFocus(); QTest.keyClick(combo, Qt.Key.Key_Space)
+        elif opener == "alt-down":
+            combo.setFocus(); QTest.keyClick(combo, Qt.Key.Key_Down, Qt.KeyboardModifier.AltModifier)
+        else:
+            x = combo.width() - 8 if opener == "arrow" else 8
+            QTest.mouseClick(combo, Qt.MouseButton.LeftButton, pos=QPoint(x, combo.height() // 2))
+        app.processEvents()
+        view = combo.view()
+        check(view.isVisible(), f"feed_record_popup_opens_{combo.count()}_{opener}")
+        if mouse:
+            # Do not let the synthetic item click fall inside Qt's popup
+            # double-click suppression interval after opening the combo.
+            QTest.qWait(app.doubleClickInterval() + 20)
+            target = view.model().index(index, 0)
+            view.scrollTo(target); app.processEvents()
+            item = view.visualRect(target).intersected(view.viewport().rect())
+            check(not item.isEmpty(), "feed_record_popup_target_visible")
+            # Align the native cursor with Qt's event position: Qt's popup mouse
+            # release handling also checks that the cursor remains in the item.
+            QCursor.setPos(view.viewport().mapToGlobal(item.center())); QTest.qWait(80)
+            QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=item.center())
+            QTest.qWait(40)
+            started = time.perf_counter()
+            QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=item.center())
+        else:
+            QTest.keyClick(view, Qt.Key.Key_Home)
+            for _ in range(index):
+                QTest.keyClick(view, Qt.Key.Key_Down)
+            started = time.perf_counter()
+            QTest.keyClick(view, Qt.Key.Key_Return)
+        app.processEvents()
+        selection_times.append({"records": combo.count(), "selected": index,
+                                "restore_and_draw_ms": round((time.perf_counter() - started) * 1000, 2)})
+        check(not view.isVisible() and combo.currentIndex() == index, "feed_record_popup_commits_selection")
+
+    def restored(index):
+        saved = panel.history[index]["report"]
+        check(panel.report is saved and probe.read_parameters() == ArrayParameters(**saved["array_parameters"])
+              and settings_payload(panel.read_settings()) == settings_payload(FeedSettings(**saved["settings"])),
+              "feed_record_selection_restores_geometry_electrical_and_branch_delays")
+        check("未重新计算" in panel.state.text(), "feed_record_selection_identifies_saved_result")
+
+    try:
+        check(combo.count() == 0 and not combo.isEnabled() and "暂无设计记录" in combo.placeholderText(),
+              "empty_feed_record_selector_explains_missing_records")
+        for index, topology in enumerate(("corporate", "series", "symmetric_series", "series", "corporate")):
+            n = 4 + index * 2
+            parameters = ArrayParameters(elements=n, scan_deg=(-15, 26, 38, -8, 5)[index], step_deg=5)
+            settings = with_branch_delays(FeedSettings(topology=topology, load_ohm=40 + index * 5,
+                                                       input_ohm=50 + index, phase_bits=index % 3, seed=80 + index),
+                                         n, tuple(10 * (j + 1) for j in range(2 * n - 2)))
+            probe.apply_parameters(parameters)
+            panel.topology.setCurrentIndex(panel.topology.findData(topology))
+            for key, edit in panel.fields.items():
+                edit.setText(str(getattr(settings, key)))
+            panel.electrical.apply(settings); panel.apply_branch_delays(settings); panel.generate(); app.processEvents()
+            if index == 0:
+                check(combo.count() == 1 and combo.isEnabled(), "generated_record_enables_selector")
+                probe.inputs["elements"].setText("12")
+                panel.target_theta.setText("43")
+                panel.fields["load_ohm"].setText("75")
+                with patch("arraylab.feed_widgets.design_feed", side_effect=AssertionError("record selection recalculated")):
+                    select_with_events(0, "text")
+                    restored(0)
+        records = deepcopy(panel.history)
+        labels = [combo.itemText(i) for i in range(combo.count())]
+        with ExitStack() as stack:
+            engines = [stack.enter_context(patch(name, side_effect=AssertionError("record selection recalculated")))
+                       for name in ("arraylab.window.calculate", "arraylab.feed_widgets.design_feed", "arraylab.feed.design_feed")]
+            with patch.object(panel, "display_report", wraps=panel.display_report) as display:
+                select_with_events(0, "arrow")
+                restored(0)
+                check(display.call_count == 1, "changed_record_draws_once_for_changed_and_activated_signals")
+            probe.inputs["elements"].setText("not a number")
+            panel.target_theta.setText("42")
+            panel.electrical.fields["phase_bits"].setText("bad")
+            with patch.object(panel, "display_report", wraps=panel.display_report) as display:
+                select_with_events(0, "space", mouse=False)
+                restored(0)
+                check(display.call_count == 1, "reselecting_current_record_restores_unrun_invalid_inputs_once")
+            for size, index, opener in (((1100, 740), 4, "text"), ((1440, 900), 1, "alt-down")):
+                probe.resize(*size); app.processEvents()
+                select_with_events(index, opener, mouse=opener == "text")
+                restored(index)
+            check(panel.history == records and [combo.itemText(i) for i in range(combo.count())] == labels,
+                  "record_selection_preserves_all_five_reports_and_labels")
+            previous = panel.report
+            previous_parameters, previous_settings = probe.read_parameters(), panel.read_settings()
+            valid_record = panel.history[0]["report"]
+            panel.history[0]["report"] = deepcopy(valid_record)
+            panel.history[0]["report"]["settings"]["load_ohm"] = "invalid saved value"
+            try:
+                with patch("arraylab.feed_widgets.QMessageBox.warning") as warning:
+                    combo.setCurrentIndex(0)
+                    panel.activate_history(0)
+                check(warning.call_count == 1 and combo.currentIndex() == 1 and panel.report is previous
+                      and probe.read_parameters() == previous_parameters and panel.read_settings() == previous_settings,
+                      "invalid_record_keeps_previous_selection_parameters_and_result")
+            finally:
+                panel.history[0]["report"] = valid_record
+            check(all(engine.call_count == 0 for engine in engines), "record_selection_never_runs_calculation_engines")
+            saved = output / "history-selected-feed-record.arraylab.json"
+            probe.save_history_path(saved)
+            probe.load_history_path(saved)
+            check(combo.isEnabled() and combo.currentIndex() == 1 and load_history(saved)["selected"] == 1,
+                  "selected_feed_record_survives_save_and_open")
+            restored(1)
+        check(probe.grab().save(str(output / "history-record-selector-restored.png")), "feed_record_selector_screenshot")
+        report["feed_record_selection"] = {"empty_state": True, "record_counts": [0, 1, 5],
+                                           "parameter_restore": True, "same_item_restore": True,
+                                           "selection_times": selection_times,
+                                           "event_driver": "Qt events with cursor alignment, not manual OS mouse acceptance"}
+    finally:
+        QCursor.setPos(old_cursor)
+        probe.close(); probe.deleteLater(); app.processEvents()

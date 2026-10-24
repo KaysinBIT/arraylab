@@ -30,8 +30,9 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
     def __init__(self, auto_compute=True):
         super().__init__()
         self.setWindowTitle(f"ArrayLab {__version__} · 阵列分析")
-        self.resize(1440, 900)
-        self.setMinimumSize(1100, 740)
+        available = self.screen().availableGeometry()
+        self.resize(min(1440, available.width()-24), min(900, available.height()-60))
+        self.setMinimumSize(1100, 640)
         self.datasets: list[PatternSet] = []
         self.sequence = 0
         self.last_directory = str(Path.home())
@@ -49,6 +50,10 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         build_workbench(self)
         from .subarray_widgets import attach_subarray
         attach_subarray(self)
+        for canvas in (self.plot.canvas, self.feed_panel.pattern_plot.canvas,
+                       self.planar_panel.canvas, self.sparse_panel.canvas,
+                       self.subarray_panel.canvas):
+            canvas.setMinimumSize(480, 360)
 
 
 

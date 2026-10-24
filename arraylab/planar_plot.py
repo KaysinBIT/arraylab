@@ -5,6 +5,11 @@ from .surface_plot import clear_figure, register_surface
 
 def draw_planar_figure(figure, report, view, chinese=False):
     clear_figure(figure)
+    if view == '3d':
+        figure.set_layout_engine(None)
+        figure.subplots_adjust(left=.11, right=.9, bottom=.18, top=.88)
+    else:
+        figure.set_layout_engine('constrained', w_pad=.06, h_pad=.08)
     patterns = report["electrical"]["patterns"]
     p = report["geometry"]
     output = patterns["output"]
@@ -13,7 +18,7 @@ def draw_planar_figure(figure, report, view, chinese=False):
         top=max(3,max(float(np.max(patterns[key]["cut_db"])) for key in patterns))
         for key, label in [("target", "Target"), ("uncompensated", "Uncompensated"), ("output", "Output")]:
             ax.plot(patterns[key]["cut_angles_deg"], np.maximum(patterns[key]["cut_db"], -60), label=label, lw=1.7)
-        ax.set(xlim=(-90,90),ylim=(-60,top),xlabel="Signed theta (deg)",ylabel="Target coherent-sum reference (dB)",
+        ax.set(xlim=(-90,90),ylim=(-60,top),xlabel="Signed theta (deg)",ylabel="Field / target\ncoherent sum (dB)",
                title=f"Planar cut: phi={p['cut_phi_deg']:g} deg")
         ax.grid(True,alpha=.3);ax.legend(fontsize=8)
     elif view == "map":

@@ -6,6 +6,8 @@ ArrayResult without recalculating it. Feed records contain label/report. Report
 extension metadata is retained, while all fields used to render it are checked.
 The old feed_comparison v1 envelope is accepted as feed history, selecting its
 last record. Missing legacy pointing summaries are derived from saved metrics.
+An exported complete feed-network.json report is accepted as one saved design;
+its electrical results are validated and retained without running the solver.
 """
 from dataclasses import asdict, fields
 import json
@@ -448,6 +450,15 @@ def load_history(path):
             records = _list(document["records"], "旧比较记录", 1, MAX_RECORDS)
             document = {"format": FORMAT, "schema_version": SCHEMA_VERSION, "kind": "feed",
                         "records": records, "selected": len(records) - 1}
+        elif isinstance(document, dict) and document.get("format") == "arraylab.feed_impedance_result":
+            # Result export and history export use different envelopes but carry
+            # the same complete report. Preserve the original report and run the
+            # usual strict snapshot checks before any widget can be changed.
+            document = {"format": FORMAT, "schema_version": SCHEMA_VERSION, "kind": "feed",
+                        "records": [{"label": Path(path).stem[:1000] + " · 导出设计", "report": document}],
+                        "selected": 0}
+        elif isinstance(document, dict) and document.get("format") in ("arraylab.feed_impedance", "arraylab.analysis"):
+            _fail("记录文件", "这是参数设置，不含已计算结果。请使用“打开参数”；馈电结果请打开feed-network.json。")
         return _validate_document(document)
     except RecursionError as exc:
         raise ValueError("记录文件嵌套过深。") from exc

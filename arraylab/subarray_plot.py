@@ -10,6 +10,11 @@ def render_subarray_figure(figure, report, view='layout', case_index=0, chinese=
     if view not in ('layout', 'pattern', 'cuts', '3d'):
         raise ValueError('未知子阵图形类型。')
     clear_figure(figure)
+    if view == '3d':
+        figure.set_layout_engine(None)
+        figure.subplots_adjust(left=.125, right=.9, bottom=.11, top=.88)
+    else:
+        figure.set_layout_engine('constrained', w_pad=.06, h_pad=.08)
     config = SubarrayConfig(**report['config'])
     best = report['best']
     case = best['cases'][case_index]
@@ -47,7 +52,7 @@ def render_subarray_figure(figure, report, view='layout', case_index=0, chinese=
                                2*config.exclusion_v, fill=False, edgecolor='white', linestyle='--', linewidth=1.))
         ax.plot(u, v, '+', color='red', ms=9)
         ax.set(xlabel='u = sin(theta) cos(phi)', ylabel='v = sin(theta) sin(phi)',
-               title='Upper-hemisphere field / coherent peak (dB)', xlim=(-1, 1), ylim=(-1, 1))
+               title='Upper-hemisphere field\nReference: coherent peak (dB)', xlim=(-1, 1), ylim=(-1, 1))
         ax.set_aspect('equal'); figure.colorbar(mesh, ax=ax, label='Relative field (dB)')
     elif view == 'cuts':
         ax = figure.add_subplot(111)
@@ -58,7 +63,7 @@ def render_subarray_figure(figure, report, view='layout', case_index=0, chinese=
             if edges:
                 ax.plot(edges, [10*np.log10(.5)]*2, 'o--', ms=4, lw=1)
         ax.set(xlabel='Angular displacement from steering direction (deg)', ylabel='Relative field (dB)',
-               title='Orthogonal great-circle cuts through steering direction', xlim=(-90, 90), ylim=(-60, 2))
+               title='Orthogonal great-circle cuts\nthrough steering direction', xlim=(-90, 90), ylim=(-60, 2))
         ax.grid(True, alpha=.25); ax.legend(fontsize=8)
     else:
         ax = figure.add_subplot(111, projection='3d')

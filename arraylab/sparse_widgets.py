@@ -472,8 +472,19 @@ class SparsePanel(QWidget):
         if self.canvas.widgetlock.isowner(self.toolbar):
             self.canvas.widgetlock.release(self.toolbar)
         self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
+        # Report figures may use 140 dpi for files. Reuse the desktop canvas's
+        # DPI so those figures do not acquire enlarged, clipped annotations.
+        original_dpi = self.canvas.figure._original_dpi
+        figure.set_dpi(self.canvas.figure.dpi)
+        figure._original_dpi = original_dpi
         self.figure = figure; self.canvas.figure = figure; figure.set_canvas(self.canvas)
-        figure.set_size_inches(max(1, self.canvas.width()) / figure.dpi, max(1, self.canvas.height()) / figure.dpi, forward=False)
+        ratio = self.canvas.device_pixel_ratio
+        figure.set_size_inches(max(1, self.canvas.width()) * ratio / figure.dpi,
+                               max(1, self.canvas.height()) * ratio / figure.dpi, forward=False)
+        from .plot_layout import reflow_plot_layout
+        reflow_plot_layout(figure)
+        if not getattr(figure, '_arraylab_responsive_plots', None):
+            self.canvas.setMinimumHeight(360)
         if hasattr(figure, '_arraylab_footer_lines'):
             from .pattern_metrics import draw_metric_footer
             draw_metric_footer(figure, figure._arraylab_footer_lines)

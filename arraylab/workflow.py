@@ -64,6 +64,8 @@ class WorkflowActions:
         if previous!=kind:
             self.inspector_dock.setVisible(kind!='home')
             self.messages_dock.setVisible(False)
+            self.results_scroll.verticalScrollBar().setValue(0)
+            self.results_scroll.horizontalScrollBar().setValue(0)
             self.statusBar().showMessage(TASKS[kind][1])
         self.context_caption.setText(TASKS[kind][0])
         self.refresh_actions()
@@ -77,6 +79,8 @@ class WorkflowActions:
                'planar':bool(self.planar_panel.report),'sparse':bool(self.sparse_panel.bundle),'subarray':bool(self.subarray_panel.report)}[kind]
         run_text={'home':'运行计算','linear':'计算直线阵','feed':'生成馈电设计','planar':'生成平面阵设计','sparse':'开始稀疏综合','subarray':'优化子阵中心'}[kind]
         self.compute_button.setText(run_text+'\nF5');self.compute_button.setEnabled(kind!='home' and not busy)
+        self.compute_button.ensurePolished()
+        self.compute_button.setMinimumHeight(max(66,self.compute_button.sizeHint().height()))
         self.save_button.setEnabled(ready and not busy);self.save_button.setText('导出所选曲线' if kind=='linear' else '导出当前结果')
         self.load_scheme_button.setEnabled(kind!='home' and not busy);self.save_scheme_button.setEnabled(kind!='home' and not busy)
         self.history_save_button.setVisible(kind in ('linear','feed'))

@@ -1,5 +1,5 @@
 """Task selection and a short, actionable explanation of saving."""
-from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QPushButton,QGroupBox
+from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QPushButton,QGroupBox,QScrollArea,QSizePolicy
 
 
 def build_start_page(window):
@@ -16,6 +16,7 @@ def build_start_page(window):
         ('subarray','子阵中心优化','固定子阵内部模板，优化中心位置，并核对多工况方向图。','优化子阵位置'),
     ]):
         card=QGroupBox(title);body=QVBoxLayout(card);body.setContentsMargins(16,18,16,14)
+        card.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Minimum)
         label=QLabel(description);label.setWordWrap(True);body.addWidget(label);body.addStretch()
         button=QPushButton(button_text);button.clicked.connect(lambda checked=False,k=kind:window.activate_task(k))
         button.setMinimumHeight(34);body.addWidget(button);window.task_cards[kind]=button;grid.addWidget(card,index//2,index%2)
@@ -29,4 +30,7 @@ def build_start_page(window):
     layout.addWidget(save)
     resume=QPushButton('打开以前保存的计算记录…');resume.clicked.connect(window.load_history_dialog);layout.addWidget(resume)
     window.resume_button=resume
-    return page
+    # Keep cards at their readable height; a shorter work area scrolls the page.
+    scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setWidget(page)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    return scroll

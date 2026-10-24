@@ -149,7 +149,12 @@ class FeedPanel(QWidget):
         history_row = QHBoxLayout()
         history_row.addWidget(QLabel("设计记录"))
         self.history_selection = QComboBox(); self.history_selection.setMinimumWidth(100)
+        self.history_selection.setAccessibleName("选择并恢复馈电设计记录")
+        self.history_selection.setPlaceholderText("暂无设计记录，请先生成或打开记录")
+        self.history_selection.setToolTip("选择记录会恢复保存的阵列参数、馈电设置及结果，不重新计算。未运行的输入修改请先用“保存参数”保存。")
+        self.history_selection.setEnabled(False)
         self.history_selection.currentIndexChanged.connect(self.select_history)
+        self.history_selection.activated.connect(self.activate_history)
         history_row.addWidget(self.history_selection, 1)
         rename = QPushButton("改名"); rename.clicked.connect(self.rename_history); history_row.addWidget(rename)
         self.compare_history = QCheckBox("比较历史输出"); self.compare_history.toggled.connect(self.redraw_patterns)
@@ -323,6 +328,7 @@ class FeedPanel(QWidget):
         self.history_selection.clear(); self.history_selection.addItems([record["label"] for record in self.history])
         self.history_selection.setCurrentIndex(len(self.history) - 1)
         self.history_selection.blockSignals(False)
+        self.update_history_available()
         self.display_report(report)
 
     def display_report(self, report):
@@ -353,11 +359,7 @@ class FeedPanel(QWidget):
         self.notice.setText(f"阻抗超提示范围：{len(m['out_of_range_sections'])}条。变换段、支路匹配延迟和端口补偿分别记录；电长度均在所选设计频率处。理想无损模型，物理尺寸暂缓。")
         self.export_button.setEnabled(True)
         self.redraw_patterns()
-        try:
-            matches = asdict(self.window.read_parameters()) == p and settings_payload(self.read_settings()) == settings_payload(FeedSettings(**report["settings"]))
-        except (ValueError, ArithmeticError):
-            matches = False
-        if not matches:
+        if not self.inputs_match_report(report):
             self.state.setText(self.state.text() + "；与当前输入不同。")
         self.window.statusBar().showMessage(self.state.text())
         self.window.refresh_actions()
@@ -403,9 +405,68 @@ class FeedPanel(QWidget):
                     text.set_fontsize(7 if compact else 8)
         self.pattern_plot.canvas.draw_idle()
 
+    def inputs_match_report(self, report):
+        try:
+            return (asdict(self.window.read_parameters()) == report["array_parameters"]
+                    and settings_payload(self.read_settings()) == settings_payload(FeedSettings(**report["settings"])))
+        except (ValueError, ArithmeticError):
+            return False
+
+    def update_history_available(self):
+        self.history_selection.setEnabled(bool(self.history))
+        for index, record in enumerate(self.history):
+            self.history_selection.setItemData(index, record["label"], Qt.ItemDataRole.ToolTipRole)
+
+    @staticmethod
+    def prepare_restore_report(report):
+        from .configuration import parameters_from_values
+        from .excitation import validate_electrical
+        from .feed import settings_from_payload, normalized_branch_delays
+        # External files have already passed complete history validation. Keep
+        # the trusted report object (and its plot caches), checking only inputs
+        # before applying them rather than copying all sampled result arrays.
+        parameters = parameters_from_values(report["array_parameters"])
+        settings = settings_from_payload(report["settings"], report["schema_version"])
+        validate_electrical(settings, parameters)
+        normalized_branch_delays(settings, parameters.elements)
+        return parameters, settings
+
+    def restore_report(self, report, prepared=None):
+        parameters, settings = prepared or self.prepare_restore_report(report)
+        changing = self._changing
+        self._changing = True
+        try:
+            self.window.apply_parameters(parameters)
+            self.topology.setCurrentIndex(self.topology.findData(settings.topology))
+            for key, edit in self.fields.items():
+                edit.setText(str(getattr(settings, key)))
+            self.electrical.apply(settings)
+            self.apply_branch_delays(settings)
+            self.display_report(report)
+            self.state.setText(self.state.text() + "；已恢复记录参数和结果，未重新计算。")
+            self.window.statusBar().showMessage(self.state.text())
+        finally:
+            self._changing = changing
+
     def select_history(self, index):
-        if 0 <= index < len(self.history):
-            self.display_report(self.history[index]["report"])
+        if not 0 <= index < len(self.history):
+            return
+        previous = next((i for i, record in enumerate(self.history) if record["report"] is self.report), -1)
+        try:
+            self.restore_report(self.history[index]["report"])
+        except (ValueError, TypeError, KeyError, OverflowError) as exc:
+            with QSignalBlocker(self.history_selection):
+                self.history_selection.setCurrentIndex(previous)
+            QMessageBox.warning(self, "设计记录恢复失败", str(exc))
+
+    def activate_history(self, index):
+        if not 0 <= index < len(self.history) or index != self.history_selection.currentIndex():
+            return
+        report = self.history[index]["report"]
+        # A changed index was just restored by currentIndexChanged. Activating
+        # the same item after editing inputs must also restore that saved design.
+        if self.report is not report or not self.inputs_match_report(report):
+            self.select_history(index)
 
     def rename_history(self):
         index = self.history_selection.currentIndex()

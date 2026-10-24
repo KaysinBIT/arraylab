@@ -481,6 +481,8 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_history(app, window, output, report, check)
             from .workflow_smoke import exercise_workflow
             exercise_workflow(app, window, output, report, check)
+            from .layout_smoke import exercise_layout
+            exercise_layout(app, output, check, report, window)
             from .next_stage_smoke import exercise_next_stage
             exercise_next_stage(app, window, output, report, check)
             from .branch_lengths_smoke import exercise_branch_lengths
