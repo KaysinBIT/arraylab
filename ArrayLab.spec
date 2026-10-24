@@ -6,10 +6,11 @@ ROOT = Path(SPECPATH)
 version = re.search(r'__version__ = "([^"]+)"', (ROOT / "arraylab/__init__.py").read_text()).group(1)
 common = ["tkinter", "PyQt5", "PyQt6", "PySide2", "pytest"]
 sparse_resources = [(str(ROOT / "arraylab/sparse2d/resources"), "arraylab/sparse2d/resources")]
+application_icons = ROOT / "arraylab/resources/icons"
 
 desktop = Analysis(
     [str(ROOT / "launch.py")], pathex=[str(ROOT)],
-    datas=sparse_resources,
+    datas=sparse_resources + [(str(application_icons), "arraylab/resources/icons")],
     hiddenimports=["arraylab.smoke", "arraylab.study_smoke", "arraylab.sparse_smoke", "arraylab.pointing_smoke", "arraylab.multicore_smoke", "arraylab.history_smoke", "arraylab.workflow_smoke", "PySide6.QtTest"],
     excludes=common, hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
 )
@@ -19,8 +20,8 @@ headless = Analysis(
     hooksconfig={"matplotlib": {"backends": ["Agg"]}},
 )
 gui = EXE(PYZ(desktop.pure), desktop.scripts, [], exclude_binaries=True,
-          name="ArrayLab", console=False, upx=False)
+          name="ArrayLab", console=False, upx=False, icon=str(application_icons / "arraylab.ico"))
 cli = EXE(PYZ(headless.pure), headless.scripts, [], exclude_binaries=True,
-          name="ArrayLab-cli", console=True, upx=False)
+          name="ArrayLab-cli", console=True, upx=False, icon=str(application_icons / "arraylab.ico"))
 COLLECT(gui, cli, desktop.binaries, desktop.datas, headless.binaries, headless.datas,
         name=f"ArrayLab-{version}", upx=False)

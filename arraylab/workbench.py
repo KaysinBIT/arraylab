@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QDockWidget, QScrollArea, QTreeWidget, QTreeWidgetItem, QPlainTextEdit, QStackedWidget,
     QSizePolicy,
 )
-from .icons import workbench_icon
+from .icons import application_icon, workbench_icon
 from .widgets import GeometryView, PatternPlot
 from . import __version__
 
@@ -155,7 +155,7 @@ def build_workbench(w):
     w.setDockNestingEnabled(True)
     w.setCorner(Qt.Corner.BottomLeftCorner, Qt.DockWidgetArea.LeftDockWidgetArea)
     w.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
-    w.setWindowIcon(workbench_icon("model"))
+    w.setWindowIcon(application_icon())
 
     # A menu widget remains above all dock areas, like a desktop ribbon.
     menu_host = QWidget()

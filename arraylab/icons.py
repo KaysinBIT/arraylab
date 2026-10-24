@@ -1,7 +1,17 @@
-"""Small original vector-style workbench icons, drawn locally with Qt."""
+"""Application artwork and small vector-style workbench icons."""
 from functools import lru_cache
+from pathlib import Path
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+
+
+@lru_cache(maxsize=1)
+def application_icon():
+    """Load the same application artwork in source and frozen desktop builds."""
+    resources = Path(__file__).resolve().parent / "resources" / "icons"
+    icon = QIcon(str(resources / "arraylab.ico"))
+    icon.addFile(str(resources / "arraylab.png"))
+    return icon
 
 
 @lru_cache(maxsize=32)

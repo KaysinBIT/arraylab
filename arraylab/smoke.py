@@ -30,6 +30,14 @@ def schedule_smoke_test(app, window, output: Path):
             app.processEvents()
 
         try:
+            from .icons import application_icon
+            icon = application_icon()
+            check(not icon.isNull(), "application_icon_loads")
+            check({16, 24, 32, 48, 64, 128, 256}.issubset({size.width() for size in icon.availableSizes()}),
+                  "application_icon_contains_windows_sizes")
+            check(not app.windowIcon().isNull() and app.windowIcon().cacheKey() == icon.cacheKey(),
+                  "application_default_icon_uses_array_and_beam_artwork")
+            check(window.windowIcon().cacheKey() == icon.cacheKey(), "main_window_uses_application_icon")
             check(window.active_task()=='home' and not window.datasets and window.feed_panel.report is None and window.planar_panel.report is None,
                   'startup_home_does_not_calculate')
             click(window.task_cards['linear'])

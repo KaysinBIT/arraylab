@@ -24,6 +24,7 @@ def main():
     for directory in ["arraylab", "tests", "tools"]:
         sources.extend((ROOT / directory).rglob("*.py"))
     sources.extend(p for p in (ROOT / "arraylab/sparse2d/resources").rglob("*") if p.is_file() and p.suffix in {".md", ".csv"})
+    sources.extend(ROOT / "arraylab/resources/icons" / name for name in ("arraylab.png", "arraylab.ico"))
     sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
     sources.extend((ROOT / ".github").rglob("*.yml"))
     sources.extend(p for p in (ROOT / "docs").rglob("*") if p.is_file() and p.suffix in {".md", ".png"})

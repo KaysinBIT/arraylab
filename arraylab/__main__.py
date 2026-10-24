@@ -5,6 +5,21 @@ import sys
 import tempfile
 
 
+def _set_windows_application_id():
+    """Keep taskbar identity stable across desktop releases and source launches."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    try:
+        setter = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+        setter.argtypes = [ctypes.c_wchar_p]
+        setter.restype = ctypes.c_long
+        setter("KaysinBIT.ArrayLab")
+    except (AttributeError, OSError):
+        # The window icon still works when the Windows shell API is unavailable.
+        pass
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     # Dispatch before importing Qt, the desktop window, or any GUI plotting.
@@ -16,12 +31,15 @@ def main(argv=None):
     parser.add_argument("--smoke-test", metavar="OUTPUT_DIR", help="Run the packaged Qt integration check and exit")
     args = parser.parse_args(argv)
     os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "arraylab-matplotlib"))
+    _set_windows_application_id()
     from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import Qt
+    from .icons import application_icon
     from .window import MainWindow
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     app = QApplication(sys.argv[:1])
     app.setApplicationName("ArrayLab")
+    app.setWindowIcon(application_icon())
     from . import __version__
     app.setApplicationVersion(__version__)
     app.setStyle("Fusion")
