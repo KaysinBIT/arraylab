@@ -483,6 +483,8 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_workflow(app, window, output, report, check)
             from .next_stage_smoke import exercise_next_stage
             exercise_next_stage(app, window, output, report, check)
+            from .branch_lengths_smoke import exercise_branch_lengths
+            exercise_branch_lengths(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

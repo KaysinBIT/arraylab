@@ -23,6 +23,7 @@ class PlanarPanel(QWidget):
     def __init__(self, window):
         super().__init__()
         self.window=window;self.report=None;self.coordinates=();self._changing=False;self.last_export=None
+        self._branch_delay_settings = dict(branch_delays_deg=(), branch_delay_elements=0, branch_delay_topology='')
         layout=QVBoxLayout(self);layout.setContentsMargins(8,6,8,6)
         title=QLabel("独立平面阵参数 · 各向同性点源 · z=0 · 最多200阵元、最大孔径40λ")
         self.intro=title
@@ -125,7 +126,7 @@ class PlanarPanel(QWidget):
     def read_settings(self,phase_mode=None):
         electrical=self.electrical.values()
         if phase_mode is not None:electrical["phase_mode"]=phase_mode
-        settings=FeedSettings(topology=self.topology.currentData(),**{key:float(edit.text().strip()) for key,edit in self.fields.items()},**electrical)
+        settings=FeedSettings(topology=self.topology.currentData(),**{key:float(edit.text().strip()) for key,edit in self.fields.items()},**electrical,**self._branch_delay_settings)
         settings.validate();return settings
 
     def mark_dirty(self):
@@ -172,7 +173,8 @@ class PlanarPanel(QWidget):
             if view=="ports":
                 columns=[("port","阵元"),("x_lambda","x/λ"),("y_lambda","y/λ"),("power_fraction","功率占比"),
                          ("target_phase_deg","目标相位°"),("applied_delay_deg","补偿电长度°"),("output_amplitude","输出幅度"),("output_phase_deg","输出相位°")]
-            else:columns=[("id","线段"),("parent","起点"),("child","终点"),("local_power_fraction","分配比"),("line_ohm","变换线Ω"),("outside_range","超范围")]
+            else:columns=[("id","线段"),("parent","起点"),("child","终点"),("local_power_fraction","分配比"),("line_ohm","变换线Ω"),
+                          ("electrical_length_deg","变换θ°"),("matched_delay_ohm","匹配段Ω"),("matched_delay_deg","支路延迟θ°"),("outside_range","超范围")]
             self.fill_table(self.table,columns,self.report["network"]["ports" if view=="ports" else "sections"])
             self.table.resizeColumnsToContents()
         else:
@@ -236,6 +238,7 @@ class PlanarPanel(QWidget):
             self.topology.setCurrentIndex(self.topology.findData(s.topology))
             for key,edit in self.fields.items():edit.setText(str(getattr(s,key)))
             self.electrical.apply(s)
+            self._branch_delay_settings = {key:getattr(s,key) for key in ('branch_delays_deg','branch_delay_elements','branch_delay_topology')}
         finally:self._changing=False
         self.mark_dirty()
 

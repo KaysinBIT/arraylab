@@ -102,6 +102,7 @@ class HistoryActions:
                 for key, edit in panel.fields.items():
                     edit.setText(str(getattr(settings, key)))
                 panel.electrical.apply(settings)
+                panel.apply_branch_delays(settings)
                 panel.history = records
                 panel.sequence = sequence
                 with QSignalBlocker(panel.history_selection):

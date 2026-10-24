@@ -13,7 +13,8 @@ from .configuration import MAX_BYTES, _unique_keys, _invalid_constant, parameter
 from .core import ArrayParameters
 from .dataio import write_pattern
 from .excitation import electrical_excitation, target_amplitudes, finite_number
-from .feed import FeedSettings, settings_payload, synthesize_impedance, write_text_atomic
+from .feed import (FeedSettings, settings_payload, settings_from_payload, normalized_branch_delays,
+                   synthesize_impedance, write_text_atomic)
 from .planar import PlanarParameters, geometry_payload, validate_planar_design, planar_amplitudes
 from .planar_pattern import field_uv, integrated_power
 from .parallel import ordered_map, requested_workers, check_cancelled, ComputationCancelled
@@ -54,6 +55,7 @@ def validate_study(parameters, settings, study):
         validate_planar_design(parameters, settings)
     elif isinstance(parameters, ArrayParameters):
         parameters.validate(); settings.validate()
+        normalized_branch_delays(settings, parameters.elements)
         target_amplitudes(parameters, settings)
         if settings.topology == "symmetric_series" and parameters.elements % 2:
             raise ValueError("对称串馈需要偶数端口。")
@@ -65,7 +67,7 @@ def validate_study(parameters, settings, study):
 def study_document(parameters, settings, study):
     validate_study(parameters, settings, study)
     planar = isinstance(parameters, PlanarParameters)
-    return {"format": "arraylab.electrical_study", "schema_version": 1,
+    return {"format": "arraylab.electrical_study", "schema_version": 2,
             "array_kind": "planar" if planar else "linear",
             "geometry": geometry_payload(parameters) if planar else asdict(parameters),
             "feed_settings": settings_payload(settings), "study_settings": asdict(study)}
@@ -88,16 +90,17 @@ def load_study_configuration(path):
     required = {"format", "schema_version", "array_kind", "geometry", "feed_settings", "study_settings"}
     if not isinstance(doc, dict) or set(doc) != required:
         raise ValueError("请选择完整批量评估设置，不能使用结果报告。")
-    if doc["format"] != "arraylab.electrical_study" or type(doc["schema_version"]) is not int or doc["schema_version"] != 1:
+    if doc["format"] != "arraylab.electrical_study" or type(doc["schema_version"]) is not int or doc["schema_version"] not in (1, 2):
         raise ValueError("未知批量评估格式或版本。")
     if doc["array_kind"] not in ("linear", "planar"):
         raise ValueError("未知阵列类型。")
     expected = asdict(PlanarParameters() if doc["array_kind"] == "planar" else ArrayParameters())
-    for key, fields in [("geometry", expected), ("feed_settings", asdict(FeedSettings())), ("study_settings", asdict(StudySettings()))]:
+    for key, fields in [("geometry", expected), ("study_settings", asdict(StudySettings()))]:
         if not isinstance(doc[key], dict) or set(doc[key]) != set(fields):
             raise ValueError(f"{key}字段缺失或含未知字段。")
     p = PlanarParameters(**doc["geometry"]) if doc["array_kind"] == "planar" else parameters_from_values(doc["geometry"])
-    s, study = FeedSettings(**doc["feed_settings"]), StudySettings(**doc["study_settings"])
+    s = settings_from_payload(doc["feed_settings"], doc["schema_version"] + 1)
+    study = StudySettings(**doc["study_settings"])
     validate_study(p, s, study)
     return p, s, study
 
@@ -163,7 +166,7 @@ def run_study(parameters, settings, study=StudySettings(), *, progress=None, can
              "曲线共用目标相干幅度和参考；显示/文本零点下限−300 dB。",
              "扫描每点更新理想补偿电长度，使用同一组阵元误差；不是误差统计、固定馈相扫频或器件宽带能力。",
              "扫描使用包含两端点的等间隔角度；平面阵切面φ保持原设置，可能不经过目标方向。"]
-    return {"format": "arraylab.electrical_study_result", "schema_version": 1, "app_version": __version__,
+    return {"format": "arraylab.electrical_study_result", "schema_version": 2, "app_version": __version__,
             "configuration": config, "runtime": {"numpy": np.__version__, "rng": type(np.random.default_rng(settings.seed).bit_generator).__name__,
                 "seed_rule": "same base seed and realization at every scan point"},
             "angles_deg": angles.tolist(), "cut_phi_deg": p.cut_phi_deg if planar else 0, "execution": execution,

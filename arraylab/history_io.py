@@ -209,7 +209,7 @@ def _validate_pattern(pattern, where):
 
 def _validate_feed(record):
     # Imports are pure scientific modules. No widgets or Qt are needed.
-    from .feed import FeedSettings
+    from .feed import settings_from_payload, normalized_branch_delays
     from .excitation import validate_electrical
     from .pointing import linear_pointing
 
@@ -217,14 +217,14 @@ def _validate_feed(record):
     _string(record["label"], "记录标签", 1024, nonempty=True)
     report = _object(record["report"], "馈电报告", {"format", "schema_version", "app_version",
                      "array_parameters", "settings", "root", "nodes", "sections", "ports", "metrics", "notes", "electrical"})
-    if report["format"] != "arraylab.feed_impedance_result" or type(report["schema_version"]) is not int or report["schema_version"] != 2:
+    if report["format"] != "arraylab.feed_impedance_result" or type(report["schema_version"]) is not int or report["schema_version"] not in (2, 3):
         _fail("馈电报告", "不支持的格式或版本；需要完整的电气结果报告。")
     _string(report["app_version"], "应用版本", 128, nonempty=True)
     parameters = _parameters(report["array_parameters"], "馈电阵列参数")
     n = parameters.elements
-    settings_values = _object(report["settings"], "馈电设置", {f.name for f in fields(FeedSettings)}, exact=True)
-    settings = FeedSettings(**settings_values)
-    settings.validate()
+    settings = settings_from_payload(report["settings"], report["schema_version"])
+    branch_delays = normalized_branch_delays(settings, n)
+    has_delays = report["schema_version"] == 3
     validate_electrical(settings, parameters)
     symmetric = settings.topology == "symmetric_series"
     if symmetric and n % 2:
@@ -263,10 +263,14 @@ def _validate_feed(record):
     sections = _list(report["sections"], "变换线", 1, 2 * n)
     if len(sections) != len(nodes) - 1:
         _fail("馈电网络", "线段与节点数不匹配。")
+    if has_delays and len(sections) != len(branch_delays):
+        _fail("馈电网络", "支路数量与延迟配置不一致。")
     line_ids, children = set(), set()
     section_keys = {"id", "parent", "child", "kind", "downstream_ports", "local_power_fraction",
                     "parent_equivalent_ohm", "child_equivalent_ohm", "branch_input_ohm", "line_ohm",
                     "electrical_length_deg", "outside_range"}
+    delay_section_keys = {"matched_delay_deg", "matched_delay_ohm", "total_electrical_length_deg"}
+    path_lengths = {root: (0.0, 0.0)}
     for index, line in enumerate(sections, 1):
         _object(line, "变换线", section_keys)
         name = _string(line["id"], "线段编号", 128, nonempty=True)
@@ -286,10 +290,29 @@ def _validate_feed(record):
             _number(line[key], key, low=1e-300)
         _number(line["electrical_length_deg"], "线段电长度")
         _boolean(line["outside_range"], "阻抗超范围标记")
+        if has_delays:
+            _object(line, "支路匹配延迟", delay_section_keys)
+            for key in delay_section_keys:
+                _number(line[key], "支路" + key, low=0)
+            if parent not in path_lengths:
+                _fail("变换线", "支路顺序须从输入到负载。")
+            expected = {"electrical_length_deg": 90.0, "matched_delay_deg": branch_delays[index - 1],
+                        "matched_delay_ohm": line["child_equivalent_ohm"],
+                        "total_electrical_length_deg": 90.0 + branch_delays[index - 1]}
+            if any(not math.isclose(line[key], value, rel_tol=1e-10, abs_tol=1e-8) for key, value in expected.items()):
+                _fail("支路匹配延迟", "电长度、阻抗或配置与保存的支路不一致。")
+            if not math.isclose(line["matched_delay_ohm"], node_map[child]["equivalent_ohm"], rel_tol=1e-10, abs_tol=1e-8):
+                _fail("支路匹配延迟", "延迟线阻抗须等于下游节点等效阻抗。")
+            transform, matched = path_lengths[parent]
+            path_lengths[child] = (transform + 90.0, matched + line["matched_delay_deg"])
+        elif delay_section_keys.intersection(line):
+            _fail("馈电报告", "旧版报告不能包含新版支路延迟字段。")
     port_keys = {"port", "load_ohm", "power_fraction", "quarter_wave_sections", "network_phase_deg",
                  "target_amplitude", "target_phase_deg", "phase_offset_deg", "desired_delay_deg", "applied_delay_deg",
                  "matched_line_wavelengths", "compensation_line_ohm", "output_amplitude", "output_phase_deg",
                  "amplitude_error_db", "phase_error_deg", "failed", "output_real", "output_imag"}
+    delay_port_keys = {"transform_path_deg", "branch_delay_path_deg", "network_electrical_length_deg",
+                       "total_electrical_length_deg"}
     ports = _list(report["ports"], "端口", n, n)
     for index, port in enumerate(ports, 1):
         _object(port, "端口", port_keys)
@@ -301,6 +324,36 @@ def _validate_feed(record):
         for key in port_keys - {"port", "quarter_wave_sections", "failed"}:
             _number(port[key], "端口" + key, nullable=key == "output_phase_deg")
         _boolean(port["failed"], "失效标记")
+        if has_delays:
+            _object(port, "端口路径电长度", delay_port_keys)
+            for key in delay_port_keys:
+                _number(port[key], "端口" + key, low=0)
+            if f"P{index}" not in path_lengths:
+                _fail("端口路径", "未连接至输入端。")
+            transform, matched = path_lengths[f"P{index}"]
+            expected = {"transform_path_deg": transform, "branch_delay_path_deg": matched,
+                        "network_electrical_length_deg": transform + matched,
+                        "network_phase_deg": -(transform + matched),
+                        "quarter_wave_sections": node["depth"],
+                        "total_electrical_length_deg": transform + matched + port["applied_delay_deg"]}
+            if any(not math.isclose(port[key], value, rel_tol=1e-10, abs_tol=1e-8) for key, value in expected.items()):
+                _fail("端口路径", "支路累积电长度或相位与保存结果不一致。")
+            desired = 0.0 if settings.phase_mode == "none" else (port["network_phase_deg"] - port["target_phase_deg"]) % 360
+            if math.isclose(desired, 360.0, rel_tol=0, abs_tol=1e-9):
+                desired = 0.0
+            applied = desired
+            if settings.phase_bits:
+                step = 360.0 / 2**settings.phase_bits
+                applied = (math.floor(desired / step + .5) % 2**settings.phase_bits) * step
+            if (not math.isclose(port["desired_delay_deg"], desired, rel_tol=0, abs_tol=1e-8) or
+                    not math.isclose(port["applied_delay_deg"], applied, rel_tol=0, abs_tol=1e-8)):
+                _fail("端口路径", "末端补偿与网络相位或量化设置不一致。")
+            expected_phase = (port["network_phase_deg"] - applied + port["phase_error_deg"] + 180) % 360 - 180
+            if not port["failed"] and (port["output_phase_deg"] is None or
+                    abs((port["output_phase_deg"] - expected_phase + 180) % 360 - 180) > 1e-8):
+                _fail("端口路径", "输出相位与支路及末端补偿不一致。")
+        elif delay_port_keys.intersection(port):
+            _fail("馈电报告", "旧版报告不能包含新版路径电长度字段。")
         if symmetric:
             if port.get("arm") not in ("left", "right"):
                 _fail("端口", "缺少有效的对称支臂标识。")
@@ -317,6 +370,11 @@ def _validate_feed(record):
     if any(name not in line_ids for name in metrics["out_of_range_sections"]):
         _fail("网络指标", "引用未知线段。")
     _boolean(metrics["equal_port_phase_at_design_frequency"], "端口等相标记")
+    if has_delays:
+        equal = bool(np.allclose(np.exp(1j * np.deg2rad([port["network_phase_deg"] for port in ports])),
+                                 np.exp(1j * np.deg2rad(ports[0]["network_phase_deg"])), rtol=0, atol=1e-10))
+        if metrics["equal_port_phase_at_design_frequency"] != equal:
+            _fail("网络指标", "端口等相标记与支路路径不一致。")
     _strings(report["notes"], "报告说明")
     electrical = _object(report["electrical"], "电气结果", {"metrics", "patterns"})
     electrical_keys = {"phase_mode", "target_scan_deg", "weighting", "normalization", "output_to_nominal_power_ratio",

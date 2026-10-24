@@ -153,7 +153,7 @@ def test_strict_feed_configuration(change, tmp_path):
     config = tmp_path / "feed.json"
     save_feed_configuration(config, ArrayParameters(), FeedSettings())
     doc = json.loads(config.read_text(encoding="utf-8"))
-    if change == "version": doc["schema_version"] = 3
+    if change == "version": doc["schema_version"] = 999
     if change == "boolean_version": doc["schema_version"] = True
     if change == "missing": del doc["settings"]["input_ohm"]
     if change == "unknown": doc["array_parameters"]["unknown"] = 1

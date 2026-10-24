@@ -46,7 +46,7 @@ D(\theta,\varphi)=\frac{|F(\theta,\varphi)|^2}{(1/4\pi)\int|F|^2\,d\Omega}.
 
 ## 配置、无头与导出
 
-设置格式为`arraylab.electrical_study`、schema_version=1，包含阵列类型、全部几何参数、完整馈电设置及扫描设置。未知/缺失字段、未知版本、重复JSON键和非有限值会被拒绝；结果报告不能当成输入方案。
+当前开发版设置格式为`arraylab.electrical_study`、schema_version=2，包含阵列类型、全部几何参数、完整馈电设置及扫描设置，并兼容旧schema 1。保存的支路延迟在各扫描点保持，末端补偿根据所选模式重新计算。未知/缺失字段、未知版本、重复JSON键和非有限值会被拒绝；结果报告不能当成输入方案。
 
 ```powershell
 ArrayLab-cli.exe --study scan --feed-config examples/feed-electrical.json --scan-start -60 --scan-stop 60 --study-count 13 --output-dir results/scan-line --plot all

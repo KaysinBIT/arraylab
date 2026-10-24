@@ -205,7 +205,7 @@ def test_broken_calculated_snapshot_rejected(field, value, tmp_path):
 
 
 @pytest.mark.parametrize("change", [
-    lambda r: r.update(schema_version=3),
+    lambda r: r.update(schema_version=999),
     lambda r: r.pop("nodes"),
     lambda r: r["nodes"][0].update(depth="0"),
     lambda r: r["nodes"][1].update(id="<unexpected-markup>"),

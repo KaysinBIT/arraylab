@@ -3,7 +3,7 @@
 This is an impedance network, not an isolated Wilkinson divider or an EM model.
 Power ratios follow the target amplitude taper into equal resistive loads.
 """
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import csv
 import json
 import math
@@ -18,11 +18,12 @@ from .dataio import write_pattern
 from .excitation import target_amplitudes, validate_electrical, electrical_excitation, excitation_csv
 
 LEGACY_SETTINGS = {"topology", "input_ohm", "junction_ohm", "load_ohm", "min_line_ohm", "max_line_ohm"}
+BRANCH_DELAY_FIELDS = {"branch_delays_deg", "branch_delay_elements", "branch_delay_topology"}
 
 
 def settings_payload(settings):
     values = asdict(settings)
-    for name in ("custom_amplitudes", "custom_phases_deg", "failed_ports"):
+    for name in ("custom_amplitudes", "custom_phases_deg", "failed_ports", "branch_delays_deg"):
         values[name] = list(values[name])
     return values
 
@@ -46,9 +47,12 @@ class FeedSettings:
     phase_error_deg: float = 0.0
     failed_ports: tuple = ()
     seed: int = 0
+    branch_delays_deg: tuple = ()
+    branch_delay_elements: int = 0
+    branch_delay_topology: str = ""
 
     def __post_init__(self):
-        for name in ("custom_amplitudes", "custom_phases_deg", "failed_ports"):
+        for name in ("custom_amplitudes", "custom_phases_deg", "failed_ports", "branch_delays_deg"):
             if isinstance(getattr(self, name), list):
                 object.__setattr__(self, name, tuple(getattr(self, name)))
 
@@ -65,11 +69,78 @@ class FeedSettings:
         if self.min_line_ohm >= self.max_line_ohm:
             raise ValueError("提示范围的下限必须小于上限。")
         validate_electrical(self)
+        if not isinstance(self.branch_delays_deg, (tuple, list)):
+            raise ValueError("支路匹配延迟须为完整列表。")
+        if type(self.branch_delay_elements) is not int or not 0 <= self.branch_delay_elements <= 200:
+            raise ValueError("支路延迟绑定阵元数须为0–200的整数。")
+        if not isinstance(self.branch_delay_topology, str):
+            raise ValueError("支路延迟绑定拓扑须为字符串。")
+        if not self.branch_delays_deg:
+            if self.branch_delay_elements != 0 or self.branch_delay_topology != "":
+                raise ValueError("空支路延迟不应包含阵元数或拓扑绑定。")
+        else:
+            n = self.branch_delay_elements
+            if not 1 <= n <= 200 or self.branch_delay_topology != self.topology:
+                raise ValueError("支路延迟的阵元数或拓扑绑定不匹配，请清空并重新设置。")
+            if len(self.branch_delays_deg) != (1 if n == 1 else 2 * n - 2):
+                raise ValueError("支路延迟须按T1…T末完整提供，每条支路一个数值。")
+            for value in self.branch_delays_deg:
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 3600:
+                    raise ValueError("支路匹配延迟须为0–3600°的有限数值。")
+
+
+def clear_branch_delays(settings):
+    """Explicitly discard topology-bound branch assignments, preserving other inputs."""
+    return replace(settings, branch_delays_deg=(), branch_delay_elements=0, branch_delay_topology="")
+
+
+def normalized_branch_delays(settings, elements):
+    """Return source-to-load T1…Tm delays, rejecting stale element/topology bindings."""
+    settings.validate()
+    if type(elements) is not int or not 1 <= elements <= 200:
+        raise ValueError("支路延迟需要1–200个阵元。")
+    if settings.branch_delays_deg:
+        if settings.branch_delay_elements != elements:
+            raise ValueError("阵元数已变化，旧支路延迟不能套用；请清空并重新设置。")
+        return tuple(float(value) for value in settings.branch_delays_deg)
+    return (0.0,) * (1 if elements == 1 else 2 * elements - 2)
+
+
+def with_branch_delays(settings, elements, delays):
+    """Bind a complete delay vector to the current network; empty means reset."""
+    if not isinstance(delays, (tuple, list)):
+        raise ValueError("支路匹配延迟须为完整列表。")
+    result = (replace(settings, branch_delays_deg=tuple(delays), branch_delay_elements=elements,
+                      branch_delay_topology=settings.topology) if delays else clear_branch_delays(settings))
+    normalized_branch_delays(result, elements)
+    return result
+
+
+def settings_from_payload(values, schema_version):
+    """Strict versioned migration, shared by feed, planar, study and history readers."""
+    if type(schema_version) is not int:
+        raise ValueError("不支持的馈电设置版本。")
+    expected = set(asdict(FeedSettings()))
+    if schema_version == 1:
+        expected = LEGACY_SETTINGS
+    elif schema_version == 2:
+        expected -= BRANCH_DELAY_FIELDS
+    elif schema_version != 3:
+        raise ValueError("不支持的馈电设置版本。")
+    if not isinstance(values, dict) or set(values) != expected:
+        raise ValueError("馈电设置字段缺失或含未知字段。")
+    migrated = dict(values)
+    if schema_version == 1:
+        migrated["phase_mode"] = "none"
+    result = FeedSettings(**migrated)
+    result.validate()
+    return result
 
 
 def validate_feed_inputs(parameters, settings):
     parameters.validate()
     settings.validate()
+    normalized_branch_delays(settings, parameters.elements)
     if settings.topology == "symmetric_series" and parameters.elements % 2:
         raise ValueError("1分2后对称串馈需要2–200个偶数阵元；奇数阵元的中心馈点结构尚未定义。")
     target_amplitudes(parameters, settings)
@@ -145,29 +216,43 @@ def synthesize_impedance(parameters, settings=FeedSettings(), amplitude_override
     sections.sort(key=lambda item: (node_order[item["parent"]], node_order[item["child"]]))
     for index, section in enumerate(sections, 1):
         section["id"] = f"T{index}"
+    delays = normalized_branch_delays(settings, n)
+    paths = {root: (0.0, 0.0)}
+    for section, delay in zip(sections, delays, strict=True):
+        section.update(matched_delay_deg=delay, matched_delay_ohm=section["child_equivalent_ohm"],
+                       total_electrical_length_deg=section["electrical_length_deg"] + delay)
+        transform, matched = paths[section["parent"]]
+        paths[section["child"]] = (transform + section["electrical_length_deg"], matched + delay)
     ports.sort(key=lambda item: item["port"])
+    for port in ports:
+        transform, matched = paths[f"P{port['port']}"]
+        port.update(transform_path_deg=transform, branch_delay_path_deg=matched,
+                    network_electrical_length_deg=transform + matched,
+                    network_phase_deg=-(transform + matched))
     line_values = [item["line_ohm"] for item in sections]
     out_of_range = [item["id"] for item in sections if item["outside_range"]]
-    phases_equal = len({port["quarter_wave_sections"] % 4 for port in ports}) == 1
+    phases_equal = bool(np.allclose(np.exp(1j * np.deg2rad([port["network_phase_deg"] for port in ports])),
+                                   np.exp(1j * np.deg2rad(ports[0]["network_phase_deg"])), rtol=0, atol=1e-10))
     notes = [
         "按目标幅度平方分配功率、同一纯电阻负载；50 Ω是可修改初值，不代表实测天线阻抗。",
         "各变换线在所设频率处均为90°电长度；节点理想、传输线无损，不计互耦和不连续效应。",
+        "每条支路在90°变换线之后串接匹配延迟段，其阻抗等于下游等效阻抗；仅增加相位延迟，保持理想功率分配及输入匹配。",
         "这是T型分配网络的阻抗综合，不提供Wilkinson隔离电阻，也不承诺输出隔离、带宽或实测匹配。",
-        "阻抗图仅表示功分主干；端口匹配相移与复激励见电气结果。物理尺寸暂缓，连接图不按比例绘制。",
+        "连接图分别标注变换段T、支路匹配延迟D和端口补偿C；复激励见电气结果。物理尺寸暂缓，连接图不按比例绘制。",
         "阻抗提示范围由用户设置，只用于筛查；范围内不代表具体工艺可制造。",
     ]
     if settings.topology == "series":
         notes.append("串行定义：沿主干逐级T型抽头，抽头和续传支路各带λ/4变换线；末端接最后一个负载，无独立终端电阻。")
     if settings.topology == "symmetric_series":
         notes.append("输入先1:1等分，两臂各N/2端口并从中心向外串馈。端口P1…PN按阵列顺序编号，镜像配对为Pi与P(N+1−i)。仅支持偶数阵元。")
-        notes.append("首级及两臂均使用理想T型λ/4变换线；左右镜像端口路径相位相同，不表示不同级的全部端口已等相。")
+        notes.append("首级及两臂均使用理想T型λ/4变换线；镜像路径仅在相应支路延迟相同时等相，不表示不同级的全部端口已等相。")
     if not phases_equal:
-        notes.append("原始功分路径级数不同，未经补偿时端口不等相；电气结果单独记录补偿与输出激励。")
+        notes.append("功分路径的变换线和支路延迟合计后端口不等相；电气结果单独记录末端补偿与输出激励。")
     else:
         notes.append("原始功分路径在中心频点端口等相；目标扫描相位及端口补偿见电气结果。")
     if out_of_range:
         notes.append(f"{len(out_of_range)}条变换线超出所设阻抗提示范围；需调整拓扑、节点阻抗或后续实现方式。")
-    report = {"format": "arraylab.feed_impedance_result", "schema_version": 2, "app_version": __version__,
+    report = {"format": "arraylab.feed_impedance_result", "schema_version": 3, "app_version": __version__,
             "array_parameters": asdict(parameters), "settings": settings_payload(settings), "root": root,
             "nodes": nodes, "sections": sections, "ports": ports,
             "metrics": {"ports": n, "junctions": max(n - 1, 0), "transformers": len(sections),
@@ -202,7 +287,7 @@ def design_feed(parameters, settings=FeedSettings()):
 def configuration_document(parameters, settings):
     parameters_from_values(asdict(parameters))
     validate_feed_inputs(parameters, settings)
-    return {"format": "arraylab.feed_impedance", "schema_version": 2,
+    return {"format": "arraylab.feed_impedance", "schema_version": 3,
             "array_parameters": asdict(parameters), "settings": settings_payload(settings)}
 
 
@@ -217,18 +302,12 @@ def load_feed_configuration(path):
         raise ValueError("馈电设置文件嵌套过深。") from exc
     if not isinstance(doc, dict) or set(doc) != {"format", "schema_version", "array_parameters", "settings"}:
         raise ValueError("请选择完整的馈电设置文件feed-config.json，不能使用结果报告。")
-    if doc["format"] != "arraylab.feed_impedance" or type(doc["schema_version"]) is not int or doc["schema_version"] not in (1, 2):
+    if doc["format"] != "arraylab.feed_impedance" or type(doc["schema_version"]) is not int or doc["schema_version"] not in (1, 2, 3):
         raise ValueError("不支持的馈电设置格式或版本。")
     if not isinstance(doc["array_parameters"], dict) or set(doc["array_parameters"]) != FIELDS:
         raise ValueError("馈电设置须完整包含6项阵列参数。")
-    expected = LEGACY_SETTINGS if doc["schema_version"] == 1 else set(asdict(FeedSettings()))
-    if not isinstance(doc["settings"], dict) or set(doc["settings"]) != expected:
-        raise ValueError("馈电设置字段缺失或含未知字段。")
     p = parameters_from_values(doc["array_parameters"])
-    values = dict(doc["settings"])
-    if doc["schema_version"] == 1:
-        values["phase_mode"] = "none"
-    settings = FeedSettings(**values)
+    settings = settings_from_payload(doc["settings"], doc["schema_version"])
     validate_feed_inputs(p, settings)
     return p, settings
 

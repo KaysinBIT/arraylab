@@ -2,6 +2,7 @@
 from dataclasses import asdict
 import json
 import sys
+import time
 
 import numpy as np
 from PySide6.QtCore import QEventLoop, QTimer, Qt, QPoint
@@ -36,15 +37,34 @@ def exercise_sparse(app, window, output, report, check):
 
     def wait_finished():
         errors=[]
+        started=time.monotonic();worker=sparse.thread;job_kind=getattr(sparse,'_job_kind',None);timed_out=[]
         loop=QEventLoop();poll=QTimer();deadline=QTimer();deadline.setSingleShot(True)
         def check_state():
             modal=QApplication.activeModalWidget()
             if isinstance(modal,QMessageBox):errors.append(modal.text());modal.accept()
             if sparse.thread is None:loop.quit()
         poll.timeout.connect(check_state);deadline.timeout.connect(loop.quit)
+        deadline.timeout.connect(lambda:timed_out.append(True))
         poll.start(30);deadline.start(65000)
         if sparse.thread is not None:loop.exec()
         poll.stop();deadline.stop()
+        if sparse.thread is not None or errors or sparse._last_error:
+            diagnostic={'check_index':len(report['checks']),'job_kind':job_kind,
+                        'elapsed_seconds':time.monotonic()-started,'deadline_reached':bool(timed_out),
+                        'thread_is_none':sparse.thread is None,'busy':sparse._busy,
+                        'worker_error':getattr(worker,'error',None),
+                        'worker_cancelled':getattr(worker,'cancelled',None),
+                        'last_error':sparse._last_error,'state':sparse.state.text(),
+                        'modal_errors':errors,'selected_row':sparse.table.currentRow(),
+                        'weight_method':sparse.weight_method.currentData()}
+            try:diagnostic['worker_running']=worker.isRunning() if worker is not None else None
+            except RuntimeError:diagnostic['worker_running']='Qt object already deleted'
+            screenshot=output/f"sparse-worker-failure-{len(report['checks'])}.png"
+            try:
+                diagnostic['screenshot_saved']=window.grab().save(str(screenshot))
+                diagnostic['screenshot']=screenshot.name
+            except Exception as exc:diagnostic['screenshot_error']=f'{type(exc).__name__}: {exc}'
+            report.setdefault('sparse_worker_failures',[]).append(diagnostic)
         check(sparse.thread is None and not errors and not sparse._last_error,
               'sparse_worker_completes_without_error_' + str(len(report['checks'])) + (' '+str(errors) if errors else ''))
 

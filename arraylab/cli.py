@@ -52,6 +52,10 @@ def parser(planar=False):
     p.add_argument("--feed-sidelobe-db", type=float, help="Chebyshev/Taylor sidelobe parameter, positive dB")
     p.add_argument("--feed-taylor-nbar", type=int, help="Taylor near-in sidelobe count")
     p.add_argument("--feed-excitation", type=Path, help="Strict element,amplitude,phase_deg CSV; phase is an additional target offset")
+    branch_group = p.add_mutually_exclusive_group()
+    branch_group.add_argument("--feed-branch-delays", type=Path, help="Complete section,delay_deg CSV for matched delays after each 90-degree transformer")
+    branch_group.add_argument("--clear-feed-branch-delays", dest="feed_clear_branch_delays", action="store_true", default=None,
+                              help="Clear saved branch delay values and their geometry/topology binding")
     p.add_argument("--feed-phase-bits", type=int, help="0=continuous; 1..12 phase-control bits")
     p.add_argument("--feed-amplitude-error-db", type=float, help="Gaussian amplitude error standard deviation in dB")
     p.add_argument("--feed-phase-error-deg", type=float, help="Gaussian phase error standard deviation in degrees")
@@ -246,7 +250,7 @@ def emit(value, stream):
 
 
 def feed_settings_from_args(args, parameters, base=None):
-    from .feed import FeedSettings
+    from .feed import FeedSettings, with_branch_delays, clear_branch_delays
     values = asdict(base or FeedSettings())
     if args.feed_network:
         values["topology"] = args.feed_network
@@ -262,6 +266,12 @@ def feed_settings_from_args(args, parameters, base=None):
         amplitude, phase = read_excitation_csv(args.feed_excitation, parameters.elements)
         values.update(weighting="custom", custom_amplitudes=amplitude, custom_phases_deg=phase)
     settings = FeedSettings(**values)
+    if getattr(args, 'feed_clear_branch_delays', None):
+        settings = clear_branch_delays(settings)
+    if getattr(args, 'feed_branch_delays', None) is not None:
+        from .branch_delay_io import read_branch_delays_csv
+        settings = with_branch_delays(clear_branch_delays(settings), parameters.elements,
+                                     read_branch_delays_csv(args.feed_branch_delays, parameters.elements))
     settings.validate()
     return settings
 

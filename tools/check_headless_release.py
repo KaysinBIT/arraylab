@@ -195,6 +195,14 @@ def main():
             actual = json.loads(run(flag, smoke / f"pointing-{kind}.json").stdout)[key]
             assert same_numbers(actual, gui_report["pointing_results"][kind])
             checks.append(f"visible_{kind}_pointing_controls_save_and_headless_EXE_full_report_match")
+        branch_directory = work / 'cli-branch-lengths'
+        branch = json.loads(run('--feed-config', smoke/'branch-length-settings.json',
+                                '--output-dir', branch_directory).stdout)['feed_network']
+        assert same_numbers(branch, gui_report['branch_length_result'])
+        assert branch['sections'][0]['matched_delay_deg'] == 405
+        svg = (branch_directory/'feed-network.svg').read_text(encoding='utf-8')
+        assert '405 deg' in svg and 'D1:' in svg and 'C1:' in svg
+        checks.append('matched_branch_delay_GUI_CLI_complete_report_and_SVG_match')
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

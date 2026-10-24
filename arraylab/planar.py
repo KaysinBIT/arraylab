@@ -14,7 +14,8 @@ from .core import ArrayParameters
 from .configuration import MAX_BYTES, _unique_keys, _invalid_constant
 from .dataio import write_pattern
 from .excitation import finite_number, target_amplitudes, electrical_excitation
-from .feed import FeedSettings, settings_payload, synthesize_impedance, write_text_atomic
+from .feed import (FeedSettings, settings_payload, settings_from_payload, normalized_branch_delays,
+                   synthesize_impedance, write_text_atomic)
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,7 @@ def planar_amplitudes(parameters, settings):
 
 def validate_planar_design(parameters, settings):
     parameters.validate(); settings.validate()
+    normalized_branch_delays(settings, parameters.elements)
     if settings.topology == "symmetric_series" and parameters.elements % 2:
         raise ValueError("对称串馈需要偶数端口。")
     planar_amplitudes(parameters, settings)
@@ -146,7 +148,7 @@ def read_coordinates_csv(path):
 
 def save_planar_configuration(path, parameters, settings):
     validate_planar_design(parameters, settings)
-    document = {"format": "arraylab.planar_electrical", "schema_version": 1,
+    document = {"format": "arraylab.planar_electrical", "schema_version": 2,
                 "geometry": geometry_payload(parameters), "settings": settings_payload(settings)}
     write_text_atomic(path, json.dumps(document, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
 
@@ -162,13 +164,12 @@ def load_planar_configuration(path):
         raise ValueError("平面阵设置嵌套过深。") from exc
     if not isinstance(doc, dict) or set(doc) != {"format", "schema_version", "geometry", "settings"}:
         raise ValueError("请选择完整平面阵设置，不能使用结果报告。")
-    if doc["format"] != "arraylab.planar_electrical" or type(doc["schema_version"]) is not int or doc["schema_version"] != 1:
+    if doc["format"] != "arraylab.planar_electrical" or type(doc["schema_version"]) is not int or doc["schema_version"] not in (1, 2):
         raise ValueError("未知平面阵格式或版本。")
     if not isinstance(doc["geometry"], dict) or set(doc["geometry"]) != set(asdict(PlanarParameters())):
         raise ValueError("几何字段缺失或含未知字段。")
-    if not isinstance(doc["settings"], dict) or set(doc["settings"]) != set(asdict(FeedSettings())):
-        raise ValueError("电气字段缺失或含未知字段。")
-    p, s = PlanarParameters(**doc["geometry"]), FeedSettings(**doc["settings"])
+    p = PlanarParameters(**doc["geometry"])
+    s = settings_from_payload(doc["settings"], doc["schema_version"] + 1)
     validate_planar_design(p, s)
     return p, s
 
@@ -200,7 +201,7 @@ def design_planar(parameters, settings=FeedSettings(), *, workers=None):
                                    work_units=3*parameters.elements*(61*121+math.ceil(180/parameters.step_deg)))
     patterns = dict(zip(names, values)); execution['scope'] = 'planar_patterns'
     from .pointing import planar_pointing
-    return {"format": "arraylab.planar_electrical_result", "schema_version": 1, "app_version": __version__,
+    return {"format": "arraylab.planar_electrical_result", "schema_version": 2, "app_version": __version__,
             "geometry": geometry_payload(parameters), "settings": settings_payload(settings), "network": network, "execution": execution,
             "electrical": {"metrics": metrics, "patterns": patterns, "pointing": planar_pointing(parameters, settings, patterns)},
             "notes": ["各向同性点源、z=0平面、无互耦；方向性为全空间积分，不是增益或全波结果。",

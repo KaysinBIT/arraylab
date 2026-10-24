@@ -29,6 +29,7 @@ def exercise_workflow(app, window, output, report, check):
         window.sparse_panel.bundle, window.sequence, window.selection.currentIndex(),
     )
     probe = None
+    watcher = None
     warnings = []
     details = {"qt_platform": app.platformName(), "screenshots": [],
                "sparse_busy_check": "UI state machine; no synthesis started",
@@ -93,7 +94,7 @@ def exercise_workflow(app, window, output, report, check):
 
         def dismiss_unexpected_message():
             modal = QApplication.activeModalWidget()
-            if isinstance(modal, QMessageBox):
+            if isinstance(modal, QMessageBox) and probe.isAncestorOf(modal):
                 warnings.append(modal.text())
                 modal.accept()
 
@@ -276,6 +277,11 @@ def exercise_workflow(app, window, output, report, check):
         check(not warnings, "workflow_no_unexpected_modal_warnings")
         report["workflow"] = details
     finally:
+        # Closing a probe does not synchronously delete its child QTimer.
+        # Keep this guard from consuming later exercises' validation dialogs.
+        if watcher is not None:
+            watcher.stop()
+            watcher.timeout.disconnect()
         if probe is not None:
             if probe.sparse_panel.thread is None:
                 probe.sparse_panel.set_busy(False)

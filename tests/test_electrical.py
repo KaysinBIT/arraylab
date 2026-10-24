@@ -193,7 +193,7 @@ def test_quantization_and_all_failed_are_explicit(tmp_path):
     np.testing.assert_allclose(angles, out["angles_deg"], rtol=0, atol=1e-9)
 
 
-def test_legacy_v1_read_as_uncompensated_and_v2_roundtrip(tmp_path):
+def test_legacy_v1_read_as_uncompensated_and_current_roundtrip(tmp_path):
     path = tmp_path / "legacy.json"
     defaults = asdict(FeedSettings())
     path.write_text(json.dumps({"format":"arraylab.feed_impedance","schema_version":1,
@@ -202,7 +202,7 @@ def test_legacy_v1_read_as_uncompensated_and_v2_roundtrip(tmp_path):
     assert s.phase_mode == "none" and s.weighting == "uniform"
     s = replace(s,phase_mode="scan",weighting="taylor",phase_bits=5,failed_ports=(2,),seed=33)
     save_feed_configuration(path,p,s)
-    assert json.loads(path.read_text())["schema_version"] == 2
+    assert json.loads(path.read_text())["schema_version"] == 3
     assert load_feed_configuration(path) == (p,s)
 
 

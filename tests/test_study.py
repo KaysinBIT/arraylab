@@ -169,14 +169,15 @@ def test_configuration_headless_export_replay_and_failure_protection(planar,tmp_
 def test_strict_config_rejects_invalid_document(change,tmp_path):
     path=tmp_path/'scan.json';save_study_configuration(path,ArrayParameters(),FeedSettings(),StudySettings())
     doc=json.loads(path.read_text(encoding='utf-8'))
-    if change=='version':doc['schema_version']=2
+    if change=='version':doc['schema_version']=999
     elif change=='unknown':doc['study_settings']['unknown']=0
     elif change=='missing':del doc['feed_settings']['seed']
     elif change=='bool':doc['study_settings']['count']=True
     elif change=='kind':doc['array_kind']='spherical'
     elif change=='report':doc=run_study(ArrayParameters(),FeedSettings(),StudySettings(count=2))
     raw=json.dumps(doc)
-    if change=='duplicate':raw=raw.replace('"schema_version": 1','"schema_version": 1, "schema_version": 1')
+    if change=='duplicate':
+        version=doc['schema_version'];raw=raw.replace(f'"schema_version": {version}',f'"schema_version": {version}, "schema_version": {version}')
     path.write_text(raw,encoding='utf-8')
     with pytest.raises(ValueError):load_study_configuration(path)
 

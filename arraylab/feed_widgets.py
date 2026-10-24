@@ -15,8 +15,8 @@ from PySide6.QtWidgets import (
     QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QAbstractItemView,
     QHeaderView, QFileDialog, QMessageBox, QGraphicsScene, QGraphicsView, QCheckBox, QInputDialog,
 )
-from .feed import FeedSettings, design_feed, settings_payload, save_feed_configuration, load_feed_configuration, export_feed_directory, write_text_atomic
-from .feed_diagram import diagram_svg
+from .feed import FeedSettings, design_feed, settings_payload, save_feed_configuration, load_feed_configuration, export_feed_directory, write_text_atomic, synthesize_impedance
+from .feed_diagram import diagram_svg, section_lengths, port_lengths
 from .electrical_widgets import ElectricalControls
 from .widgets import PatternPlot, PatternSet
 
@@ -41,9 +41,9 @@ class NetworkView(QGraphicsView):
         self.scene().addItem(item)
         self.scene().setSceneRect(item.boundingRect())
         n = report["metrics"]["ports"]
-        self.focus_point = (400, 180 if report["settings"]["topology"] == "series" else 100 + (n - 1) * 45)
+        self.focus_point = (430, 180 if report["settings"]["topology"] == "series" else 120 + (n - 1) * 70)
         if report["settings"]["topology"] == "symmetric_series":
-            self.focus_point = (730, 180)
+            self.focus_point = (1400, 250)
         self.readable_view()
 
     def readable_view(self):
@@ -71,6 +71,9 @@ class FeedPanel(QWidget):
         self.history = []
         self.sequence = 0
         self._compact_mode = None
+        self.branch_delays_deg = ()
+        self.branch_delay_elements = 0
+        self.branch_delay_topology = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 6)
         intro = QLabel("按目标幅度分配功率 · 纯电阻负载 · 匹配相位补偿。阵列参数取右侧当前输入。")
@@ -100,6 +103,10 @@ class FeedPanel(QWidget):
             grid.addWidget(QLabel(label), row, col); grid.addWidget(edit, row, col + 1)
             edit.textChanged.connect(self.mark_dirty)
         self.topology.currentIndexChanged.connect(self.mark_dirty)
+        self.branch_delay_button = QPushButton("支路电长度…（全部为0°）")
+        self.branch_delay_button.setAccessibleName("编辑支路匹配延迟电长度")
+        self.branch_delay_button.clicked.connect(self.edit_branch_delays)
+        grid.addWidget(self.branch_delay_button, 3, 0, 1, 4)
         grid.setColumnStretch(1, 1); grid.setColumnStretch(3, 1)
         self.settings_tabs.addTab(impedance_page, "阻抗与拓扑")
         self.electrical = ElectricalControls(self, self.settings_tabs)
@@ -156,7 +163,7 @@ class FeedPanel(QWidget):
             table.setAlternatingRowColors(True)
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.result_tabs.addTab(self.sections, "支路阻抗")
+        self.result_tabs.addTab(self.sections, "支路参数")
         diagram_page = QWidget(); dl = QVBoxLayout(diagram_page); dl.setContentsMargins(0, 0, 0, 0)
         controls = QHBoxLayout()
         hint = QLabel("滚轮缩放，拖动平移；点击适配查看全图。连接图不按尺寸绘制。")
@@ -199,6 +206,7 @@ class FeedPanel(QWidget):
         self.target_theta.textChanged.connect(self.edit_target_theta)
         self.window.inputs["scan_deg"].textChanged.connect(self.sync_target_theta)
         self.window.phase_mode.currentIndexChanged.connect(self.sync_target_theta)
+        self.window.inputs["elements"].textChanged.connect(self.mark_dirty)
         self.sync_target_theta()
 
     def edit_target_theta(self, text):
@@ -220,13 +228,63 @@ class FeedPanel(QWidget):
         self.beam_mode_hint.setText({"scan": "θ从+z朝+x；按目标指向补偿。", "equalize": "当前为正侧向0°；在“幅相加权”中切换指向补偿。",
                                      "none": "当前不补偿；可在“幅相加权”中启用指向补偿。"}[mode])
 
-    def read_settings(self, phase_mode=None):
+    def read_settings(self, phase_mode=None, include_branch_delays=True):
         values = {key: float(edit.text().strip()) for key, edit in self.fields.items()}
         electrical = self.electrical.values()
         if phase_mode is not None: electrical["phase_mode"] = phase_mode
-        settings = FeedSettings(topology=self.topology.currentData(), **values, **electrical)
+        branch = dict(branch_delays_deg=self.branch_delays_deg,
+                      branch_delay_elements=self.branch_delay_elements,
+                      branch_delay_topology=self.branch_delay_topology) if include_branch_delays else {}
+        settings = FeedSettings(topology=self.topology.currentData(), **values, **electrical, **branch)
         settings.validate()
         return settings
+
+    def apply_branch_delays(self, settings):
+        self.branch_delays_deg = tuple(settings.branch_delays_deg)
+        self.branch_delay_elements = settings.branch_delay_elements
+        self.branch_delay_topology = settings.branch_delay_topology
+        self.update_branch_hint()
+
+    def branch_binding_matches(self):
+        if not self.branch_delays_deg:
+            return True
+        try:
+            return (int(self.window.inputs["elements"].text()) == self.branch_delay_elements
+                    and self.topology.currentData() == self.branch_delay_topology)
+        except (ValueError, AttributeError):
+            return False
+
+    def update_branch_hint(self):
+        if not hasattr(self, "branch_delay_button"):
+            return
+        count = sum(value != 0 for value in self.branch_delays_deg)
+        suffix = "需重新设置" if not self.branch_binding_matches() else f"{count}条非零" if count else "全部为0°"
+        self.branch_delay_button.setText(f"支路电长度…（{suffix}）")
+        self.branch_delay_button.setToolTip(
+            "每条支路：90°变换段＋独立匹配延迟段；端口自动补偿另外计算。"
+            + ("阵元数或拓扑已改变，原T编号不再适用；请打开后重设或清零。" if not self.branch_binding_matches() else "")
+        )
+
+    def edit_branch_delays(self):
+        from .branch_delay_widgets import BranchDelayDialog
+        from .feed import with_branch_delays
+        try:
+            parameters = self.window.read_parameters()
+            # Generate only the topology; a stale binding must not block resetting it.
+            base = self.read_settings(include_branch_delays=False)
+            network = synthesize_impedance(parameters, base)
+            matches = self.branch_binding_matches()
+            values = self.branch_delays_deg if matches and self.branch_delays_deg else (0.0,) * len(network["sections"])
+            reason = ("阵元数或拓扑与原支路设置不匹配。本次从零重新设置，不能复用原T编号；取消会保留原设置。"
+                      if not matches else "")
+            dialog = BranchDelayDialog(network, values, self, reason)
+            if dialog.exec():
+                delays = dialog.result_delays if any(dialog.result_delays) else ()
+                settings = with_branch_delays(base, parameters.elements, delays)
+                self.apply_branch_delays(settings)
+                self.mark_dirty()
+        except (ValueError, ArithmeticError) as exc:
+            QMessageBox.warning(self, "支路电长度", str(exc))
 
     def open_study(self):
         if self.report is None:
@@ -240,6 +298,7 @@ class FeedPanel(QWidget):
         self.study_dialog.exec()
 
     def mark_dirty(self):
+        self.update_branch_hint()
         if self._changing or not hasattr(self, "state"):
             return
         self.state.setText("输入已改变，尚未重新生成。表格、方向图和导出仍对应所选设计；保存设置使用当前输入。")
@@ -269,27 +328,33 @@ class FeedPanel(QWidget):
     def display_report(self, report):
         self.report = report
         columns = [("id", "线段"), ("parent", "起点"), ("child", "终点"),
+                   ("line_ohm", "变换线 Zₜ (Ω)"),
+                   ("electrical_length_deg", "变换段 (°)"), ("matched_delay_ohm", "匹配延迟 Zc (Ω)"),
+                   ("matched_delay_deg", "附加延迟 (°)"), ("total_electrical_length_deg", "支路合计 (°)"),
                    ("local_power_fraction", "局部分配比"), ("branch_input_ohm", "支路输入 (Ω)"),
-                   ("child_equivalent_ohm", "下游等效 (Ω)"), ("line_ohm", "变换线 Zₜ (Ω)"),
-                   ("electrical_length_deg", "电长度 (°)"), ("outside_range", "超提示范围")]
-        self.fill_table(self.sections, columns, report["sections"])
+                   ("child_equivalent_ohm", "下游等效 (Ω)"),
+                   ("outside_range", "超提示范围")]
+        self.fill_table(self.sections, columns, [section_lengths(line) for line in report["sections"]])
         port_columns = [("port", "端口"), ("load_ohm", "负载 (Ω)"),
                         ("power_fraction", "总功率占比"), ("quarter_wave_sections", "λ/4段数"),
-                        ("network_phase_deg", "原始相位 (°)"), ("target_phase_deg", "目标相位 (°)"),
-                        ("applied_delay_deg", "补偿电长度 (°)"), ("output_phase_deg", "输出相位 (°)"),
+                        ("transform_path_deg", "变换路径 (°)"), ("branch_delay_path_deg", "支路延迟累计 (°)"),
+                        ("network_electrical_length_deg", "网络路径合计 (°)"),
+                        ("network_phase_deg", "网络相位 (°)"), ("target_phase_deg", "目标相位 (°)"),
+                        ("applied_delay_deg", "端口补偿 (°)"), ("total_electrical_length_deg", "完整路径 (°)"),
+                        ("output_phase_deg", "输出相位 (°)"),
                         ("output_amplitude", "输出幅度"), ("failed", "失效")]
         if report["settings"]["topology"] == "symmetric_series":
             port_columns.extend([("arm", "支臂"), ("mirror_port", "镜像端口")])
-        self.fill_table(self.ports, port_columns, report["ports"])
+        self.fill_table(self.ports, port_columns, port_lengths(report))
         self.diagram.set_report(report)
         m, p = report["metrics"], report["array_parameters"]
         self.state.setText(f"所选设计：{report['settings']['topology']} · {m['ports']}端口 · {p['frequency_ghz']:g} GHz · "
                            f"Zₜ {m['line_min_ohm']:.3f}–{m['line_max_ohm']:.3f} Ω · 理想输入 {m['input_equivalent_ohm']:g} Ω")
-        self.notice.setText(f"阻抗超提示范围：{len(m['out_of_range_sections'])}条。理想匹配相移，无输出隔离保证；误差为单次实现，物理尺寸暂缓。")
+        self.notice.setText(f"阻抗超提示范围：{len(m['out_of_range_sections'])}条。变换段、支路匹配延迟和端口补偿分别记录；电长度均在所选设计频率处。理想无损模型，物理尺寸暂缓。")
         self.export_button.setEnabled(True)
         self.redraw_patterns()
         try:
-            matches = asdict(self.window.read_parameters()) == p and settings_payload(self.read_settings()) == report["settings"]
+            matches = asdict(self.window.read_parameters()) == p and settings_payload(self.read_settings()) == settings_payload(FeedSettings(**report["settings"]))
         except (ValueError, ArithmeticError):
             matches = False
         if not matches:
@@ -431,6 +496,7 @@ class FeedPanel(QWidget):
             for key, edit in self.fields.items():
                 edit.setText(str(getattr(settings, key)))
             self.electrical.apply(settings)
+            self.apply_branch_delays(settings)
         finally:
             self._changing = False
         self.mark_dirty()

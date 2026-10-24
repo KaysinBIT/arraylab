@@ -24,6 +24,7 @@ def exercise_next_stage(app, window, output, report, check):
     prior_quit = app.quitOnLastWindowClosed()
     app.setQuitOnLastWindowClosed(False)
     probe = None
+    watcher = None
     warnings = []
     details = {"qt_platform": app.platformName(), "screenshots": [], "footer_bounds": [],
                "subarray_execution": "real QThread optimization and cooperative cancellation"}
@@ -88,7 +89,7 @@ def exercise_next_stage(app, window, output, report, check):
 
         def dismiss_unexpected_modal():
             modal = QApplication.activeModalWidget()
-            if isinstance(modal, QMessageBox):
+            if isinstance(modal, QMessageBox) and probe.isAncestorOf(modal):
                 warnings.append(modal.text()); modal.accept()
 
         watcher.timeout.connect(dismiss_unexpected_modal); watcher.start(50)
@@ -229,6 +230,11 @@ def exercise_next_stage(app, window, output, report, check):
         check(not warnings, "next_no_unexpected_modal_warnings")
         report["next_stage"] = details
     finally:
+        # DeferredDelete can wait until the outer smoke driver returns. Stop
+        # this probe's modal guard before another exercise starts a nested loop.
+        if watcher is not None:
+            watcher.stop()
+            watcher.timeout.disconnect()
         if probe is not None:
             if probe.subarray_panel.thread is not None:
                 probe.subarray_panel.cancel()

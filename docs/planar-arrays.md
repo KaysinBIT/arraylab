@@ -64,7 +64,7 @@ JSON的`electrical.pointing`含请求θ/φ、有效目标θ/φ、相位模式、
 
 ## 保存和无头运行
 
-平面阵使用独立格式`arraylab.planar_electrical`、schema_version=1，保存完整几何与电气设置。无效设置、重合坐标或错误CSV在应用前拒绝；已有图形和导出继续对应上次成功生成的快照。
+当前开发版平面阵使用独立格式`arraylab.planar_electrical`、schema_version=2，保存完整几何与电气设置，并兼容旧schema 1。导入配置中的支路延迟会保持，阵元数或拓扑绑定错误时拒绝计算；逐支路编辑窗口本轮位于直线阵馈电页。无效设置、重合坐标或错误CSV在应用前拒绝；已有图形和导出继续对应上次成功生成的快照。
 
 ```powershell
 python -m arraylab --headless --planar --nx 4 --ny 4 --scan-theta 30 --scan-phi 45 --cut-phi 45 --feed-network symmetric_series --output-dir results/planar --plot all
