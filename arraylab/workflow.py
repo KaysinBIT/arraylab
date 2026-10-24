@@ -13,6 +13,15 @@ TASKS={
 }
 
 
+def picture_pixmap(widget):
+    """Capture the full 3D surface, even if a gesture has not settled yet."""
+    finish = getattr(widget, 'finish_interaction', None)
+    if finish is not None:
+        finish(redraw=False)
+        widget.draw()
+    return widget.grab()
+
+
 class WorkflowActions:
     def active_task(self):
         return {4:'feed',5:'planar',6:'sparse',7:'home',8:'subarray'}.get(self.tabs.currentIndex(),'linear')
@@ -168,11 +177,11 @@ class WorkflowActions:
         widget=self.current_picture()
         if widget is None:self.statusBar().showMessage('请先切换到本任务的图形视图。');return
         path,_=QFileDialog.getSaveFileName(self,'保存当前图形',self.last_directory+'/arraylab-figure.png','PNG图像 (*.png)',options=QFileDialog.Option.DontUseNativeDialog)
-        if path and not widget.grab().save(path,'PNG'):QMessageBox.warning(self,'保存失败','无法写入图像文件。')
+        if path and not picture_pixmap(widget).save(path,'PNG'):QMessageBox.warning(self,'保存失败','无法写入图像文件。')
 
     def copy_plot(self):
         widget=self.current_picture()
-        if widget is not None:QApplication.clipboard().setPixmap(widget.grab());self.statusBar().showMessage('当前任务图形已复制。')
+        if widget is not None:QApplication.clipboard().setPixmap(picture_pixmap(widget));self.statusBar().showMessage('当前任务图形已复制。')
         else:self.statusBar().showMessage('请先切换到本任务的图形视图。')
 
     def reset_plot_view(self):

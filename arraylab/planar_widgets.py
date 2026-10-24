@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QLabe
                               QPushButton,QTabWidget,QTableWidget,QFileDialog,QMessageBox,QApplication)
 from PySide6.QtCore import Qt
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg,NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from .interactive_canvas import InteractiveFigureCanvas as FigureCanvasQTAgg
 
 from .electrical_widgets import ElectricalControls
 from .feed_widgets import FeedPanel

@@ -9,7 +9,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QScrollArea, QLabel, QLineEdit, QComboBox, QProgressBar,
     QFileDialog, QMessageBox, QTreeWidgetItem)
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from .interactive_canvas import InteractiveFigureCanvas as FigureCanvasQTAgg
+from .surface_plot import clear_figure
 
 from .parallel import ComputationCancelled, requested_workers
 from .subarray import (SubarrayConfig, optimize_subarrays,
@@ -183,7 +185,7 @@ class SubarrayPanel(QWidget):
 
     def redraw(self):
         if self.report is None:
-            self.figure.clear(); ax = self.figure.add_subplot(111); ax.set_axis_off()
+            clear_figure(self.figure); ax = self.figure.add_subplot(111); ax.set_axis_off()
             ax.text(.5, .5, '设置右侧参数后运行子阵中心优化', ha='center', va='center', transform=ax.transAxes)
         else:
             render_subarray_figure(self.figure, self.report, self.view.currentData(), max(0, self.case_selector.currentIndex()), chinese=True)

@@ -15,7 +15,9 @@ matplotlib.rcParams.update({
     "axes.spines.right": False,
     "agg.path.chunksize": 10000,
 })
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from .interactive_canvas import InteractiveFigureCanvas as FigureCanvasQTAgg
+from .surface_plot import clear_figure
 from matplotlib.figure import Figure
 
 from .core import ArrayParameters, ArrayResult, pattern_db_at
@@ -189,7 +191,7 @@ class PatternPlot(QWidget):
     def draw_sets(self, datasets, selected, polar=False, floor=-40.0, view=None):
         self.datasets, self.selected, self.polar, self.floor = datasets, selected, polar, floor
         self.three_dimensional = view == "3d"
-        self.figure.clear()
+        clear_figure(self.figure)
         self.cursor_artist = None
         if self.three_dimensional and datasets and 0 <= selected < len(datasets):
             from .linear_plot import sphere_pattern, sphere_from_feed, draw_sphere

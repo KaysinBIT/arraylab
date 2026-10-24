@@ -3,12 +3,13 @@ import numpy as np
 
 from .subarray import SubarrayConfig, expanded_coordinates, normalized_field
 from .pattern_metrics import metrics_text, draw_metric_footer
+from .surface_plot import clear_figure, register_surface
 
 
 def render_subarray_figure(figure, report, view='layout', case_index=0, chinese=False):
     if view not in ('layout', 'pattern', 'cuts', '3d'):
         raise ValueError('未知子阵图形类型。')
-    figure.clear()
+    clear_figure(figure)
     config = SubarrayConfig(**report['config'])
     best = report['best']
     case = best['cases'][case_index]
@@ -67,8 +68,10 @@ def render_subarray_figure(figure, report, view='layout', case_index=0, chinese=
         from matplotlib import colormaps
         db = 20*np.log10(np.maximum(radius, 1e-15))
         colors = colormaps['viridis'](np.clip((db+40)/40, 0, 1))
-        ax.plot_surface(radius*uv[:, :, 0], radius*uv[:, :, 1], radius*np.cos(theta),
+        x,y,z=radius*uv[:, :, 0],radius*uv[:, :, 1],radius*np.cos(theta)
+        surface=ax.plot_surface(x,y,z,
                         facecolors=colors, rstride=1, cstride=2, linewidth=0, shade=False, antialiased=False)
+        register_surface(figure,ax,surface,x,y,z,colors)
         ax.set(xlabel='x', ylabel='y', zlabel='z', xlim=(-1, 1), ylim=(-1, 1), zlim=(-1, 1),
                title='Full sphere: radius = relative field magnitude')
         ax.set_box_aspect((1, 1, 1)); ax.view_init(elev=22, azim=-50)

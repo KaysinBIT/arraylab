@@ -4,7 +4,7 @@
 
 **0.21.0 正式版**新增线阵及线阵馈电三维方向图、图下主要指标，以及固定内部模板的连续子阵中心优化。[方向图与指标](docs/pattern-metrics.md) · [子阵中心优化](docs/subarray-centers.md)。
 
-当前源码为 **0.22.0.dev2 开发版**，二维稀疏的X/Y候选数及目标阵元K均可输入自定义正整数，取消20上限和偶数步进；奇数K采用中心阵元加对称位置对。开始前按当前内存预检，保留可取消的独立计算与多核复核。包含[逐支路匹配延迟](docs/branch-electrical-lengths.md)及20×20综合提速，详见[二维稀疏的条件与操作](docs/sparse-arrays.md)。当前正式下载仍为0.21.0。
+当前源码为 **0.22.0.dev3 开发版**，改进[三维方向图旋转和缩放](docs/3d-interaction.md)：拖动时使用轻量预览，松开恢复完整细节，支持滚轮缩放并清理旧视图回调。保留[自定义二维稀疏规模与K](docs/sparse-arrays.md)、独立计算取消、多核复核及[逐支路匹配延迟](docs/branch-electrical-lengths.md)。当前正式下载仍为0.21.0。
 
 本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计、子阵中心优化各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
 
@@ -34,7 +34,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.22.0.dev2/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.22.0.dev3/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 

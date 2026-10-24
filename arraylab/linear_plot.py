@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+from .surface_plot import register_surface
 
 from .core import ArrayParameters, normalized_field_u
 from .complex_pattern import field_at_cycles
@@ -96,7 +97,8 @@ def linear_metrics(result=None, feed_report=None, key="output", angles=None, db=
             else:
                 p = result.parameters
                 field = lambda xyz: normalized_field_u(xyz[:, 0], p)
-            widths = spherical_beamwidths(field, theta, phi, step_deg=min(.25, 5 / max(1, (p.elements-1)*p.spacing_lambda)))
+            widths = spherical_beamwidths(field, theta, phi, step_deg=min(.25, 5 / max(1, (p.elements-1)*p.spacing_lambda)),
+                                         flat_cuts=('transverse',) if theta == 0 else ())
             metrics["orthogonal_beamwidths_deg"] = widths["orthogonal_beamwidths_deg"]
     return metrics
 
@@ -121,9 +123,12 @@ def draw_sphere(figure, sphere, chinese=False, title=None):
     radius = sphere["magnitude"]
     top = max(0.0, float(np.max(sphere["db"])))
     norm = colors.Normalize(-40, top)
-    ax.plot_surface(radius*np.sin(tt)*np.cos(pp), radius*np.sin(tt)*np.sin(pp), radius*np.cos(tt),
-                    facecolors=colormaps["viridis"](norm(sphere["db"])), rstride=2, cstride=2,
+    x, y, z = radius*np.sin(tt)*np.cos(pp), radius*np.sin(tt)*np.sin(pp), radius*np.cos(tt)
+    facecolors = colormaps["viridis"](norm(sphere["db"]))
+    surface = ax.plot_surface(x, y, z,
+                    facecolors=facecolors, rstride=2, cstride=2,
                     linewidth=0, antialiased=False, shade=False)
+    register_surface(figure, ax, surface, x, y, z, facecolors)
     bound = max(1.0, float(np.max(radius)))
     ax.set(xlabel="x", ylabel="y", zlabel="z", xlim=(-bound,bound), ylim=(-bound,bound), zlim=(-bound,bound),
            title=title or ("线阵三维阵因子 · 半径为相对场幅度" if chinese else "Full-sphere array factor; radius = relative field"))

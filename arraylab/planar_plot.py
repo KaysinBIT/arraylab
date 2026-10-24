@@ -1,9 +1,10 @@
 """Plot planar fields into an existing Figure, or Agg PNGs without Qt."""
 import numpy as np
+from .surface_plot import clear_figure, register_surface
 
 
 def draw_planar_figure(figure, report, view, chinese=False):
-    figure.clear()
+    clear_figure(figure)
     patterns = report["electrical"]["patterns"]
     p = report["geometry"]
     output = patterns["output"]
@@ -30,8 +31,10 @@ def draw_planar_figure(figure, report, view, chinese=False):
         if report["electrical"]["metrics"]["active_ports"] == 0:radius[:]=0
         from matplotlib import colormaps
         colors = colormaps["viridis"](np.clip((db+40)/40,0,1))
-        ax.plot_surface(radius*np.sin(tt)*np.cos(pp),radius*np.sin(tt)*np.sin(pp),radius*np.cos(tt),
+        x,y,z=radius*np.sin(tt)*np.cos(pp),radius*np.sin(tt)*np.sin(pp),radius*np.cos(tt)
+        surface=ax.plot_surface(x,y,z,
                         facecolors=colors,rstride=1,cstride=2,linewidth=0,antialiased=False,shade=False)
+        register_surface(figure,ax,surface,x,y,z,colors)
         ax.set(xlabel="x",ylabel="y",zlabel="z",title="Full sphere: radius = relative field magnitude")
         bound=max(1,float(np.max(radius)))
         ax.set_xlim(-bound,bound);ax.set_ylim(-bound,bound);ax.set_zlim(-bound,bound)

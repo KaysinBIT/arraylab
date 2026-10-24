@@ -239,6 +239,62 @@ def metrics_text(metrics, chinese=False):
     return lines
 
 
+def _wrap_footer_lines(lines, available, text_width):
+    """Wrap measured text with the footer's existing space-boundary rules.
+
+    Font advances are nondecreasing for the plain text used by the footer.
+    Find each longest fitting prefix by bisection instead of measuring every
+    growing prefix. A single over-wide character is retained, as before.
+    """
+    wrapped = []
+    for original in lines:
+        for line in str(original).splitlines() or [""]:
+            pending = line
+            while len(pending) > 1 and text_width(pending) > available:
+                low, high = 1, len(pending) - 1
+                while low < high:
+                    middle = (low + high + 1) // 2
+                    if text_width(pending[:middle]) <= available:
+                        low = middle
+                    else:
+                        high = middle - 1
+                prefix, character = pending[:low], pending[low]
+                boundary = prefix.rfind(" ")
+                if boundary > len(prefix) // 2:
+                    wrapped.append(prefix[:boundary].rstrip())
+                    pending = prefix[boundary + 1:].lstrip() + character + pending[low + 1:]
+                else:
+                    wrapped.append(prefix.rstrip())
+                    pending = character.lstrip() + pending[low + 1:]
+            wrapped.append(pending.rstrip())
+    return tuple(wrapped)
+
+
+def _footer_font_key(font):
+    """Include every ordinary-text font setting that affects measured width."""
+    return (tuple(font.get_family()), font.get_style(), font.get_variant(),
+            font.get_weight(), font.get_stretch(), font.get_size_in_points(),
+            font.get_file(), font.get_math_fontfamily())
+
+
+def _cached_footer_wrap(figure, lines, available, dpi, font_key, renderer_key, text_width):
+    """Keep at most eight immutable text layouts on this figure, not globally."""
+    from collections import OrderedDict
+
+    key = (tuple(str(line) for line in lines), float(available), float(dpi), font_key, renderer_key)
+    cache = getattr(figure, "_arraylab_footer_wrap_cache", None)
+    if cache is None:
+        cache = figure._arraylab_footer_wrap_cache = OrderedDict()
+    if key in cache:
+        cache.move_to_end(key)
+        return cache[key]
+    wrapped = _wrap_footer_lines(lines, available, text_width)
+    cache[key] = wrapped
+    if len(cache) > 8:
+        cache.popitem(last=False)
+    return wrapped
+
+
 def draw_metric_footer(figure, lines):
     """Reserve a bottom caption strip inside a Figure, included in PNG export.
 
@@ -282,22 +338,8 @@ Compatible with both constrained layout and ordinary subplots.
         units = sum(1 if unicodedata.east_asian_width(c) in ("W", "F") else .55 for c in value)
         return units * 8 * figure.dpi / 72
 
-    wrapped = []
-    for original in lines:
-        for line in str(original).splitlines() or [""]:
-            pending = ""
-            for character in line:
-                if pending and text_width(pending + character) > available:
-                    boundary = pending.rfind(" ")
-                    if boundary > len(pending) // 2:
-                        wrapped.append(pending[:boundary].rstrip())
-                        pending = pending[boundary + 1:].lstrip() + character
-                    else:
-                        wrapped.append(pending.rstrip())
-                        pending = character.lstrip()
-                else:
-                    pending += character
-            wrapped.append(pending.rstrip())
+    wrapped = _cached_footer_wrap(figure, lines, available, figure.dpi, _footer_font_key(font),
+                                  type(renderer) if renderer is not None else None, text_width)
     line_height = 8 * figure.dpi / 72 * 1.55
     reserved = min(.65, max(.12, (len(wrapped) * line_height + 12.) / max(height_px, 1) + .025))
     engine = figure.get_layout_engine()
