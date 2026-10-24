@@ -63,6 +63,7 @@ def finish_release():
         shutil.copy2(ROOT / name, release / name)
     shutil.copytree(ROOT / "examples", release / "examples", dirs_exist_ok=True)
     shutil.copytree(ROOT / "docs", release / "docs", dirs_exist_ok=True)
+    shutil.copytree(ROOT / "arraylab/sparse2d/resources", release / "_internal/arraylab/sparse2d/resources", dirs_exist_ok=True)
     shutil.copy2(ROOT / "ROADMAP.md", release / "ROADMAP.md")
     shutil.copy2(ROOT / "CONTRIBUTING.md", release / "CONTRIBUTING.md")
     print(release / "ArrayLab.exe")

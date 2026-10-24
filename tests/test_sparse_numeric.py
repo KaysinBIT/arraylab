@@ -99,7 +99,7 @@ class MathematicalChecks(unittest.TestCase):
         self.assertLessEqual(max(abs(matrix@weights)),info['cap_linear']+1e-7)
 
     def test_invalid_parameters(self):
-        for kwargs in ({'nx':7},{'k':15},{'k':200},{'spacing':float('nan')},{'theta':61},{'seed':-1},{'iterations':0},{'nx':True}):
+        for kwargs in ({'nx':0},{'k':15},{'k':200},{'spacing':float('nan')},{'theta':61},{'seed':-1},{'iterations':0},{'nx':True}):
             with self.subTest(kwargs=kwargs),self.assertRaises(ValueError): Config(**kwargs).validate()
         with self.assertRaisesRegex(ValueError,'covers the visible disk'):
             run(Config(nx=4,ny=4,k=8,spacing=.1))

@@ -487,6 +487,8 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_branch_lengths(app, window, output, report, check)
             from .sparse_responsiveness_smoke import exercise_sparse_responsiveness
             exercise_sparse_responsiveness(app, window, output, report, check)
+            from .sparse_size_smoke import exercise_sparse_sizes
+            exercise_sparse_sizes(app, window, output, report, check)
             report["success"] = True
             code = 0
         except Exception:

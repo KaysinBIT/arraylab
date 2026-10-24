@@ -69,7 +69,7 @@ def test_bridge_never_truncates_or_changes_excessive_layout(sparse_bundle):
 
 def test_sparse_batch_retains_success_and_records_failure(tmp_path):
     request={'schema_version':1,'config':{'nx':4,'ny':4,'k':8,'iterations':1,'opt_grid':25,'eval_grid':81}}
-    bad={'schema_version':1,'config':{'nx':3}}
+    bad={'schema_version':1,'config':{'nx':0}}
     manifest=tmp_path/'batch.json'
     manifest.write_text(json.dumps({'schema_version':1,'jobs':[{'id':'bad','request':bad},{'id':'good','request':request}]}))
     r=sparse_command('batch','--manifest',manifest,'--output',tmp_path/'batch')

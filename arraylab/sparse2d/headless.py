@@ -18,6 +18,7 @@ from .core import (Config, available_mask, candidates, evaluation_domains,
 from .elements import build_element, make_snapshot
 from .scenarios import scenarios
 from .weighting import Weighting, add_weighting
+from .resources import ensure_resources
 
 VERSION = 1
 ALIASES = {'regular': 'Regular thinning', 'random': 'Random symmetric',
@@ -205,6 +206,7 @@ def restore_bundle(data):
             raise ValueError('保存结果的无头接口版本不受支持。')
     original_config = bundle['config']
     config = Config(**_typed(original_config, asdict(Config()), 'config')).validate()
+    ensure_resources(config,operation='restore')
     bundle['config'] = asdict(config)
     if 'element_pattern' not in bundle and not any(k.startswith('element_') for k in original_config):
         # Results predating element support were explicitly ideal point sources.
@@ -217,7 +219,7 @@ def restore_bundle(data):
     integer, xy, _ = candidates(config); allowed = available_mask(config)
     for row_index, row in enumerate(rows):
         indices = np.asarray(row['indices'])
-        if (indices.ndim != 1 or not 2 <= len(indices) <= len(xy)
+        if (indices.ndim != 1 or not 1 <= len(indices) <= len(xy)
                 or indices.dtype.kind not in 'iu' or len(set(indices.tolist())) != len(indices)
                 or np.any(indices < 0) or np.any(indices >= len(xy))):
             raise ValueError(f'第 {row_index} 行候选索引非法。')
@@ -275,6 +277,7 @@ def reevaluate(bundle, eval_grid=None, progress=None, phase_bits=None, *, worker
     if phase_bits is not None:
         config=Config(**_typed({**asdict(config),'phase_bits':phase_bits},asdict(Config()),'config')).validate()
         restored['config']=asdict(config)
+    ensure_resources(config,workers=workers,operation='evaluate')
     domains = evaluation_domains(config)
     from .core import evaluate_layouts
     restored['results'],restored['execution']=evaluate_layouts(restored['results'],config,domains,element,workers=workers,

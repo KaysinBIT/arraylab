@@ -13,6 +13,7 @@ from . import __version__
 from .parallel import check_cancelled, requested_workers
 from .sparse2d.core import Config
 from .sparse2d.headless import dumps, load_bundle, normalize_request, save_bundle
+from .sparse2d.resources import ensure_resources
 
 
 _POLL_SECONDS = .05
@@ -40,7 +41,7 @@ def _temporary_directory():
 
 class _WindowsJob:
     """A noninherited Job handle kills its child even if the GUI process crashes."""
-    def __init__(self):
+    def __init__(self, memory_limit_bytes=None):
         self.handle = None
         if os.name != 'nt':
             return
@@ -96,6 +97,10 @@ class _WindowsJob:
             raise ctypes.WinError(ctypes.get_last_error())
         limits = ExtendedLimits()
         limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if memory_limit_bytes is not None:
+            # Bound aggregate committed memory, including venv launcher children.
+            limits.BasicLimitInformation.LimitFlags |= 0x0200  # JOB_OBJECT_LIMIT_JOB_MEMORY
+            limits.JobMemoryLimit = int(memory_limit_bytes)
         if not self.api.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
             error = ctypes.WinError(ctypes.get_last_error())
             self.close()
@@ -267,6 +272,10 @@ def run_sparse_process(config=None, weighting=None, *, workers=0, progress=None,
     command, cwd = _cli_command()
     if config is not None and weighting is not None:
         raise ValueError('综合参数与稀疏后加权任务不能同时指定。')
+    task_config = (Config() if config is None else config) if weighting is None else Config(**weighting[0]['config'])
+    task_config.validate()
+    operation = 'run' if weighting is None else ('weight' if weighting[2].method == 'minimax' else 'evaluate')
+    resources = ensure_resources(task_config, workers=workers if weighting is None else 1, operation=operation)
     with _temporary_directory() as temporary:
         folder = Path(temporary)
         output = folder / 'result'
@@ -298,7 +307,7 @@ def run_sparse_process(config=None, weighting=None, *, workers=0, progress=None,
             env['PYTHONPATH'] = str(cwd) + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
         stdout_path, stderr_path = folder / 'stdout.log', folder / 'stderr.log'
         process = None
-        job = _WindowsJob()
+        job = _WindowsJob(memory_limit_bytes=resources['budget_bytes'])
         try:
             with stdout_path.open('wb') as stdout, stderr_path.open('wb') as stderr:
                 process = subprocess.Popen(command + arguments, cwd=cwd, env=env,

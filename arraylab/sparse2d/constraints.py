@@ -4,24 +4,39 @@ from scipy.optimize import Bounds,LinearConstraint,milp
 from scipy.sparse import coo_array
 from ..parallel import check_cancelled
 from .numerics import solve_milp
+from .resources import FIELD_WORKSPACE_BYTES
 
 
 def pair_conflicts(xy,pairs,minimum):
     n=len(pairs)
-    if minimum<=0: return np.zeros((n,n),dtype=bool)
-    points=xy[pairs]
-    distances=np.linalg.norm(points[:,None,:,None,:]-points[None,:,None,:,:],axis=-1)
-    conflicts=np.min(distances,axis=(2,3))<minimum-1e-10
+    conflicts=np.zeros((n,n),dtype=bool)
+    if minimum<=0 or not n: return conflicts
+    points=np.asarray(xy)[pairs]
+    block_rows=max(1,min(n,FIELD_WORKSPACE_BYTES//(48*n)))
+    for start in range(0,n,block_rows):
+        block=conflicts[start:start+block_rows]
+        for left in range(points.shape[1]):
+            for right in range(points.shape[1]):
+                distances=np.linalg.norm(points[start:start+block_rows,left,None,:]-points[None,:,right,:],axis=-1)
+                block|=distances<minimum-1e-10
     np.fill_diagonal(conflicts,False)
     return conflicts
 
 
 def spacing_stats(xy,minimum):
     xy=np.asarray(xy)
-    distances=np.linalg.norm(xy[:,None,:]-xy[None,:,:],axis=-1)
-    values=distances[np.triu_indices(len(xy),1)]
-    return {'min_distance_lambda_ref':float(values.min()) if len(values) else None,
-            'spacing_violations':int(np.count_nonzero(values<minimum-1e-10))}
+    if len(xy)<2:
+        return {'min_distance_lambda_ref':None,'spacing_violations':0}
+    closest=float('inf'); violations=0
+    block_rows=max(1,min(len(xy),FIELD_WORKSPACE_BYTES//(48*len(xy))))
+    for start in range(0,len(xy),block_rows):
+        distances=np.linalg.norm(xy[start:start+block_rows,None,:]-xy[None,:,:],axis=-1)
+        for local,row in enumerate(distances):
+            values=row[start+local+1:]
+            if len(values):
+                closest=min(closest,float(values.min()))
+                violations+=int(np.count_nonzero(values<minimum-1e-10))
+    return {'min_distance_lambda_ref':closest,'spacing_violations':violations}
 
 
 def feasible_groups(conflicts,target,rng,*,progress=None,cancelled=None):

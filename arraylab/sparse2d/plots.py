@@ -15,6 +15,7 @@ def _plot_response(*args):
 
 NAMES = {
     'Dense reference':'满阵参考', 'Regular thinning':'规则抽稀',
+    'Paired reference (center excluded)':'对称配对参考（不含中心）',
     'Random symmetric':'随机选点', 'Greedy exchange':'贪心交换',
     'Simulated annealing':'模拟退火', 'L1 top-K uniform':'ℓ1 取整等幅',
     'L1 weighted solution':'ℓ1 加权解',

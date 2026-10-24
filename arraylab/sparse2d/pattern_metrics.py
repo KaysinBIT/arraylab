@@ -16,7 +16,7 @@ from .elements import build_element
 from .scenarios import scenarios, case_config
 from .phase_quantization import excitation_phases, angular_distance
 from ..pattern_metrics import spherical_beamwidths
-from ..planar_pattern import integrated_power
+from .aperture_metrics import integrated_power, maximum_distance
 from ..parallel import ordered_map
 
 
@@ -142,28 +142,45 @@ def _measure_summary(bundle, result, case_index, view_mode, phase_mode, source_u
         chosen, level, maximum, psl = saved
     radial = min(1., float(np.linalg.norm(chosen)))
     theta = math.degrees(math.asin(radial)); phi = math.degrees(math.atan2(chosen[1], chosen[0])) if radial > 1e-10 else case['phi']
-    diameter = float(np.max(np.linalg.norm(points[:, None] - points[None, :], axis=2)))
+    diameter = maximum_distance(points)
     step = max(.001, min(.125, 2 / max(1, diameter)))
     full_sphere = view_mode == 'array_factor' or element.model == 'isotropic'
+    t, p = np.deg2rad([theta, phi]); direction = np.array([np.sin(t)*np.cos(p), np.sin(t)*np.sin(p), np.cos(t)])
+    tangents = [np.array([np.cos(t)*np.cos(p), np.cos(t)*np.sin(p), -np.sin(t)]), np.array([-np.sin(p), np.cos(p), 0.])]
+    invariant = [bool(np.all(np.ptp(points @ np.stack([direction[:2], tangent[:2]], axis=1), axis=0) == 0)) for tangent in tangents]
     if full_sphere:
-        widths = spherical_beamwidths(lambda xyz: response(xyz[:, :2]), theta, phi, step)['orthogonal_beamwidths_deg']
+        flat = [name for name, constant in zip(('meridional', 'transverse'), invariant) if constant]
+        widths = spherical_beamwidths(lambda xyz: response(xyz[:, :2]), theta, phi, step, flat_cuts=flat)['orthogonal_beamwidths_deg']
     else:
         # Bracket only inside the measured front hemisphere, on two great circles.
-        t, p = np.deg2rad([theta, phi]); direction = np.array([np.sin(t)*np.cos(p), np.sin(t)*np.sin(p), np.cos(t)])
-        tangents = [np.array([np.cos(t)*np.cos(p), np.cos(t)*np.sin(p), -np.sin(t)]), np.array([-np.sin(p), np.cos(p), 0.])]
         widths = []
-        for tangent in tangents:
+        for tangent, constant in zip(tangents, invariant):
+            cut_response = response
+            if constant and view_mode != 'element':
+                af_center = response_field(result['xy'], weights, direction[None, :2], c, case, element, 'array_factor', phase_mode)[0]
+                def cut_response(uv):
+                    af = af_center * np.exp(2j*np.pi*((uv-direction[:2]) @ points[0]))
+                    return af if view_mode == 'array_factor' else af * element.normalized_response(uv, case)
             edges = []
             for sign in (-1, 1):
                 a = np.r_[0., np.geomspace(1e-6, step, 24), np.arange(step, 180, step)]
-                rad = np.deg2rad(sign*a); xyz = np.cos(rad)[:,None]*direction + np.sin(rad)[:,None]*tangent
-                invalid = np.flatnonzero(xyz[:, 2] < -1e-10)
-                end = int(invalid[0]) if len(invalid) else len(a)
-                power = abs(response(xyz[:end, :2]))**2
-                hit = np.flatnonzero(power <= level**2 / 2)
-                if len(hit) and hit[0] > 0:
-                    i = int(hit[0]); fraction = (level**2/2-power[i-1])/(power[i]-power[i-1])
-                    edges.append(sign*float(a[i-1]+fraction*(a[i]-a[i-1])))
+                previous = None
+                for start in range(0, len(a), 128):
+                    angles = a[start:start+128]
+                    rad = np.deg2rad(sign*angles); xyz = np.cos(rad)[:,None]*direction + np.sin(rad)[:,None]*tangent
+                    invalid = np.flatnonzero(xyz[:, 2] < -1e-10)
+                    end = int(invalid[0]) if len(invalid) else len(angles)
+                    power = abs(cut_response(xyz[:end, :2]))**2
+                    hit = np.flatnonzero(power <= level**2 / 2)
+                    if len(hit):
+                        i = int(hit[0])
+                        if start+i > 0:
+                            last = power[i-1] if i else previous
+                            fraction = (level**2/2-last)/(power[i]-last)
+                            edges.append(sign*float(a[start+i-1]+fraction*(a[start+i]-a[start+i-1])))
+                        break
+                    if end < len(angles): break
+                    if len(power): previous = power[-1]
             widths.append(edges[1]-edges[0] if len(edges) == 2 else None)
     directivity = None
     if full_sphere and view_mode != 'element':

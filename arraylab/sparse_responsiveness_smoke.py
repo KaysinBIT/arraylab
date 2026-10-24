@@ -122,7 +122,7 @@ def exercise_sparse_responsiveness(app, window, output, report, check):
         panel.view.setCurrentIndex(panel.view.findData('layout'))
         panel.set_config(Config(nx=20, ny=20))
         app.processEvents()
-        success = _observe_job(panel, lambda: QTest.mouseClick(panel.run_button, Qt.MouseButton.LeftButton))
+        success = _observe_job(panel, lambda: QTest.mouseClick(window.compute_button, Qt.MouseButton.LeftButton))
         observations['default_20x20_success'] = success
         check(success['finished'] and not success['last_error'] and not success['modal_or_callback_errors'],
               'sparse_20x20_default_auto_completes')
@@ -154,7 +154,7 @@ def exercise_sparse_responsiveness(app, window, output, report, check):
                 cancel_timer.start(100)
         panel.set_config(Config(nx=20, ny=20, lp_solver='highs'))
         app.processEvents()
-        cancelled = _observe_job(panel, lambda: QTest.mouseClick(panel.run_button, Qt.MouseButton.LeftButton),
+        cancelled = _observe_job(panel, lambda: QTest.mouseClick(window.compute_button, Qt.MouseButton.LeftButton),
                                  on_stage=cancel_stage, timeout_ms=60000)
         cancel_timer.stop()
         latency = time.monotonic()-cancellation['requested_at'] if cancellation['requested_at'] is not None else None
@@ -185,7 +185,7 @@ def exercise_sparse_responsiveness(app, window, output, report, check):
                 auxiliary.close()
                 closing['close_pending_observed'] = bool(getattr(auxiliary, '_sparse_close_pending', False))
         closed = _observe_job(close_panel,
-                              lambda: QTest.mouseClick(close_panel.run_button, Qt.MouseButton.LeftButton),
+                              lambda: QTest.mouseClick(auxiliary.compute_button, Qt.MouseButton.LeftButton),
                               on_stage=close_stage, closed_window=auxiliary, timeout_ms=30000)
         closed.update(close_requested=closing['requested_at'] is not None,
                       close_pending_observed=closing.get('close_pending_observed', False),

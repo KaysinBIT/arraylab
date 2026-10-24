@@ -12,6 +12,8 @@ from .scenarios import LIGHT_MM_GHZ,case_config,scenarios
 from .elements import build_element,validate_element_config
 from .phase_quantization import validate_bits,evaluate_quantization,sampled_peak,quantized_af
 from .numerics import bounded_call,minimax_solver,solve_lp
+from .geometry import coarray
+from .resources import ensure_resources
 from ..parallel import ordered_map, requested_workers, check_cancelled
 
 
@@ -49,10 +51,12 @@ class Config:
         for name in ('nx', 'ny', 'k', 'seed', 'iterations', 'opt_grid', 'eval_grid'):
             if type(getattr(self, name)) is not int:
                 raise ValueError(f'{name} must be an integer')
-        if any(n < 4 or n > 20 or n % 2 for n in (self.nx, self.ny)):
-            raise ValueError('nx and ny must be even integers in [4, 20]')
-        if not 4 <= self.k <= self.nx * self.ny or self.k % 2:
-            raise ValueError('K must be even, between 4 and nx*ny')
+        if min(self.nx,self.ny)<1:
+            raise ValueError('nx 和 ny 必须为正整数。')
+        if not 1 <= self.k <= self.nx * self.ny:
+            raise ValueError('K 必须为 1 至 nx*ny 的整数。')
+        if self.k%2 and (not self.nx%2 or not self.ny%2):
+            raise ValueError('中心对称布局的奇数 K 需要 nx、ny 均为奇数，以保留中心阵元。')
         if not all(np.isfinite(x) for x in (self.spacing, self.theta, self.phi)):
             raise ValueError('parameters must be finite')
         if not 0.1 <= self.spacing <= 2 or not 0 <= self.theta <= 60 or not -360 <= self.phi <= 360:
@@ -67,16 +71,17 @@ class Config:
             raise ValueError('Hole dimensions and amplitude dynamic range must be finite')
         if min(self.hole_x,self.hole_y)<=0 or not 0<=self.amplitude_dr_db<=40:
             raise ValueError('Hole dimensions must be positive; amplitude dynamic range: 0..40 dB')
-        available=int(available_mask(self).sum())
-        if self.k>available:
-            raise ValueError(f'中心禁布后只剩 {available} 个可用位置，目标 K={self.k} 过大；请减小 K 或孔尺寸。')
+        if self.k%2 and self.hole_shape!='none':
+            raise ValueError('奇数 K 必须保留中心阵元，与中心禁布区域不兼容。')
         if not np.isfinite(self.reference_ghz) or not .1<=self.reference_ghz<=1000:
             raise ValueError('参考频率必须在 0.1–1000 GHz 内。')
         if not np.isfinite(self.min_spacing) or not 0<=self.min_spacing<=100:
             raise ValueError('最小中心距必须在 0–100 λ0 内，0 表示不追加约束。')
         scenarios(self)
-        if 2*len(admissible_pairs(self))<self.k:
-            raise ValueError('对称位置对内部已违反最小间距，剩余位置不足 K。')
+        # A cheap configuration check must not allocate an arbitrary user grid.
+        # Large geometries are checked after the run/restore resource preflight.
+        if self.nx*self.ny<=32768:
+            validate_geometry(self)
         validate_element_config(self)
         validate_bits(self.phase_bits)
         return self
@@ -92,8 +97,22 @@ def candidates(c):
     integer = np.column_stack((xx.ravel(), yy.ravel()))
     xy = (integer - [(c.nx-1)/2, (c.ny-1)/2]) * c.spacing
     # Flattened reversal pairs each position with its inversion through origin.
-    groups = np.column_stack((np.arange(len(xy)//2), np.arange(len(xy)-1, len(xy)//2-1, -1)))
+    first=np.arange(len(xy)//2)
+    groups = np.column_stack((first,len(xy)-1-first))
     return integer, xy, groups
+
+
+def required_center(c):
+    """Exact-K symmetric layouts need the central singleton precisely for odd K."""
+    return c.nx*c.ny//2 if c.k%2 else None
+
+
+def validate_geometry(c):
+    available=int(available_mask(c).sum())
+    if c.k>available:
+        raise ValueError(f'中心禁布后只剩 {available} 个可用位置，目标 K={c.k} 过大；请减小 K 或孔尺寸。')
+    if 2*len(admissible_pairs(c))+int(required_center(c) is not None)<c.k:
+        raise ValueError('中心对称及最小间距约束下可用位置不足 K；请减小 K 或间距。')
 
 
 def available_mask(c):
@@ -113,7 +132,10 @@ def admissible_pairs(c):
     allowed=available_mask(c)
     pairs=pairs[allowed[pairs[:,0]]&allowed[pairs[:,1]]]
     xy=candidates(c)[1]
-    return pairs[np.linalg.norm(xy[pairs[:,0]]-xy[pairs[:,1]],axis=1)>=c.min_spacing-1e-10]
+    valid=np.linalg.norm(xy[pairs[:,0]]-xy[pairs[:,1]],axis=1)>=c.min_spacing-1e-10
+    if required_center(c) is not None:
+        valid &= np.linalg.norm(xy[pairs[:,0]],axis=1)>=c.min_spacing-1e-10
+    return pairs[valid]
 
 
 def visible_grid(n, shifted=False):
@@ -156,8 +178,9 @@ def manifold(xy, uv, steering=(0, 0)):
 def field(xy, weights, uv, steering=(0, 0)):
     # Chunking bounds peak allocation for large validation grids.
     uv = np.asarray(uv)
-    return np.concatenate([manifold(xy, uv[i:i+2048], steering) @ weights
-                           for i in range(0, len(uv), 2048)])
+    chunk=max(1,min(2048,(32*1024*1024)//max(1,48*len(xy))))
+    return np.concatenate([manifold(xy, uv[i:i+chunk], steering) @ weights
+                           for i in range(0, len(uv), chunk)])
 
 
 def response_field(xy,weights,uv,c,case,element=None,view_mode='total',phase_mode='ideal'):
@@ -179,23 +202,32 @@ def group_matrix(c, uv,steering=None,frequency_ratio=1.):
     _, xy, _ = candidates(c)
     pairs=admissible_pairs(c)
     center=scan_uv(c) if steering is None else steering
-    return np.cos(2*np.pi*frequency_ratio*((uv-center) @ xy[pairs[:,0]].T))
+    positions=xy[pairs[:,0]]
+    if required_center(c) is not None:
+        positions=np.vstack((positions,np.zeros((1,2))))
+    return np.cos(2*np.pi*frequency_ratio*((uv-center) @ positions.T))
 
 
 def joint_matrix(c,element=None,*,progress=None,cancelled=None):
     element=build_element(c) if element is None else element
-    blocks=[]
+    domains=[]
     cases=scenarios(c)
     for index,case in enumerate(cases,1):
         check_cancelled(cancelled)
-        if progress: progress(f'构造优化矩阵：工况 {index}/{len(cases)}')
         cc=case_config(c,case); uv=sample_domain(cc,c.opt_grid); side=uv[sidelobe_mask(uv,cc)]
         if not len(side): raise ValueError(f"工况 {case['label']}：Reference mainlobe mask covers the visible disk；请增大孔径。")
         element.steering_response(case)
+        domains.append((case,cc,side))
+    result=None; offset=0
+    for index,(case,cc,side) in enumerate(domains,1):
+        check_cancelled(cancelled)
+        if progress: progress(f'构造优化矩阵：工况 {index}/{len(cases)}')
         block=group_matrix(c,side,scan_uv(cc),case['frequency_ratio'])
-        if element.model!='isotropic': block=block*element.normalized_response(side,case)[:,None]
-        blocks.append(block)
-    return np.vstack(blocks)
+        if element.model!='isotropic': block*=element.normalized_response(side,case)[:,None]
+        if len(domains)==1:return block
+        if result is None:result=np.empty((sum(len(row[2]) for row in domains),block.shape[1]),dtype=block.dtype)
+        result[offset:offset+len(block)]=block; offset+=len(block)
+    return result
 
 
 def evaluation_domains(c):
@@ -215,26 +247,37 @@ def random_groups(c, rng):
 def regular_groups(c):
     # Separable, inversion-symmetric, approximately equally spaced subsets.
     integer, _, pairs = candidates(c)
-    sizes = [(a,b) for a in range(2,c.nx+1,2) for b in range(2,c.ny+1,2) if a*b == c.k]
+    if c.nx%2==0 and c.ny%2==0:
+        sizes = [(a,b) for a in range(2,c.nx+1,2) for b in range(2,c.ny+1,2) if a*b == c.k]
+    else:
+        sizes=[(a,c.k//a) for a in range(1,min(c.nx,c.k)+1)
+               if c.k%a==0 and c.k//a<=c.ny and (a%2==0 or c.nx%2)
+               and ((c.k//a)%2==0 or c.ny%2)]
     if not sizes:
         return None
     a,b = min(sizes, key=lambda ab: abs(ab[0]/ab[1] - c.nx/c.ny))
-    xs = np.rint(np.linspace(0,c.nx-1,a)).astype(int)
-    ys = np.rint(np.linspace(0,c.ny-1,b)).astype(int)
+    xs = np.array([(c.nx-1)//2]) if a==1 else np.rint(np.linspace(0,c.nx-1,a)).astype(int)
+    ys = np.array([(c.ny-1)//2]) if b==1 else np.rint(np.linspace(0,c.ny-1,b)).astype(int)
     chosen = np.isin(integer[:,0], xs) & np.isin(integer[:,1], ys)
+    if not np.array_equal(chosen,chosen[::-1]) or int(chosen.sum())!=c.k:
+        return None
     if np.any(chosen&~available_mask(c)):
         return None
     if spacing_stats(candidates(c)[1][chosen],c.min_spacing)['spacing_violations']:
         return None
     selected=np.flatnonzero(chosen[admissible_pairs(c)[:,0]])
-    return selected if len(selected)*2==c.k else None
+    return selected if len(selected)*2+int(required_center(c) is not None)==c.k else None
 
 
-def exchange(matrix, initial, passes=6,conflicts=None,*,progress=None,cancelled=None):
+def exchange(matrix, initial, passes=6,conflicts=None,*,progress=None,cancelled=None,
+             fixed_field=None,normalization=None):
     chosen = np.array(initial, copy=True)
     total = matrix[:,chosen].sum(axis=1)
-    history = [float(np.max(np.abs(total))/len(chosen))]
+    if fixed_field is not None: total=total+fixed_field
+    divisor=len(chosen) if normalization is None else normalization
+    history = [float(np.max(np.abs(total))/divisor)]
     check_cancelled(cancelled)
+    if not len(chosen): return chosen,history
     for iteration in range(passes):
         check_cancelled(cancelled)
         if progress: progress(f'贪心交换：第 {iteration+1}/{passes} 轮')
@@ -254,7 +297,7 @@ def exchange(matrix, initial, passes=6,conflicts=None,*,progress=None,cancelled=
             for start in range(0,len(valid),batch):
                 check_cancelled(cancelled)
                 choices=valid[start:start+batch]
-                values = np.max(np.abs(total[:,None]-matrix[:,old,None]+matrix[:,choices]),axis=0)/len(chosen)
+                values = np.max(np.abs(total[:,None]-matrix[:,old,None]+matrix[:,choices]),axis=0)/divisor
                 idx = int(np.argmin(values))
                 if values[idx] < slot_best[0]:
                     slot_best=(float(values[idx]),int(choices[idx]))
@@ -269,14 +312,17 @@ def exchange(matrix, initial, passes=6,conflicts=None,*,progress=None,cancelled=
     return np.sort(chosen), history
 
 
-def anneal(matrix, initial, rng, iterations,conflicts=None,*,progress=None,cancelled=None):
+def anneal(matrix, initial, rng, iterations,conflicts=None,*,progress=None,cancelled=None,
+           fixed_field=None,normalization=None):
     chosen = np.array(initial, copy=True)
     outside = np.setdiff1d(np.arange(matrix.shape[1]),chosen)
     total = matrix[:,chosen].sum(axis=1)
-    score = float(np.max(np.abs(total))/len(chosen))
+    if fixed_field is not None: total=total+fixed_field
+    divisor=len(chosen) if normalization is None else normalization
+    score = float(np.max(np.abs(total))/divisor)
     best, best_score, history = chosen.copy(), score, [score]
     check_cancelled(cancelled)
-    if not len(outside):
+    if not len(outside) or not len(chosen):
         return np.sort(best), history
     for it in range(iterations):
         check_cancelled(cancelled)
@@ -287,7 +333,7 @@ def anneal(matrix, initial, rng, iterations,conflicts=None,*,progress=None,cance
         if conflicts is not None and conflicts[new,np.delete(chosen,slot)].any():
             history.append(best_score); continue
         trial = total + matrix[:,new] - matrix[:,old]
-        trial_score = float(np.max(np.abs(trial))/len(chosen))
+        trial_score = float(np.max(np.abs(trial))/divisor)
         temperature = 0.025*(0.0005/0.025)**(it/max(1,iterations-1))
         if trial_score < score or rng.random() < np.exp(min(0,(score-trial_score)/temperature)):
             total, score = trial, trial_score
@@ -303,13 +349,13 @@ def anneal(matrix, initial, rng, iterations,conflicts=None,*,progress=None,cance
 def reweighted_lp(matrix, rounds=5,*,lp_solver='auto',progress=None,cancelled=None):
     """Positive real group weights, symmetry, fixed sampled sidelobe cap.
 
-    Each group weight is the total weight of a centrosymmetric pair.
+    Each group weight is the total weight of an inversion pair or singleton.
     This restricted real LP is not the general complex-valued SOCP.
     """
     n = matrix.shape[1]
     method=minimax_solver(lp_solver,n)
     check_cancelled(cancelled)
-    if progress: progress(f'首次最小最大 LP：{method}，{n} 个对称位置对')
+    if progress: progress(f'首次最小最大 LP：{method}，{n} 个对称组')
     constraints = np.vstack((matrix,-matrix))
     minimum,first_diagnostics = solve_lp(linprog,np.r_[np.zeros(n),1.0],
         A_ub=np.column_stack((constraints,-np.ones(len(constraints)))),
@@ -339,21 +385,25 @@ def reweighted_lp(matrix, rounds=5,*,lp_solver='auto',progress=None,cancelled=No
                      'sampled_residual':float(np.max(np.abs(matrix@weights))-cap)}
 
 
-def amplitude_minimax(matrix, dynamic_range_db,*,lp_solver='auto',progress=None,cancelled=None):
+def amplitude_minimax(matrix, dynamic_range_db,*,lp_solver='auto',progress=None,cancelled=None,
+                      group_sizes=None):
     """Fixed support, positive weights, ratio(max/min) <= 10**(DR/20).
 
-    Auxiliary q imposes q <= g_j <= ratio*q; no element can disappear.
+    Auxiliary q bounds each physical amplitude g_j/group_size_j; no element disappears.
     The optimum is global only for this finite-sample, restricted real LP.
     """
     n=matrix.shape[1]
+    sizes=np.ones(n) if group_sizes is None else np.asarray(group_sizes,dtype=float)
+    if sizes.shape!=(n,) or not np.all(np.isfinite(sizes)) or np.any(sizes<=0):
+        raise ValueError('每个对称组的阵元数必须为正且与矩阵列数一致。')
     method=minimax_solver(lp_solver,n)
     check_cancelled(cancelled)
-    if progress: progress(f'固定布局幅度 LP：{method}，{n} 个对称位置对')
+    if progress: progress(f'固定布局幅度 LP：{method}，{n} 个对称组')
     ratio=10**(dynamic_range_db/20)
     pattern=np.vstack((matrix,-matrix))
     pattern=np.column_stack((pattern,np.zeros(len(pattern)),-np.ones(len(pattern))))
-    lower=np.column_stack((-np.eye(n),np.ones(n),np.zeros(n)))
-    upper=np.column_stack((np.eye(n),-ratio*np.ones(n),np.zeros(n)))
+    lower=np.column_stack((-np.eye(n),sizes,np.zeros(n)))
+    upper=np.column_stack((np.eye(n),-ratio*sizes,np.zeros(n)))
     bounds=np.vstack((pattern,lower,upper))
     solution,diagnostics=solve_lp(linprog,np.r_[np.zeros(n+1),1.0],A_ub=bounds,b_ub=np.zeros(len(bounds)),
         A_eq=np.array([np.r_[np.ones(n),0,0]]),b_eq=[1],bounds=(0,None),method=method,cancelled=cancelled)
@@ -362,26 +412,10 @@ def amplitude_minimax(matrix, dynamic_range_db,*,lp_solver='auto',progress=None,
     weights=solution.x[:n]
     return weights,{'requested_dynamic_range_db':dynamic_range_db,
                     'requested_solver':lp_solver,'minimax_solver':method,'solver_diagnostics':diagnostics,
-                    'actual_dynamic_range_db':float(db(weights.max()/weights.min())),
+                    'actual_dynamic_range_db':float(db((weights/sizes).max()/(weights/sizes).min())),
                     'sampled_peak_linear':float(np.max(np.abs(matrix@weights))),
                     'lp_peak_linear':float(solution.x[-1]),
                     'preserves_support':True}
-
-
-def coarray(integer):
-    diffs = (integer[:,None,:]-integer[None,:,:]).reshape(-1,2)
-    lags, multiplicity = np.unique(diffs,axis=0,return_counts=True)
-    lagset = set(map(tuple,lags))
-    mx,my = np.max(np.abs(lags),axis=0)
-    best = (1,0,0)
-    for rx in range(int(mx)+1):
-        for ry in range(int(my)+1):
-            area=(2*rx+1)*(2*ry+1)
-            if area > best[0] and all((x,y) in lagset for x in range(-rx,rx+1) for y in range(-ry,ry+1)):
-                best=(area,rx,ry)
-    return {'unique_lags':len(lags),'bounding_holes':int((2*mx+1)*(2*my+1)-len(lags)),
-            'central_rectangle_lags':best[0], 'central_half_widths':[best[1],best[2]],
-            'lags':lags,'multiplicity':multiplicity}
 
 
 def structured_arrays():
@@ -525,6 +559,8 @@ def evaluate_layouts(results,c,domains,element,*,workers=None,progress=None,canc
 def run(c=Config(), progress=None, *, workers=None, cancelled=None):
     workers=requested_workers(workers)
     c.validate()
+    ensure_resources(c,workers=workers)
+    validate_geometry(c)
     check_cancelled(cancelled)
     def tell(message):
         check_cancelled(cancelled)
@@ -532,6 +568,9 @@ def run(c=Config(), progress=None, *, workers=None, cancelled=None):
         check_cancelled(cancelled)
     integer,xy,_=candidates(c)
     pairs=admissible_pairs(c)
+    center=required_center(c)
+    has_center=center is not None
+    groups=len(pairs)+int(has_center)
     available=available_mask(c)
     element=build_element(c)
     matrix=bounded_call(lambda:joint_matrix(c,element,progress=tell,cancelled=cancelled),cancelled=cancelled)
@@ -539,28 +578,47 @@ def run(c=Config(), progress=None, *, workers=None, cancelled=None):
     conflicts=pair_conflicts(xy,pairs,c.min_spacing)
     tell('检查间距可行性及公共布局')
     initial,pool,packing=feasible_groups(conflicts,c.k//2,rng,progress=tell,cancelled=cancelled)
+    def columns(selected):
+        return np.r_[selected,len(pairs)].astype(int) if has_center else selected
+    def sizes(selected):
+        return np.r_[np.full(len(selected),2),1] if has_center else None
+    pool_columns=columns(pool)
+    pair_matrix=matrix[:,:len(pairs)] if has_center else matrix
+    uniform_options=({'fixed_field':matrix[:,-1]/2,'normalization':c.k/2} if has_center else {})
     raw=[]
     amplitude_info={}
     def add(name,selected=None,group_weights=None,notes='',history=None,seconds=0):
         if group_weights is None:
-            group_weights=np.zeros(len(pairs)); group_weights[selected]=1/len(selected)
-        w=np.zeros(len(xy)); w[pairs[:,0]]=group_weights/2; w[pairs[:,1]]=group_weights/2
+            group_weights=np.zeros(groups)
+            if has_center:
+                count=2*len(selected)+1
+                group_weights[selected]=2/count
+                group_weights[-1]=1/count
+            else:
+                group_weights[selected]=1/len(selected)
+        w=np.zeros(len(xy)); w[pairs[:,0]]=group_weights[:len(pairs)]/2; w[pairs[:,1]]=group_weights[:len(pairs)]/2
+        if has_center: w[center]=group_weights[-1]
         active=np.flatnonzero(w>1e-9)
         w=w[active]; w/=w.sum()
         raw.append({'name':name,'indices':active,'xy':xy[active],'integer':integer[active],
                     'weights':w,'notes':notes,'history':history or [],'seconds':seconds})
     hollow=c.hole_shape!='none'
     restricted=len(pool)<len(pairs)
-    add('Feasible packing reference' if restricted else ('Hollow uniform' if hollow else 'Dense reference'),pool,
-        notes='Uniform feasible packing reference; not necessarily a maximum packing' if restricted else 'All admissible positions, uniform amplitude; count differs from K')
+    excludes_center=bool(c.nx%2 and c.ny%2 and not has_center and not hollow)
+    reference_name=('Feasible packing reference' if restricted else ('Hollow uniform' if hollow else
+        ('Paired reference (center excluded)' if excludes_center else 'Dense reference')))
+    reference_notes=('Uniform feasible packing reference; not necessarily a maximum packing' if restricted else
+        ('All admissible inversion pairs; central singleton excluded for even K; count differs from K' if excludes_center else
+         'All admissible positions, uniform amplitude; count differs from K'))
+    add(reference_name,pool,notes=reference_notes)
     joint=len(scenarios(c))>1
     if hollow or joint:
         tell('优化参考布局幅度')
-        start=time.perf_counter(); ag,info=amplitude_minimax(matrix[:,pool],c.amplitude_dr_db,
-            lp_solver=c.lp_solver,progress=tell,cancelled=cancelled)
+        start=time.perf_counter(); ag,info=amplitude_minimax(matrix[:,pool_columns],c.amplitude_dr_db,
+            lp_solver=c.lp_solver,progress=tell,cancelled=cancelled,group_sizes=sizes(pool))
         name='Packing amplitude LP' if restricted else ('Hollow amplitude LP' if hollow else 'Joint amplitude LP')
         amplitude_info[name]=info
-        full=np.zeros(len(pairs)); full[pool]=ag
+        full=np.zeros(groups); full[pool_columns]=ag
         add(name,group_weights=full,seconds=time.perf_counter()-start,
             notes='Same support as the feasible reference; one shared positive amplitude vector optimized across all cases')
     regular=regular_groups(c)
@@ -568,27 +626,29 @@ def run(c=Config(), progress=None, *, workers=None, cancelled=None):
         add('Regular thinning',regular,notes='Symmetric separable rounded grid, not exact uniform spacing')
     add('Random symmetric',initial,notes='One seeded realization, not an ensemble average')
     tell('开始贪心交换')
-    start=time.perf_counter(); selected,hist=bounded_call(lambda:exchange(matrix,initial,
-        conflicts=conflicts if conflicts.any() else None,progress=tell,cancelled=cancelled),cancelled=cancelled)
+    start=time.perf_counter(); selected,hist=bounded_call(lambda:exchange(pair_matrix,initial,
+        conflicts=conflicts if conflicts.any() else None,progress=tell,cancelled=cancelled,
+        **uniform_options),cancelled=cancelled)
     add('Greedy exchange',selected,history=hist,seconds=time.perf_counter()-start)
     tell('开始模拟退火')
-    start=time.perf_counter(); selected,hist=bounded_call(lambda:anneal(matrix,initial,rng,c.iterations,
-        conflicts=conflicts if conflicts.any() else None,progress=tell,cancelled=cancelled),cancelled=cancelled)
+    start=time.perf_counter(); selected,hist=bounded_call(lambda:anneal(pair_matrix,initial,rng,c.iterations,
+        conflicts=conflicts if conflicts.any() else None,progress=tell,cancelled=cancelled,
+        **uniform_options),cancelled=cancelled)
     add('Simulated annealing',selected,history=hist,seconds=time.perf_counter()-start)
     if hollow or joint:
         tell('优化所选布局幅度')
-        start=time.perf_counter(); sg,info=amplitude_minimax(matrix[:,selected],c.amplitude_dr_db,
-            lp_solver=c.lp_solver,progress=tell,cancelled=cancelled)
+        start=time.perf_counter(); sg,info=amplitude_minimax(matrix[:,columns(selected)],c.amplitude_dr_db,
+            lp_solver=c.lp_solver,progress=tell,cancelled=cancelled,group_sizes=sizes(selected))
         amplitude_info['SA amplitude LP']=info
-        full=np.zeros(len(pairs)); full[selected]=sg
+        full=np.zeros(groups); full[columns(selected)]=sg
         add('SA amplitude LP',group_weights=full,seconds=time.perf_counter()-start,
             notes='Exactly the same K positions as Simulated annealing; only positive amplitudes change, with bounded dynamic range')
     tell('开始重加权 L1 线性规划')
-    start=time.perf_counter(); gw,lp=reweighted_lp(matrix[:,pool],lp_solver=c.lp_solver,progress=tell,cancelled=cancelled)
+    start=time.perf_counter(); gw,lp=reweighted_lp(matrix[:,pool_columns],lp_solver=c.lp_solver,progress=tell,cancelled=cancelled)
     lp_seconds=time.perf_counter()-start
-    selected=pool[np.argsort(-gw,kind='stable')[:c.k//2]]
+    selected=pool[np.argsort(-gw[:len(pool)],kind='stable')[:c.k//2]]
     add('L1 top-K uniform',selected,notes='Rank LP support, select K, reset equal amplitude; cap no longer guaranteed',seconds=lp_seconds)
-    full=np.zeros(len(pairs)); full[pool]=gw
+    full=np.zeros(groups); full[pool_columns]=gw
     add('L1 weighted solution',group_weights=full,notes='Variable support on the documented feasible pool; shared positive taper across cases; not equal-budget comparison',seconds=lp_seconds)
     tell('构造独立密网格及偏移网格')
     domains=evaluation_domains(c)
@@ -596,17 +656,19 @@ def run(c=Config(), progress=None, *, workers=None, cancelled=None):
         progress=lambda done,total:tell(f'验证布局：{done}/{total}'))
     return {'config':asdict(c),'results':raw,'lp':lp,'amplitude_lp':amplitude_info,'execution':execution,
             'element_pattern':element.snapshot,'scenarios':scenarios(c),'spacing':{**packing,'minimum_lambda_ref':c.min_spacing,
-                'minimum_mm':c.min_spacing*LIGHT_MM_GHZ/c.reference_ghz,'lp_pool_pair_indices':pool.tolist()},
-            'candidate_counts':{'total':len(xy),'available':int(available.sum()),'forbidden':int((~available).sum()),'admissible_pair_elements':2*len(pairs)},
+                'minimum_mm':c.min_spacing*LIGHT_MM_GHZ/c.reference_ghz,'lp_pool_pair_indices':pool.tolist(),
+                'required_center_index':center},
+            'candidate_counts':{'total':len(xy),'available':int(available.sum()),'forbidden':int((~available).sum()),
+                'admissible_pair_elements':2*len(pairs),'admissible_center_elements':int(has_center)},
             'model':{'coordinates':'fixed physical xy in reference wavelengths lambda0; u=sin(theta)cos(phi), v=sin(theta)sin(phi)',
                      'normalization':'field at steering = 1, 20log10 amplitude',
                      'mask':'outside fixed reference first-null rectangle: |u-u0|>=1/(nx*d) OR |v-v0|>=1/(ny*d)',
                      'validation':'max over dense and shifted visible-disk grids; sampled, not continuous bound',
                      'assumptions':'per-case narrowband, far field, identical co-oriented scalar element envelope, no mutual coupling or polarization; only +z hemisphere evaluated',
-                     'symmetry':'centrosymmetric support and positive real taper, steering phase applied analytically',
+                     'symmetry':'centrosymmetric support and positive real taper; odd K fixes the central singleton, even K excludes it; L1 weighted reference has variable support; steering phase applied analytically',
                      'central_hole':'rectangle: full X/Y widths; circle: diameter=hole_x, hole_y ignored; lambda units; boundary forbidden',
                      'dynamic_range':'amplitude DR applies only to fixed-support amplitude LP methods; reweighted L1 is a separate unconstrained reference',
-                     'lp_solver':'auto: minimax uses highs-ipm for >=128 support pairs, otherwise highs; explicit highs/highs-ipm selects minimax only; five reweighting rounds always highs; all sampling and constraints retained',
+                     'lp_solver':'auto: minimax uses highs-ipm for >=128 support groups (pairs or central singleton), otherwise highs; explicit highs/highs-ipm selects minimax only; five reweighting rounds always highs; all sampling and constraints retained',
                      'joint_synthesis':'One shared physical support and one shared amplitude vector; minimize worst sampled PSL across the Cartesian product of angles and frequencies',
                      'frequency_steering':'Ideal per-frequency phase correction (TTD-equivalent); phase=-2*pi*(f/f0)*(x*u0+y*v0); no fixed-phase beam-squint model',
                      'spacing':'Pairwise Euclidean center distance in lambda0; equality is allowed; checked on every generated result',

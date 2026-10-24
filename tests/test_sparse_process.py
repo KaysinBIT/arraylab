@@ -215,3 +215,18 @@ time.sleep(60)
         parent.wait(timeout=5)
         if child_handle:
             api.CloseHandle(child_handle)
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows Job Object memory bound')
+def test_job_memory_budget_rejects_oversized_native_allocation():
+    job = sparse_process._WindowsJob(memory_limit_bytes=64 * 1024**2)
+    script = "import sys\ntry: data=bytearray(128*1024**2)\nexcept MemoryError: sys.exit(23)\nsys.exit(0)"
+    child = subprocess.Popen([sys.executable, '-c', script],
+        creationflags=subprocess.CREATE_NO_WINDOW | 0x00000004)
+    try:
+        job.attach(child)
+        sparse_process._resume_child(child)
+        assert child.wait(timeout=10) == 23
+    finally:
+        sparse_process._stop(child)
+        job.close()

@@ -89,7 +89,7 @@ either bounding minimum is absent no PSL is inferred from a guessed mask.
     return result
 
 
-def spherical_beamwidths(field_xyz, theta_deg, phi_deg, step_deg=.25):
+def spherical_beamwidths(field_xyz, theta_deg, phi_deg, step_deg=.25, *, flat_cuts=()):
     """Local half-power widths on meridional and transverse great circles.
 
 ``field_xyz`` maps an (N,3) array of unit directions to N complex field values.
@@ -97,6 +97,7 @@ The selected direction is supplied by the caller's peak search. Sampling only
 brackets crossings; roots use the field itself. Step controls the bracketing
 resolution, so callers with large apertures should use a finer step. Near the
 center geometric samples avoid skipping very narrow main lobes.
+``flat_cuts`` may name circles whose constant power the caller has proved.
 """
     phi_deg = 0.0 if phi_deg is None else float(phi_deg)
     if (not all(math.isfinite(v) for v in (theta_deg, phi_deg, step_deg)) or
@@ -125,17 +126,24 @@ center geometric samples avoid skipping very narrow main lobes.
             record["status"] = "zero_field_at_selected_direction"
             records.append(record)
             continue
+        if name in flat_cuts:
+            records.append(record)
+            continue
         edges = []
         for sign in (-1, 1):
-            angles = sign * offsets
-            radians = np.deg2rad(angles)
-            directions = np.cos(radians)[:, None] * center + np.sin(radians)[:, None] * tangent
-            power = values(directions)
-            crossings = np.flatnonzero(power <= peak / 2)
-            if not len(crossings):
+            bracket = None
+            for start in range(0, len(offsets), 128):
+                angles = sign * offsets[start:start+128]
+                radians = np.deg2rad(angles)
+                directions = np.cos(radians)[:, None] * center + np.sin(radians)[:, None] * tangent
+                crossings = np.flatnonzero(values(directions) <= peak / 2)
+                if len(crossings):
+                    index = start + int(crossings[0])
+                    bracket = sorted((0.0 if index == 0 else sign * offsets[index-1], sign * offsets[index]))
+                    break
+            if bracket is None:
                 continue
-            index = int(crossings[0])
-            a, b = sorted((0.0 if index == 0 else angles[index - 1], angles[index]))
+            a, b = bracket
 
             def residual(angle):
                 radians = math.radians(angle)

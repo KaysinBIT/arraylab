@@ -95,7 +95,7 @@ class SparsePlotCache(unittest.TestCase):
     def test_bounded_cache_and_blas_restoration(self):
         bundle, result = self.bundle()
         before = [(p['filepath'], p['num_threads']) for p in threadpool_info() if p['user_api'] == 'blas']
-        def check_limit(*args):
+        def check_limit(*args, **kwargs):
             self.assertTrue(all(p['num_threads'] == 1 for p in threadpool_info() if p['user_api'] == 'blas'))
             return {'orthogonal_beamwidths_deg': [1., 1.]}
         with patch.object(metrics, 'spherical_beamwidths', side_effect=check_limit):

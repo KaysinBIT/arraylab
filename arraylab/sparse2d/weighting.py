@@ -5,10 +5,11 @@ import warnings
 import numpy as np
 from scipy.signal import windows
 from .core import (Config,admissible_pairs,amplitude_minimax,available_mask,
-    evaluate_layouts,evaluation_domains,joint_matrix)
+    evaluate_layouts,evaluation_domains,joint_matrix,required_center)
 from ..parallel import requested_workers,check_cancelled
 from .elements import build_element
 from .numerics import bounded_call
+from .resources import ensure_resources
 
 METHODS={'minimax':'副瓣优化 LP','taylor':'Taylor','chebyshev':'Chebyshev',
          'gaussian':'Gaussian','uniform':'均匀'}
@@ -29,8 +30,10 @@ class Weighting:
             raise ValueError('加权幅度范围必须在 0–40 dB 内。')
         if self.method in ('taylor','chebyshev') and (not np.isfinite(self.sll_db) or not 20<=self.sll_db<=80):
             raise ValueError('窗函数参考副瓣抑制参数必须在 20–80 dB 内。')
-        if self.method=='taylor' and (type(self.nbar) is not int or not 2<=self.nbar<=min(10,c.nx,c.ny)):
-            raise ValueError('Taylor nbar 必须为 2 至 min(10,nx,ny) 的整数。')
+        axes=[n for n in (c.nx,c.ny) if n>1]
+        maximum=min([10,*axes])
+        if self.method=='taylor' and (type(self.nbar) is not int or not 2<=self.nbar<=maximum):
+            raise ValueError('Taylor nbar 必须为 2 至 min(10,非退化轴阵元数) 的整数。')
         if self.method=='gaussian' and (not np.isfinite(self.sigma) or not .05<=self.sigma<=1):
             raise ValueError('Gaussian σ/网格跨度必须在 0.05–1.0 内。')
         # All metadata must remain valid strict JSON, even for inactive controls.
@@ -42,6 +45,7 @@ class Weighting:
 def window_weights(c,integer,settings):
     """Sample separable parent-grid windows at actual retained coordinates."""
     def axis(n):
+        if n==1:return np.ones(1)
         if settings.method=='uniform': return np.ones(n)
         if settings.method=='taylor':
             return windows.taylor(n,nbar=settings.nbar,sll=settings.sll_db,norm=True,sym=True)
@@ -69,6 +73,7 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,worke
     """Return a new bundle; append one result and preserve every source result."""
     workers=requested_workers(workers);check_cancelled(cancelled)
     c=Config(**bundle['config']).validate(); settings.validate(c)
+    ensure_resources(c,workers=1,operation='weight' if settings.method=='minimax' else 'evaluate')
     element=build_element(c,bundle.get('element_pattern'))
     if type(source_index) is not int or not 0<=source_index<len(bundle['results']):
         raise ValueError('请选择一项已计算的布局。')
@@ -86,15 +91,20 @@ def add_weighting(bundle,source_index,settings=Weighting(),progress=None,*,worke
         tell('固定稀疏布局幅度优化')
         pair_lookup={int(index):position for position,index in enumerate(indices)}
         pairs=admissible_pairs(c)
-        selected=np.array([j for j,(a,b) in enumerate(pairs) if a in pair_lookup and b in pair_lookup])
-        if len(selected)*2!=len(indices):
+        selected=np.array([j for j,(a,b) in enumerate(pairs) if a in pair_lookup and b in pair_lookup],dtype=int)
+        center=required_center(c)
+        has_center=center is not None and center in pair_lookup
+        if len(selected)*2+int(has_center)!=len(indices):
             raise ValueError('当前受限 LP 需要完整的中心对称位置对。')
         matrix=bounded_call(lambda:joint_matrix(c,element,progress=tell,cancelled=cancelled),cancelled=cancelled)
-        gw,info=amplitude_minimax(matrix[:,selected],settings.dr_db,lp_solver=c.lp_solver,
-                                 progress=tell,cancelled=cancelled)
+        columns=np.r_[selected,len(pairs)].astype(int) if has_center else selected.astype(int)
+        sizes=np.r_[np.full(len(selected),2),1] if has_center else None
+        gw,info=amplitude_minimax(matrix[:,columns],settings.dr_db,lp_solver=c.lp_solver,
+                                 progress=tell,cancelled=cancelled,group_sizes=sizes)
         weights=np.zeros(len(indices))
         for pair,g in zip(pairs[selected],gw):
             for index in pair: weights[pair_lookup[int(index)]]=g/2
+        if has_center:weights[pair_lookup[center]]=gw[-1]
     else:
         tell('在保留阵元位置上采样窗函数')
         weights,info=window_weights(c,integer,settings)

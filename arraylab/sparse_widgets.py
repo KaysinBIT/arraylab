@@ -15,7 +15,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, Q
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QDialog, QTextBrowser)
 from . import __version__
 from .parallel import ComputationCancelled, requested_workers
-from .sparse2d.core import Config, available_mask
+from .sparse2d.core import Config
+from .sparse2d.resources import estimate_resources, ensure_resources, format_bytes
 from .sparse2d.weighting import METHODS, Weighting
 from .sparse_process import run_sparse_process
 from .sparse2d.elements import MODELS, build_element, write_example_csv
@@ -30,6 +31,34 @@ from .sparse_bridge import planar_from_sparse
 
 
 SparseCancelled = ComputationCancelled
+
+
+class SparseIntegerInput(QLineEdit):
+    """Exact integer entry without Qt's signed 32-bit spin-box range."""
+
+    def __init__(self, value, label):
+        super().__init__(str(value))
+        self.label = label
+        self.setMinimumWidth(65)
+        self.setAccessibleName(label)
+        self.setToolTip('输入正整数，不限制为偶数；开始计算前检查对称条件和本机资源预算。')
+
+    def value(self):
+        text = self.text().strip()
+        if not text or not text.isascii() or not text.isdecimal():
+            raise ValueError(f'{self.label}须填写正整数。')
+        try:
+            value = int(text)
+        except ValueError as exc:
+            raise ValueError(f'{self.label}的数字过长，无法读取。') from exc
+        if value <= 0:
+            raise ValueError(f'{self.label}须大于0。')
+        return value
+
+    def setValue(self, value):
+        if type(value) is not int:
+            raise ValueError(f'{self.label}须使用整数，不接受自动取整。')
+        self.setText(str(value))
 
 
 class SparseWorker(QThread):
@@ -150,6 +179,9 @@ class SparsePanel(QWidget):
             if key == 'seed':
                 box = QLineEdit(str(defaults.seed)); box.textChanged.connect(self.mark_stale)
                 box.setAccessibleName(label); self.inputs[key] = box; form.addRow(label, box); return
+            if key in ('nx', 'ny', 'k'):
+                box = SparseIntegerInput(getattr(defaults, key), label)
+                box.textChanged.connect(self.mark_stale); self.inputs[key] = box; form.addRow(label, box); return
             box = QSpinBox() if type(getattr(defaults, key)) is int else QDoubleSpinBox()
             if isinstance(box, QDoubleSpinBox): box.setDecimals(8)
             box.setRange(low, high); box.setSingleStep(step); box.setValue(getattr(defaults, key)); box.setMinimumWidth(65)
@@ -159,11 +191,13 @@ class SparsePanel(QWidget):
             for text, value in pairs: box.addItem(text, value)
             box.currentIndexChanged.connect(self.mark_stale); form.addRow(label, box); return box
         body, form = page('阵列')
-        for spec in [('nx', 'X候选数', 4, 20, 2), ('ny', 'Y候选数', 4, 20, 2), ('k', '目标阵元K', 4, 400, 2),
+        for spec in [('nx', 'X候选数', None, None), ('ny', 'Y候选数', None, None), ('k', '目标阵元K', None, None),
                      ('spacing', '间距/λ0', .1, 2, .1), ('reference_ghz', '参考GHz', .1, 1000, 1), ('min_spacing', '最小距/λ0', 0, 100, .1)]: number(form, *spec)
         self.hole_shape = combo(form, '中心禁布', [('无', 'none'), ('矩形', 'rectangle'), ('圆形', 'circle')])
         number(form, 'hole_x', '孔宽X/直径λ0', .01, 100, .25); number(form, 'hole_y', '孔高Y/λ0', .01, 100, .25)
-        self.availability = QLabel(); self.availability.setWordWrap(True); body.addWidget(self.availability); body.addStretch()
+        self.availability = QLabel(); self.availability.setWordWrap(True); body.addWidget(self.availability)
+        label = QLabel('X/Y候选数和目标阵元K均可填写正整数。中心对称布局中，奇数K需要X/Y均为奇数且中心阵元不在禁布区；其余阵元成对选取。实际可计算规模取决于资源预算。')
+        label.setWordWrap(True); body.addWidget(label); body.addStretch()
         body, form = page('单元')
         self.element_model = combo(form, '模型', [(v, k) for k, v in MODELS.items()])
         self.element_axis = combo(form, '偶极子轴', [(v, v) for v in ('x', 'y', 'z')])
@@ -271,8 +305,15 @@ class SparsePanel(QWidget):
         self.inputs['hole_x'].setEnabled(self.hole_shape.currentData() != 'none'); self.inputs['hole_y'].setEnabled(self.hole_shape.currentData() == 'rectangle')
         model = self.element_model.currentData(); self.element_axis.setEnabled(model == 'dipole'); self.inputs['element_dipole_length'].setEnabled(model == 'dipole')
         self.inputs['element_patch_hpbw'].setEnabled(model == 'patch'); self.element_import_mode.setEnabled(model == 'imported'); self.element_file.setEnabled(model == 'imported')
-        try: self.availability.setText(f'可用候选位置：{int(available_mask(self.config_from_inputs()).sum())}；按中心对称成对选点。')
-        except ValueError: self.availability.setText('请检查候选网格与禁布区。')
+        try:
+            config = self.config_from_inputs()
+            count = config.nx * config.ny
+            candidates = f'可用候选位置：{count:,}' if config.hole_shape == 'none' else f'完整网格：{count:,}；禁布后可用数量在综合前核实'
+            resources = estimate_resources(config, workers=requested_workers())
+            verdict = '预算内' if resources['within_budget'] else '超出当前预算，开始综合时会提示'
+            self.availability.setText(f"{candidates}。\n预计峰值 {format_bytes(resources['estimated_peak_bytes'])} / 当前预算 {format_bytes(resources['budget_bytes'])}；{verdict}。")
+        except (ValueError, OverflowError) as exc:
+            self.availability.setText('请检查参数：' + str(exc))
         method = self.weight_method.currentData(); self.weight_dr.setEnabled(method != 'uniform')
         self.weight_sll.setEnabled(method in ('taylor', 'chebyshev')); self.weight_nbar.setEnabled(method == 'taylor'); self.weight_sigma.setEnabled(method == 'gaussian')
 
@@ -290,7 +331,9 @@ class SparsePanel(QWidget):
     def start(self):
         if self.thread is not None or self._busy: return
         try:
-            config = self.config_from_inputs().validate(); element = build_element(config)
+            config = self.config_from_inputs().validate()
+            ensure_resources(config, workers=requested_workers())
+            element = build_element(config)
             for case in scenarios(config): element.steering_response(case)
         except (ValueError, OSError) as exc:
             self._last_error = str(exc); QMessageBox.warning(self, '稀疏参数检查', str(exc)); return
@@ -456,7 +499,8 @@ class SparsePanel(QWidget):
         result = self.selected_result()
         if result is not None:
             ci = max(0, self.case_selector.currentIndex()); case = self.bundle['scenarios'][ci]; m = result['metrics']; config = Config(**self.bundle['config'])
-            self.summary.setText(f"{result_name(result)} · {m['elements']}阵元 · 理想最差PSL {m['validation_psl_db']:.2f} dB · 最小距 {m['min_distance_lambda_ref']:.4g} λ0 · {self.bundle['element_pattern']['name']}")
+            distance = '未定义（单阵元）' if m['min_distance_lambda_ref'] is None else f"{m['min_distance_lambda_ref']:.4g} λ0"
+            self.summary.setText(f"{result_name(result)} · {m['elements']}阵元 · 理想最差PSL {m['validation_psl_db']:.2f} dB · 最小距 {distance} · {self.bundle['element_pattern']['name']}")
             phases = excitation_phases(result['xy'], case, config.phase_bits)
             ports = [{'index': int(idx), 'x': float(xy[0]), 'y': float(xy[1]), 'amplitude': float(w), 'ideal': float(ideal), 'actual': float(actual), 'code': int(code) if config.phase_bits else None}
                      for idx, xy, w, ideal, actual, code in zip(result['indices'], result['xy'], result['weights'], phases['ideal_phase_deg'], phases['command_phase_deg'], phases['phase_code'])]
