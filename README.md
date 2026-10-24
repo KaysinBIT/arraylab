@@ -1,10 +1,10 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版本0.21.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.21.0) · [发行说明](docs/releases/0.21.0.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版本0.22.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.0) · [发行说明](docs/releases/0.22.0.md)。
 
-**0.21.0 正式版**新增线阵及线阵馈电三维方向图、图下主要指标，以及固定内部模板的连续子阵中心优化。[方向图与指标](docs/pattern-metrics.md) · [子阵中心优化](docs/subarray-centers.md)。
+**0.22.0 正式版**加入[逐支路匹配延迟](docs/branch-electrical-lengths.md)与[自定义稀疏网格及K](docs/sparse-arrays.md)，改善稀疏综合的进度、取消和资源保护，并提升[三维图旋转/缩放响应](docs/3d-interaction.md)。串馈末级连接图现在清楚显示沿主干延续到最后负载。
 
-当前源码为 **0.22.0.dev3 开发版**，改进[三维方向图旋转和缩放](docs/3d-interaction.md)：拖动时使用轻量预览，松开恢复完整细节，支持滚轮缩放并清理旧视图回调。保留[自定义二维稀疏规模与K](docs/sparse-arrays.md)、独立计算取消、多核复核及[逐支路匹配延迟](docs/branch-electrical-lengths.md)。当前正式下载仍为0.21.0。
+保留0.21.0的线阵三维方向图、图下主要指标及固定内部模板的连续子阵中心优化。[方向图与指标](docs/pattern-metrics.md) · [子阵中心优化](docs/subarray-centers.md)。
 
 本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计、子阵中心优化各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
 
@@ -20,7 +20,7 @@
 
 ## 启动
 
-Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.21.0)下载`ArrayLab-0.21.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
+Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.0)下载`ArrayLab-0.22.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
 
 源码用户可在Windows PowerShell中创建环境并启动桌面版：
 
@@ -34,7 +34,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.22.0.dev3/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.22.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -47,7 +47,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.21.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.22.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -194,7 +194,7 @@ python -m arraylab --headless --sparse inspect --input results/sparse01
 python -m arraylab --headless --sparse planar --input results/sparse01 --index 3 --case-index 0 --output results/handoff01
 ```
 
-行索引从0开始，先inspect查看当前方案。稀疏模块可独立处理最多20×20候选网格；输出协议、全部入口和模型边界见[操作指南](docs/sparse-arrays.md)。运行包及源码自包含，不依赖原`sparse2d_demo`目录。误差统计与馈线物理尺寸仍暂缓。
+行索引从0开始，先inspect查看当前方案。稀疏候选网格及目标K可自定义正整数，实际计算受中心对称、可用位置和资源预算约束；输出协议、全部入口和模型边界见[操作指南](docs/sparse-arrays.md)。运行包及源码自包含，不依赖原`sparse2d_demo`目录。误差统计与馈线物理尺寸仍暂缓。
 
 ## 首版范围与坐标
 
@@ -208,7 +208,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - 方向图按理论峰值归一化0 dB；保存数值零点以−300 dB表示。该数值只是有限精度下限，零点的相位不作物理解释。显示下限不改变保存的数据。
 - 导入文件只显示数据，不由单个切面反推方向性，也不假定其角度定义与当前模型相同。允许的导入角度范围为−180°至180°，角度必须严格递增。
 
-尚未实现或暂缓：物理馈线尺寸、非各向同性/极化单元、互耦、连续坐标自动优化、复阻抗匹配与全波求解、蒙特卡洛统计平均、包含窗口布局的完整项目持久化。
+尚未实现或暂缓：物理馈线尺寸、电气馈电模型中的非各向同性/极化单元、互耦、独立阵元连续坐标自动优化、复阻抗匹配与全波求解、蒙特卡洛统计平均、包含窗口布局的完整项目持久化。稀疏模块的标量单元响应和子阵中心连续优化属于已有独立功能。
 
 ## 计算与核对
 
@@ -223,7 +223,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.21.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.22.0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

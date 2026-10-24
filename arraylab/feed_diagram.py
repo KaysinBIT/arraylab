@@ -73,8 +73,9 @@ def diagram_svg(report):
              '<text x="20" y="69">Each T and D uses its own impedance. Zero-degree D/C means bypass. Not to scale.</text>']
     port_map = {f"P{port['port']}": port for port in report["ports"]}
 
-    def segment(points, color="#297da7"):
-        parts.append(f'<polyline points="{points}" stroke="{color}" stroke-width="2" fill="none"/>')
+    def segment(points, color="#297da7", *, section, role):
+        parts.append(f'<polyline points="{points}" stroke="{color}" stroke-width="2" fill="none" '
+                     f'data-section="{escape(section)}" data-role="{escape(role)}"/>')
 
     def block(x, y, label, impedance, degrees, kind, width=136, outside=False):
         fill, stroke = {"T": ("#e4edf8", "#297da7"), "D": ("#e6f5ed", "#27815a"),
@@ -95,7 +96,7 @@ def diagram_svg(report):
         label_t, label_d = line["id"], "D" + line["id"][1:]
         if x1 == x2:
             # Series backbone: enough separation to draw both actual segments.
-            segment(f"{x1},{y1+22} {x2},{y2-22}", color)
+            segment(f"{x1},{y1+22} {x2},{y2-22}", color, section=line["id"], role=line["kind"])
             block(x1, y1 + 68, label_t, line["line_ohm"], line["electrical_length_deg"], "T", outside=line["outside_range"])
             block(x1, y2 - 68, label_d, line["matched_delay_ohm"], line["matched_delay_deg"], "D")
         else:
@@ -105,12 +106,20 @@ def diagram_svg(report):
                 run_y = y1 + 130
                 start = x1 + 90 * direction
                 end = x2
-                segment(f"{x1+53*direction},{y1} {start},{y1} {start},{run_y} {end},{run_y} {x2},{y2-22}", color)
+                segment(f"{x1+53*direction},{y1} {start},{y1} {start},{run_y} {end},{run_y} {x2},{y2-22}",
+                        color, section=line["id"], role=line["kind"])
             else:
                 start = x1 + 90 * direction
                 end = x2 - 53 * direction
                 run_y = y2
-                segment(f"{x1+53*direction},{y1} {start},{y1} {start},{run_y} {end},{run_y}", color)
+                if (serial or symmetric) and line["kind"] == "through" and port is not None:
+                    # The final load continues the backbone below the last tap.
+                    # Keep the existing horizontal T/D/C positions and values.
+                    segment(f"{x1},{y1+22} {x1},{run_y} {end},{run_y}", color,
+                            section=line["id"], role="terminal-through")
+                else:
+                    segment(f"{x1+53*direction},{y1} {start},{y1} {start},{run_y} {end},{run_y}",
+                            color, section=line["id"], role=line["kind"])
             count = 3 if has_compensation else 2
             centers = [start + (end-start) * (index+.5)/count for index in range(count)]
             block(centers[0], run_y, label_t, line["line_ohm"], line["electrical_length_deg"], "T", outside=line["outside_range"])
