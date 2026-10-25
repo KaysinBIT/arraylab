@@ -1,4 +1,4 @@
-"""Only waveform/A-B/recovery checks on the actual frozen desktop and CLI."""
+"""Only radar waveform/antenna checks on the actual frozen desktop and CLI."""
 import argparse
 import json
 import math
@@ -67,7 +67,20 @@ def main():
     bad=work/'bad-waveform.json';bad.write_text('{"format":"arraylab.waveform","schema_version":99,"configuration":{}}',encoding='utf-8')
     _,error=command('--waveform-config',bad,code=2);assert json.loads(error)['error']['type']=='input'
     checks.append('invalid_waveform_configuration_returns_input_error')
-    result={'success':True,'scope':'Only new waveform/A-B/recovery and directly affected entrypoints; no full suite',
+    # New 1.4 algorithms must be present in the actual Qt-free executable.
+    radar_document=json.loads((release/'examples'/'radar-dml-coherent.json').read_text(encoding='utf-8'))
+    radar_document['antennaDesign']['sparseOptions'].update(iterations=100,trials=2,snapshots=32,scanMaxDeg=10)
+    radar_input=work/'radar-1.4.json';radar_input.write_text(json.dumps(radar_document),encoding='utf-8')
+    for action in ('sparse','evaluate'):
+        destination=work/('radar-'+action)
+        out,_=command('waveform','--config',radar_input,'--radar-action',action,'--workers','2','--output-dir',destination,'--plot','sparse_design')
+        actual_radar=json.loads(out)['waveform'];sparse=actual_radar['sparse_design']
+        assert actual_radar['source']['version']=='1.4' and sparse['valid'] and sparse['action']==action
+        assert sparse['superresolution']['method']=='dml' and sparse['superresolution']['valid']
+        assert json.loads((destination/'waveform-record.json').read_text(encoding='utf-8'))['report']==actual_radar
+        assert (destination/'sparse-design.json').is_file() and (destination/'waveform-A-sparse_design.png').is_file()
+        checks.append('radar_'+action+'_DML_and_complete_snapshot_without_Qt')
+    result={'success':True,'scope':'Only waveform/antenna/gain and directly affected entrypoints; no full suite',
             'full_desktop_suite':False,'gui_checks':len(desktop['checks']),'gui_seconds':desktop['elapsed_seconds'],
             'headless_checks':checks,'app_version':actual['app_version'],'work_directory':str(work),
             'host':platform.platform(),'environment':'Existing Windows host; system-only PATH and isolated history/cache; not a clean OS image'}

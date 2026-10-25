@@ -116,7 +116,7 @@ def exercise_waveform(app, window, output, report, check):
         panel.open_path(import_path)
         check(panel.config() == load_waveform_configuration(import_path) and panel.report is not None
               and canonical(panel.report) == canonical(single),
-              'waveform_imports_WaveLab_v2_without_recalculating_or_migrating_antenna')
+                  'waveform_imports_WaveLab_v2_without_recalculating_saved_results')
         parameter_path = directory / '原生 波形配置.json'; panel.save_path(parameter_path)
         check(load_waveform_configuration(parameter_path) == panel.config(),
               'waveform_native_configuration_roundtrip_preserves_both_profiles_and_experiments')
@@ -140,9 +140,9 @@ def exercise_waveform(app, window, output, report, check):
 
         science = canonical(panel.report)
         with patch('arraylab.waveform_widgets.calculate_waveform', side_effect=AssertionError('View must not calculate')) as solver:
-            for view in ('overview', 'metrics', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'comparisons', 'theory'):
+            for view in ('overview', 'metrics', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'antenna', 'gain_budget', 'comparisons', 'theory'):
                 panel.view.setCurrentIndex(panel.view.findData(view)); settle()
-                plotted = view in ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery')
+                plotted = view in ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'antenna', 'gain_budget')
                 check(panel.view.currentData() == view and (probe.current_picture() is not None) == plotted,
                       'waveform_native_view_and_picture_actions_' + view)
             panel.view.setCurrentIndex(panel.view.findData('spectra'))
@@ -206,6 +206,65 @@ def exercise_waveform(app, window, output, report, check):
 
         reopened.load_history_path(record_path); settle()
 
+        # WaveLab 1.4 additions: native controls, a bounded real worker, and a
+        # complete saved result. This does not run any other ArrayLab task.
+        radar_config = default_waveform_configuration()
+        for profile in (radar_config['params'], radar_config['profileB']):
+            profile.update(samples=64, rangeFft=128, loops=8, dopplerFft=16, targetRange=12)
+        radar_config['antennaDesign']['sparseOptions'].update(criterion='dml', iterations=100,
+            scanMaxDeg=10, targetResolutionDeg=8, trials=1, snapshots=32, maxApertureLambda=10)
+        restored.apply_configuration(radar_config)
+        controls = restored.radar_controls
+        check(restored.parameter_widget.count() == 6 and controls.pages.count() == 4
+              and not controls.sparse['smoothing'].isEnabled() and not controls.sparse['scanGridStepDeg'].isEnabled(),
+              'radar_native_antenna_pages_and_DML_conditional_controls')
+        controls.sparse['criterion'].setCurrentIndex(controls.sparse['criterion'].findData('music'))
+        check(controls.sparse['smoothing'].isEnabled() and controls.sparse['scanGridStepDeg'].isEnabled()
+              and not controls.sparse['diagonalLoading'].isEnabled(), 'radar_MUSIC_controls_are_method_specific')
+        controls.sparse['criterion'].setCurrentIndex(controls.sparse['criterion'].findData('dml'))
+        restored.start('evaluate'); wait_idle(restored)
+        radar_result = deepcopy(restored.report)
+        check(radar_result['source']['version'] == '1.4' and radar_result['sparse_design']['valid']
+              and radar_result['sparse_design']['action'] == 'evaluate'
+              and radar_result['sparse_design']['superresolution']['method'] == 'dml',
+              'radar_real_worker_evaluates_current_geometry_with_DML')
+        for view in ('antenna', 'sparse_design', 'gain_budget'):
+            restored.view.setCurrentIndex(restored.view.findData(view)); settle(); restored.canvas.draw()
+            check(len(restored.figure.axes) == 2 and reopened.current_picture() is restored.canvas,
+                  'radar_saved_numeric_result_native_plot_' + view)
+            restored.recovery_table_toggle.setChecked(True); settle()
+            check(restored.table.isVisible() and restored.table.rowCount() > 0 and reopened.current_picture() is None,
+                  'radar_complete_result_table_' + view)
+            restored.recovery_table_toggle.setChecked(False)
+        restored.view.setCurrentIndex(restored.view.findData('sparse_design'))
+        radar_record = directory / '完整 雷达1.4记录.json'; restored.save_record_path(radar_record)
+        with patch('arraylab.waveform_widgets.calculate_waveform', side_effect=AssertionError('Radar record must not recompute')) as solver:
+            restored.load_record_path(radar_record); settle()
+            check(canonical(restored.report) == canonical(radar_result) and solver.call_count == 0
+                  and restored.config() == radar_result['configuration'], 'radar_record_restores_inputs_and_DML_diagnostics_without_solver')
+        controls.apply_result()
+        applied = restored.config()['geometry']
+        check(applied is not None and abs(applied['referenceFrequencyGHz']-radar_result['sparse_design']['referenceFrequencyGHz']) < 1e-9
+              and controls.custom.isChecked() and controls.fixed.isChecked()
+              and restored.report['sparse_design']['action'] == 'evaluate',
+              'radar_apply_coordinates_pins_reference_frequency_without_recalculation')
+        with patch('arraylab.features.waveform.sparse_design.design', side_effect=AssertionError('F5 must not synthesize')) as designer:
+            with patch('arraylab.features.waveform.sparse_design.evaluate', side_effect=AssertionError('F5 must not revalidate')) as evaluator:
+                restored.start(); wait_idle(restored)
+        retained = restored.report['sparse_design']
+        check(retained.get('retainedFromPreviousCalculation') is True and designer.call_count == evaluator.call_count == 0
+              and retained['superresolution'] == radar_result['sparse_design']['superresolution'],
+              'radar_F5_after_apply_retains_original_diagnostics_without_revalidation')
+        applied_record = directory / '应用后 F5完整记录.json'; restored.save_record_path(applied_record)
+        applied_snapshot = canonical(restored.report)
+        with patch('arraylab.waveform_widgets.calculate_waveform', side_effect=AssertionError('Applied record must not recompute')):
+            restored.load_record_path(applied_record)
+        check(canonical(restored.report) == applied_snapshot
+              and restored.report['sparse_design']['retainedFromPreviousCalculation'],
+              'radar_applied_F5_record_retains_complete_independent_diagnostics')
+        # Restore the established A/B result for the existing responsive checks.
+        reopened.load_history_path(record_path); settle()
+
         for width, height in ((1440, 900), (1100, 740), (1100, 640)):
             reopened.resize(width, height); restored.view.setCurrentIndex(restored.view.findData('spectra')); settle(160)
             reopened.results_scroll.ensureWidgetVisible(restored.canvas); settle(); restored.canvas.draw()
@@ -218,7 +277,7 @@ def exercise_waveform(app, window, output, report, check):
                 if isinstance(scroll, QScrollArea):
                     scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum()); settle()
                     scrolls.append(scroll.horizontalScrollBar().maximum() == 0)
-            check(all(not box.overlaps(footer) for box in bounds) and len(scrolls) == 5 and all(scrolls),
+            check(all(not box.overlaps(footer) for box in bounds) and len(scrolls) == 6 and all(scrolls),
                   f'waveform_plot_metrics_and_all_parameter_pages_fit_{width}x{height}')
             restored.parameter_widget.setCurrentIndex(0)
             restored.parameter_widget.widget(0).verticalScrollBar().setValue(0); settle()

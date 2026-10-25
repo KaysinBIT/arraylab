@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QScrollArea, QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QTextBrowser, QFileDialog,
-    QMessageBox, QInputDialog)
+    QMessageBox, QInputDialog, QPlainTextEdit)
 
 from arraylab.framework.parallel import ComputationCancelled, requested_workers
 from arraylab.features.waveform.model import default_waveform_configuration, normalize_waveform_configuration, calculate_waveform
@@ -48,10 +48,11 @@ STATUS = {'off':'未开启','blocked':'不可解算','resolved':'范围内唯一
 class WaveformWorker(QThread):
     progress=Signal(str)
 
-    def __init__(self,configuration,parent=None):
+    def __init__(self,configuration,parent=None,radar_action='waveform'):
         super().__init__(parent)
         self.configuration=deepcopy(configuration);self.workers=requested_workers()
         self.stop=threading.Event();self.result=None;self.error=None;self.cancelled=False
+        self.radar_action=radar_action
 
     def tell(self,*args):
         if self.stop.is_set() or self.isInterruptionRequested():raise ComputationCancelled()
@@ -60,7 +61,8 @@ class WaveformWorker(QThread):
     def run(self):
         try:
             self.result=calculate_waveform(self.configuration,workers=self.workers,
-                cancelled=lambda:self.stop.is_set() or self.isInterruptionRequested(),progress=self.tell)
+                cancelled=lambda:self.stop.is_set() or self.isInterruptionRequested(),progress=self.tell,
+                radar_action=self.radar_action)
         except ComputationCancelled:self.cancelled=True
         except Exception as exc:self.error=f'{type(exc).__name__}: {exc}'
 
@@ -92,6 +94,8 @@ class WaveformPanel(QWidget):
         for title,key in [('波形与A/B时序','overview'),('波形指标与参数检查','metrics'),
                           ('DDM相位编码','phase'),('距离与速度频谱','spectra'),('距离-速度图','rd'),
                           ('ADC折叠解模糊','range_recovery'),('跨周期归属解模糊','pri_recovery'),
+                          ('雷达天线布局与方向图','antenna'),('稀疏阵列设计 / 高分辨验证','sparse_design'),
+                          ('天线增益预算','gain_budget'),
                           ('方案对比','comparisons'),('公式与适用范围','theory')]:self.view.addItem(title,key)
         self.view.setAccessibleName('波形结果视图');controls.addWidget(self.view,1);body.addLayout(controls)
         self.recovery_table_toggle=QCheckBox('候选表');self.recovery_table_toggle.setToolTip('显示全部候选区间；图中只展示前80项。')
@@ -111,7 +115,7 @@ class WaveformPanel(QWidget):
         self.remove_comparison_button=QPushButton('移除所选方案（含A/B）');self.remove_comparison_button.clicked.connect(self.remove_selected_comparison)
         compare_row.addWidget(self.add_comparison_button);compare_row.addWidget(self.remove_comparison_button);compare_row.addStretch()
         body.addWidget(self.comparison_bar)
-        note=QLabel('理想单目标与独立观测级实验；不含硬件配置、探测概率、DDM盲解码或反向天线设计。')
+        note=QLabel('WaveLab 1.4 · 理想波形、Tx/Rx反向设计与增益预算；高分辨判据是已知双目标有限快拍实验，不是硬件分辨率保证。')
         note.setWordWrap(True);note.setObjectName('scope');body.addWidget(note)
         self.resize_timer=QTimer(self);self.resize_timer.setSingleShot(True);self.resize_timer.timeout.connect(self.reflow)
         self.view.currentIndexChanged.connect(self.redraw);self.result_profile.currentIndexChanged.connect(self.redraw)
@@ -191,6 +195,8 @@ class WaveformPanel(QWidget):
         demo=QPushButton('载入时延实验设置');demo.clicked.connect(self.load_pri_demo);body.addWidget(demo)
         self._note(body,'独立的周期内时延观测实验，假设同一个静止目标、Tx已正确分离、时延已测得。不是主波形的原始回波链，也不表示这些距离可被真实雷达探测。')
         self._note(body,'两种重复周期分别用于均匀观测；未模拟单序列交错PRI。搜索范围与容差决定候选唯一性。');body.addStretch()
+        from .antenna_controls import RadarAntennaControls
+        self.radar_controls=RadarAntennaControls(self)
 
     @staticmethod
     def _number(control,key):
@@ -211,7 +217,8 @@ class WaveformPanel(QWidget):
             'abOptions':{'enabled':self.inputs['abEnabled'].isChecked(),'layout':self.inputs['abLayout'].currentData(),
                          'switchGapUs':self._number(self.inputs['switchGapUs'],'switchGapUs')},
             'activeProfile':self.inputs['activeProfile'].currentData(),
-            'rangeOptions':values(self.range_inputs),'priOptions':values(self.pri_inputs)})
+            'rangeOptions':values(self.range_inputs),'priOptions':values(self.pri_inputs),
+            **self.radar_controls.configuration()})
 
     read_parameters=config
 
@@ -228,6 +235,7 @@ class WaveformPanel(QWidget):
             self._set(self.inputs['activeProfile'],configuration['activeProfile'])
             for name,group in [('rangeOptions',self.range_inputs),('priOptions',self.pri_inputs)]:
                 for key,control in group.items():self._set(control,configuration[name][key])
+            self.radar_controls.apply_configuration(configuration)
             for profile in ('A','B'):self.refresh_derived(profile)
             self._options_changed();self._velocity_changed()
         finally:self._changing=False
@@ -305,14 +313,17 @@ class WaveformPanel(QWidget):
         c=self.config();c['priOptions'].update(method='dual_period',period1Us=38,period2Us=43,searchMaxM=20000,timingResolutionNs=2,targetRangeM=8000)
         self.apply_configuration(c);self.state.setText('已载入独立时延实验设置；主波形参数保持，按F5计算。')
 
-    def start(self):
+    def start(self,radar_action='waveform'):
         if self._busy or self.thread is not None:return
+        if type(radar_action) is bool:radar_action='waveform'
         try:configuration=self.config()
         except (ValueError,TypeError,ArithmeticError) as exc:
             QMessageBox.warning(self,'波形参数检查',str(exc));return
         self._busy=True;self._cancel_pending=False;self._last_error=None
-        self.parameter_widget.setEnabled(False);self.state.setText('正在计算波形、时序与解模糊实验…')
-        worker=WaveformWorker(configuration,self);self.thread=worker
+        self.parameter_widget.setEnabled(False);self.state.setText('正在计算雷达波形与天线设计…')
+        if radar_action in ('sparse','evaluate'):
+            self.view.setCurrentIndex(self.view.findData('sparse_design'))
+        worker=WaveformWorker(configuration,self,radar_action);self.thread=worker
         worker.progress.connect(self.state.setText);worker.finished.connect(self.complete)
         worker.start();self._refresh_host()
 
@@ -327,7 +338,14 @@ class WaveformPanel(QWidget):
         try:
             if worker.cancelled or self._cancel_pending:self.state.setText('计算已取消，原波形结果保留。')
             elif worker.error:self._last_error=worker.error;self.state.setText('计算未完成，原结果保留：'+worker.error)
-            else:self.accept_result(worker.result)
+            else:
+                previous=(self.report or {}).get('sparse_design')
+                if (worker.radar_action=='waveform' and previous and
+                        self.report['configuration']['antennaDesign']['sparseOptions']==worker.result['configuration']['antennaDesign']['sparseOptions']):
+                    worker.result['sparse_design']={**deepcopy(previous),'retainedFromPreviousCalculation':True}
+                self.accept_result(worker.result)
+                if (worker.result.get('sparse_design') or {}).get('retainedFromPreviousCalculation'):
+                    self.state.setText('波形、天线和增益已更新；保留此前的独立综合快照，综合图注明原参考频率，未重新搜索。')
         except Exception as exc:self._last_error=f'{type(exc).__name__}: {exc}';self.state.setText('结果显示未完成，原结果保留：'+self._last_error)
         finally:
             self.thread=None;worker.deleteLater();self._busy=False;self.parameter_widget.setEnabled(True);self._refresh_host()
@@ -339,7 +357,8 @@ class WaveformPanel(QWidget):
 
     def _input_state(self):
         controls=list(self.inputs.values())+[c for group in self.profile_inputs.values() for c in group.values()]+list(self.range_inputs.values())+list(self.pri_inputs.values())
-        return [(c,c.isChecked() if isinstance(c,QCheckBox) else c.currentIndex() if isinstance(c,QComboBox) else c.text()) for c in controls]
+        controls+=self.radar_controls.all_controls()
+        return [(c,c.isChecked() if isinstance(c,QCheckBox) else c.currentIndex() if isinstance(c,QComboBox) else c.toPlainText() if isinstance(c,QPlainTextEdit) else c.text()) for c in controls]
 
     def _restore_inputs(self,state):
         self._changing=True
@@ -348,9 +367,11 @@ class WaveformPanel(QWidget):
                 with QSignalBlocker(control):
                     if isinstance(control,QCheckBox):control.setChecked(value_)
                     elif isinstance(control,QComboBox):control.setCurrentIndex(value_)
+                    elif isinstance(control,QPlainTextEdit):control.setPlainText(value_)
                     else:control.setText(value_)
             self._options_changed();self._velocity_changed()
             for profile in ('A','B'):self.refresh_derived(profile)
+            self.radar_controls.refresh_enabled()
         finally:self._changing=False
 
     def _make_figure(self,report,view,profile):
@@ -373,7 +394,8 @@ class WaveformPanel(QWidget):
         if self.view.findData(chosen)<0:raise ValueError('未知波形结果视图。')
         if profile not in ('A','B') or not report['analysis']['profiles'].get(profile):raise ValueError('该记录没有所选A/B组结果。')
         figure=self._make_figure(report,chosen,profile)
-        old=(self.report,self.figure,self.view.currentIndex(),self.result_profile.currentIndex(),self._input_state(),self.comparisons)
+        old=(self.report,self.figure,self.view.currentIndex(),self.result_profile.currentIndex(),self._input_state(),self.comparisons,
+             self.radar_controls.pages.currentIndex(),self.radar_controls._section)
         try:
             if restore_inputs:self.apply_configuration(report['configuration'])
             self.report=report
@@ -384,6 +406,8 @@ class WaveformPanel(QWidget):
             self._install_figure(figure);self._show_view();self.update_summary()
         except Exception:
             self.report=old[0];self.comparisons=old[5];self._restore_inputs(old[4])
+            with QSignalBlocker(self.radar_controls.pages):self.radar_controls.pages.setCurrentIndex(old[6])
+            self.radar_controls._section=old[7]
             with QSignalBlocker(self.view),QSignalBlocker(self.result_profile):
                 self.view.setCurrentIndex(old[2]);self.result_profile.setCurrentIndex(old[3])
             self._install_figure(old[1]);self._show_view();self.update_summary();raise
@@ -418,19 +442,29 @@ class WaveformPanel(QWidget):
 
     def _show_view(self):
         view=self.view.currentData();recovery=view in ('range_recovery','pri_recovery')
-        candidate_table=recovery and self.recovery_table_toggle.isChecked()
+        radar=view in ('antenna','sparse_design','gain_budget')
+        candidate_table=(recovery or radar) and self.recovery_table_toggle.isChecked()
         plot=view in VIEWS and not candidate_table;metrics=view=='metrics';compare=view=='comparisons';theory=view=='theory'
-        self.recovery_table_toggle.setVisible(recovery)
+        self.recovery_table_toggle.setVisible(recovery or radar)
+        self.recovery_table_toggle.setText('详细表格' if radar else '候选表')
+        self.recovery_table_toggle.setToolTip('切换图形与完整结果表。' if radar else '显示全部候选区间；图中只展示前80项。')
         self.canvas.setVisible(plot);self.toolbar.setVisible(plot)
-        self.table.setVisible(metrics or compare or candidate_table);self.check_table.setVisible(metrics)
-        self.table_note.setVisible(metrics or compare or view in ('range_recovery','pri_recovery'))
+        self.table.setVisible(metrics or compare or candidate_table);self.check_table.setVisible(metrics or radar)
+        self.table_note.setVisible(metrics or compare or recovery or radar)
         self.theory.setVisible(theory);self.comparison_bar.setVisible(compare)
         self.add_comparison_button.setEnabled(self.report is not None and not self._busy)
         self.remove_comparison_button.setEnabled(bool(self.comparisons) and not self._busy)
         if self.report is None:
             self.table.setRowCount(0);self.check_table.setRowCount(0);self.table_note.clear()
             self.theory.setPlainText('先设置参数并按F5计算。');return
-        if metrics:
+        if radar:
+            from .antenna_views import radar_table
+            columns,rows,checks,note=radar_table(self.report,view,self.result_profile.currentData())
+            if candidate_table:self._fill(self.table,columns,rows)
+            self._fill(self.check_table,['检查项','状态','说明'],checks)
+            self.check_table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.Stretch)
+            self.check_table.resizeRowsToContents();self.table_note.setText(note)
+        elif metrics:
             self._fill(self.table,['指标','A','B','单位'],self._metric_rows())
             rows=[[{'pass':'通过','warn':'提示','fail':'失败'}.get(c['status'],c['status']),c['label'],c['detail']] for c in self.report['analysis']['checks']]
             self._fill(self.check_table,['状态','检查','说明'],rows)
@@ -476,6 +510,9 @@ class WaveformPanel(QWidget):
             '- A/B分段各自做慢时间FFT；整轮交替用A、B及切换间隔构成的真实重访周期。',
             '- ADC折叠求解只使用两组观测、采集参数、模拟IF和外部速度先验；跨周期求解使用时延余数区间。',
             '- 频谱演示为理想单目标、无噪声、无距离迁移；未实现DDM盲解码或硬件配置。','']
+        lines += ['- 天线虚拟位置为Tx+Rx，重合位置保留通道重数。HPBW与双目标角分辨率分别报告。',
+                  '- 高分辨判据：MUSIC、MVDR、LS-ESPRIT或DML，已知K=2、有限含噪快拍；选择候选和最终验证使用独立种子。',
+                  '- 增益预算：SNR = Pt·Gt·Gr·λ²·σ·Tadc·Nc·ηfast·ηslow·ΓRx / ((4π)³·R⁴·k·T·F·L)。']
         sources=[]
         for block in [self.report['analysis'],*[(x['result']) for x in self.report['analysis']['profiles'].values() if x],self.report['pri_recovery']]:
             for text in block.get('assumptions',[]):
@@ -547,7 +584,7 @@ class WaveformPanel(QWidget):
         if self._busy or self.thread is not None:raise ValueError('请先完成或取消波形计算。')
         from arraylab.features.waveform.io import load_waveform_configuration
         self.apply_configuration(load_waveform_configuration(path))
-        self.state.setText('已载入波形/A-B/解模糊参数，不迁移天线几何；按F5计算，旧结果保留。')
+        self.state.setText('已载入波形、解模糊与雷达天线设置；按F5更新分析，综合使用独立按钮，旧结果保留。')
 
     load_path=open_path
 

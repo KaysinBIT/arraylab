@@ -1,4 +1,4 @@
-"""ArrayLab orchestration of the frozen WaveLab v1.2 waveform capabilities."""
+"""ArrayLab orchestration of the frozen WaveLab v1.4 radar capabilities."""
 from copy import deepcopy
 import math
 from numbers import Real
@@ -6,11 +6,13 @@ from numbers import Real
 from arraylab import __version__
 import arraylab.features.waveform.core as waveform_core; import arraylab.features.waveform.ab as waveform_ab; import arraylab.features.waveform.ambiguity as waveform_ambiguity; import arraylab.features.waveform.pri as waveform_pri
 from arraylab.framework.parallel import check_cancelled, ordered_map
+from .settings import default_antenna_design, normalize_antenna_design, normalize_geometry
 
-SOURCE_VERSION = '1.2'
-SOURCE_ARCHIVE_SHA256 = '16cd6c2e1ad15f7ecb4ba0c15af957711d2427b972b0dee1fd2e07bc08d21ad4'
-CONFIG_KEYS = ('params', 'profileB', 'abOptions', 'activeProfile', 'rangeOptions', 'priOptions')
-VIEWS = ('overview', 'phase', 'spectra', 'rd', 'metrics', 'range_recovery', 'pri_recovery', 'comparisons', 'theory')
+SOURCE_VERSION = '1.4'
+SOURCE_ARCHIVE_SHA256 = '2af9b70fee0df942fb9e3fede34b0d83b87c76652e9a9bffd281355682075509'
+LEGACY_CONFIG_KEYS = ('params', 'profileB', 'abOptions', 'activeProfile', 'rangeOptions', 'priOptions')
+CONFIG_KEYS = (*LEGACY_CONFIG_KEYS, 'geometry', 'antennaDesign')
+VIEWS = ('overview', 'phase', 'spectra', 'rd', 'metrics', 'range_recovery', 'pri_recovery', 'comparisons', 'theory', 'antenna', 'sparse_design', 'gain_budget')
 
 
 def _default_profile_b(a):
@@ -26,7 +28,8 @@ def default_waveform_configuration():
             'activeProfile': 'A',
             'rangeOptions': {'method': 'off', 'secondSampleRateMsps': 5, 'secondSlopeMHzUs': 9.6,
                              'searchMaxM': 120, 'knownVelocityMps': 0, 'toleranceBins': .75},
-            'priOptions': {**deepcopy(waveform_pri.DEFAULTS), 'method': 'off'}}
+            'priOptions': {**deepcopy(waveform_pri.DEFAULTS), 'method': 'off'},
+            'geometry': None, 'antennaDesign': default_antenna_design()}
 
 
 def _merge(values, defaults, label):
@@ -96,10 +99,14 @@ def normalize_waveform_configuration(configuration=None):
         result['priOptions']['method'] = 'dual_period'
     if result['priOptions']['method'] not in ('off', 'dual_period'):
         raise ValueError('跨周期解模糊算法无效。')
+    result['geometry'] = normalize_geometry(configuration.get('geometry'))
+    result['antennaDesign'] = normalize_antenna_design(configuration.get('antennaDesign'))
     return result
 
 
-def calculate_waveform(configuration=None, *, workers=None, cancelled=None, progress=None):
+def calculate_waveform(configuration=None, *, workers=None, cancelled=None, progress=None, radar_action='waveform'):
+    if radar_action not in ('waveform', 'sparse', 'evaluate'):
+        raise ValueError('雷达操作须为waveform、sparse或evaluate。')
     config = normalize_waveform_configuration(configuration)
     def tell(text):
         check_cancelled(cancelled)
@@ -128,17 +135,58 @@ def calculate_waveform(configuration=None, *, workers=None, cancelled=None, prog
                                     cancelled=cancelled)
     tell('计算独立跨周期时延实验')
     pri = waveform_pri.simulate(config['priOptions'])
-    tell('波形分析完成')
-    return {'format': 'arraylab.waveform.result', 'schema_version': 1, 'app_version': __version__,
+    from . import antenna, gain, sparse_design
+    tell('计算虚拟阵列与波形关联增益预算')
+    geometry = config['geometry'] or {**antenna.geometry_preset('ula', config['params']['txCount'], config['params']['rxCount']),
+                                      'steerAzDeg': 0, 'steerElDeg': 0}
+    antenna_results = {}
+    for name in active:
+        profile = analysis['profiles'][name]
+        if len(geometry['tx']) != config['params']['txCount'] or len(geometry['rx']) != config['params']['rxCount']:
+            antenna_results[name] = {'valid': False, 'errors': ['坐标行数与波形Tx/Rx通道数不一致，请同步通道数或恢复默认布局。']}
+        else:
+            try:
+                effective = antenna.effective_geometry(geometry, profile['result']['metrics']['centerGHz'])
+                antenna_results[name] = {'valid': True, **antenna.calculate(effective, cancelled=cancelled)}
+            except ValueError as exc:
+                antenna_results[name] = {'valid': False, 'errors': [str(exc)]}
+    design_settings = config['antennaDesign']
+    selected = active if design_settings['gainScope'] == 'all' else [config['activeProfile']]
+    profiles = [{'name': name, **analysis['profiles'][name]} for name in selected]
+    budget = gain.calculate(profiles, design_settings['gainOptions'])
+    budget['layoutWarnings'] = gain.layout_warnings(budget, geometry)
+    budget.update(scope=design_settings['gainScope'], waveformInputs=[{'name': p['name'], 'params': p['params'], 'acquisition': p['acquisition']} for p in profiles])
+    sparse_result = None
+    if radar_action != 'waveform':
+        tell('执行稀疏阵列设计与独立验证' if radar_action == 'sparse' else '验证当前Tx/Rx阵列')
+        options = design_settings['sparseOptions']
+        frequency = analysis['profiles'][config['activeProfile']]['result']['metrics']['centerGHz']
+        if radar_action == 'sparse':
+            sparse_result = sparse_design.design(options, workers=workers, cancelled=cancelled, progress=progress)
+        else:
+            effective = antenna.effective_geometry(geometry, frequency)
+            axis = 0 if options['axis'] == 'azimuth' else 1
+            if len(geometry['tx']) != options['txCount'] or len(geometry['rx']) != options['rxCount']:
+                raise ValueError('当前阵列的Tx/Rx数量与稀疏验证设置不一致。')
+            other = 1 - axis
+            if any(max(p[other] for p in effective[key])-min(p[other] for p in effective[key]) > 1e-9 for key in ('tx', 'rx')):
+                raise ValueError('当前判据只验证一维阵列，请选择与布局一致的设计轴。')
+            sparse_result = sparse_design.evaluate([p[axis] for p in effective['tx']], [p[axis] for p in effective['rx']],
+                                                   options, workers=workers, cancelled=cancelled, progress=progress)
+        sparse_result = {**sparse_result, 'referenceFrequencyGHz': frequency, 'action': radar_action}
+    tell('雷达分析完成')
+    return {'format': 'arraylab.waveform.result', 'schema_version': 2, 'app_version': __version__,
             'configuration': config, 'analysis': analysis,
             'spectra': {name: row[0] for name, row in zip(active, values)},
             'range_recovery': {name: row[1] for name, row in zip(active, values)},
             'pri_recovery': pri, 'execution': execution,
+            'antenna': antenna_results, 'gain_budget': budget, 'sparse_design': sparse_result,
             'source': {'name': 'WaveLab', 'version': SOURCE_VERSION, 'archive_sha256': SOURCE_ARCHIVE_SHA256},
             'notices': [
-                '由已完成的WaveLab v1.2快照独立移植，运行不依赖原项目、浏览器或Node.js。',
+                '由WaveLab v1.4固定快照独立移植，运行不依赖原项目、浏览器或Node.js。',
                 '理想单点目标与有限采样模型；IF/采样距离上限不是雷达方程探测距离，FFT补零不提高物理分辨率。',
                 'A/B独立处理，不直接合并带宽；DDM展示编码频谱，未实现多目标盲解码。',
                 '两类距离解模糊为独立实验，第二次采集的额外时间不自动加入主波形帧预算。',
                 '跨周期实验的目标距离独立于主波形目标；恢复候选仅在指定搜索范围与容差内有效。',
-                '本轮不包含稀疏阵列反向设计、天线增益预算或硬件配置。']}
+                '稀疏设计仅验证离散扫描工况；高分辨判据基于已知双目标的有限含噪快拍，不代表硬件分辨率保证。',
+                '增益预算采用单站雷达能量方程；等效口径仅为预算估算，未进行馈线或天线物理尺寸设计。']}

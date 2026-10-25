@@ -12,12 +12,14 @@ class Parser(argparse.ArgumentParser):
 
 def main(argv=None):
     try:
-        p = Parser(description='ArrayLab FMCW TDM/DDM, A/B and distance recovery', allow_abbrev=False)
+        p = Parser(description='ArrayLab radar: FMCW, A/B, recovery, sparse antenna design and gain budget', allow_abbrev=False)
         configs = p.add_mutually_exclusive_group()
         configs.add_argument('--config', type=Path)
         configs.add_argument('--waveform-config', type=Path)
         p.add_argument('--output-dir', type=Path)
-        p.add_argument('--plot', choices=('none','all','overview','phase','spectra','rd','range_recovery','pri_recovery'), default='none')
+        p.add_argument('--plot', choices=('none','all','overview','phase','spectra','rd','range_recovery','pri_recovery','antenna','sparse_design','gain_budget'), default='none')
+        p.add_argument('--radar-action', choices=('waveform','sparse','evaluate'), default='waveform',
+                       help='waveform: analyze without searching; sparse: design Tx/Rx; evaluate: verify current array')
         p.add_argument('--workers', type=int, default=0)
         p.add_argument('--headless', action='store_true', help=argparse.SUPPRESS)
         p.add_argument('--version', action='version', version=f'ArrayLab {__version__} (waveform headless)')
@@ -32,7 +34,7 @@ def main(argv=None):
         requested_workers(args.workers)
         file = args.config or args.waveform_config
         config = load_waveform_configuration(file) if file else default_waveform_configuration()
-        report = calculate_waveform(config, workers=args.workers)
+        report = calculate_waveform(config, workers=args.workers, radar_action=args.radar_action)
         result = {'status': 'ok', 'app_version': __version__, 'waveform': report}
         if args.output_dir:
             if args.plot != 'none':

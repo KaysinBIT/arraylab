@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 3,
+  "app": "WaveLab",
+  "name": "示例 · DML 相干双目标",
+  "params": {
+    "startGHz": 77,
+    "slopeMHzUs": 12,
+    "rampUs": 34,
+    "idleUs": 4,
+    "adcStartUs": 3,
+    "samples": 512,
+    "sampleRateMsps": 20,
+    "loops": 128,
+    "txCount": 3,
+    "rxCount": 4,
+    "frameMs": 50,
+    "ifBandwidthMHz": 10,
+    "rangeFft": 1024,
+    "dopplerFft": 128,
+    "window": "hann",
+    "mode": "tdm",
+    "ddmSlots": 4,
+    "targetRange": 60,
+    "targetVelocity": 5
+  },
+  "profileB": {
+    "startGHz": 77,
+    "slopeMHzUs": 18,
+    "rampUs": 42,
+    "idleUs": 6,
+    "adcStartUs": 3,
+    "samples": 512,
+    "sampleRateMsps": 20,
+    "loops": 128,
+    "txCount": 3,
+    "rxCount": 4,
+    "frameMs": 50,
+    "ifBandwidthMHz": 10,
+    "rangeFft": 1024,
+    "dopplerFft": 128,
+    "window": "hann",
+    "mode": "tdm",
+    "ddmSlots": 4,
+    "targetRange": 60,
+    "targetVelocity": 5
+  },
+  "abOptions": {
+    "enabled": false,
+    "layout": "blocks",
+    "switchGapUs": 5
+  },
+  "activeProfile": "A",
+  "antennaDesign": {
+    "version": 1,
+    "section": "sparse",
+    "sparseOptions": {
+      "txCount": 3,
+      "rxCount": 4,
+      "targetResolutionDeg": 4,
+      "criterion": "dml",
+      "axis": "azimuth",
+      "scanMaxDeg": 20,
+      "maxApertureLambda": 20,
+      "minSpacingLambda": 0.5,
+      "gridLambda": 0.5,
+      "maxSidelobeDb": -8,
+      "iterations": 400,
+      "seed": 42,
+      "snrDb": 30,
+      "snapshots": 256,
+      "powerDifferenceDb": 0,
+      "sourceCorrelation": 1,
+      "trials": 8,
+      "angleToleranceDeg": 0.5,
+      "requiredSuccessRate": 0.8,
+      "diagonalLoading": 0.001,
+      "smoothing": "none",
+      "subarrayLength": 0,
+      "scanGridStepDeg": 0.2
+    },
+    "gainOptions": {
+      "rcsDbsm": 0,
+      "rangeM": 100,
+      "txPowerDbm": 10,
+      "powerBasis": "per_tx",
+      "noiseFigureDb": 12,
+      "systemLossDb": 6,
+      "requiredSnrDb": 13,
+      "marginDb": 3,
+      "temperatureK": 290,
+      "combining": "coherent_rx",
+      "gainMode": "equal",
+      "fixedGainDbi": 12,
+      "apertureEfficiency": 0.6,
+      "radialVelocityMps": 0
+    },
+    "gainScope": "active"
+  },
+  "geometry": {
+    "tx": [
+      [
+        0,
+        0.5
+      ],
+      [
+        2,
+        0.5
+      ],
+      [
+        4,
+        0.5
+      ]
+    ],
+    "rx": [
+      [
+        0,
+        0
+      ],
+      [
+        0.5,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        1.5,
+        0
+      ]
+    ],
+    "referenceFrequencyGHz": 77.1896,
+    "steerAzDeg": 0,
+    "steerElDeg": 0
+  },
+  "geometryKind": "custom",
+  "rangeOptions": {
+    "method": "off",
+    "secondSampleRateMsps": 5,
+    "secondSlopeMHzUs": 9.6,
+    "searchMaxM": 120,
+    "knownVelocityMps": 0,
+    "toleranceBins": 0.75
+  },
+  "priOptions": {
+    "method": "off",
+    "period1Us": 38,
+    "period2Us": 43,
+    "searchMaxM": 20000,
+    "timingResolutionNs": 2,
+    "targetRangeM": 8000
+  },
+  "savedAt": "2026-10-25T17:08:01.158Z"
+}

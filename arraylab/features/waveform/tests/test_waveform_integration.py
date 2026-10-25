@@ -95,7 +95,7 @@ def test_disabled_b_is_preserved_but_not_evaluated_and_active_group_is_a(tmp_pat
 
 
 @pytest.mark.parametrize('version', [1, 2])
-def test_wavelab_import_uses_only_confirmed_waveform_domains(version, tmp_path):
+def test_wavelab_import_preserves_waveform_and_local_radar_geometry(version, tmp_path):
     source = {'app': 'WaveLab', 'schemaVersion': version, 'name': '独立输入',
               'params': small_configuration(True)['params'],
               'geometry': {'tx': [[9, 9]], 'rx': [[99, 99]]}, 'savedAt': 'source-metadata',
@@ -106,7 +106,7 @@ def test_wavelab_import_uses_only_confirmed_waveform_domains(version, tmp_path):
     path = tmp_path/'WaveLab 方案.json'; path.write_text(json.dumps(source), encoding='utf-8')
     before = path.read_bytes(); config = io.load_waveform_configuration(path)
     assert path.read_bytes() == before
-    assert 'geometry' not in config and set(config) == set(waveform.CONFIG_KEYS)
+    assert config['geometry']['tx'] == source['geometry']['tx'] and set(config) == set(waveform.CONFIG_KEYS)
     assert config['abOptions']['enabled'] is (version == 2)
     assert config['activeProfile'] == ('A' if version == 1 else 'B')
     report = waveform.calculate_waveform(config, workers=1)
@@ -176,10 +176,10 @@ def test_wrong_ddm_phase_code_is_rejected_after_digest_is_recomputed(tmp_path):
 
 @pytest.mark.parametrize('text', ['{"format":"x","format":"y"}',
     '{"format":"arraylab.waveform","schema_version":true,"configuration":{}}',
-    '{"format":"arraylab.waveform","schema_version":2,"configuration":{}}',
+    '{"format":"arraylab.waveform","schema_version":3,"configuration":{}}',
     '{"format":"arraylab.waveform","schema_version":1,"configuration":{"params":{"extra":1}}}',
     '{"format":"arraylab.waveform","schema_version":1,"configuration":{"params":{"samples":NaN}}}',
-    '{"app":"WaveLab","schemaVersion":3,"params":{}}', '[1,2,3]'])
+    '{"app":"WaveLab","schemaVersion":4,"params":{}}', '[1,2,3]'])
 def test_invalid_configuration_documents_are_rejected(tmp_path, text):
     path = tmp_path/'invalid.json'; path.write_text(text, encoding='utf-8'); before = path.read_bytes()
     with pytest.raises(ValueError): io.load_waveform_configuration(path)
@@ -294,7 +294,7 @@ def test_cli_json_csv_png_matches_saved_ab_report_without_qt(ab_report, tmp_path
     assert actual['waveform'] == canonical(ab_report)
     assert io.load_waveform_record(out/'waveform-record.json')['report'] == actual['waveform']
     expected = {f'waveform-{name}-{view}.png' for name in actual['waveform']['spectra']
-                for view in ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery')}
+                for view in ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'antenna', 'gain_budget')}
     assert {p.name for p in out.glob('*.png')} == expected
     assert all(p.stat().st_size > 1000 for p in out.glob('*.png'))
     assert all((out/f'{name}-range.csv').is_file() and (out/f'{name}-doppler.csv').is_file() for name in ('A', 'B'))

@@ -35,7 +35,7 @@ python -m arraylab --smoke-test tmp/sparse-view --smoke-suite sparse-view
 
 MIMO功能可先执行`python -m pytest -q tests/test_mimo.py tests/test_mimo_io.py tests/test_mimo_cli.py`与`python -m arraylab --smoke-test tmp/mimo --smoke-suite mimo`。MIMO专项使用独立窗口/记录和实际后台计算，涵盖阵列交接及失败恢复；完整冻结验收额外比较一维、二维桌面快照与无头输出，并验证PNG导出。相关说明见[雷达MIMO](docs/mimo-arrays.md)。
 
-波形功能使用`tests/test_waveform_core.py`、`test_waveform_ab.py`、`test_waveform_ambiguity.py`、`test_waveform_pri.py`与`test_waveform_integration.py`，按修改范围选择；桌面专项为`python -m arraylab --smoke-test tmp/waveform --smoke-suite waveform`。独立程序使用`python tools/check_waveform_release.py <运行包目录> <报告路径>`，该脚本只检查波形/A-B/解模糊及其入口，不顺带运行其他工作台。原WaveLab项目保持只读，开发对照只使用固定快照副本。
+波形功能使用`tests/test_waveform_core.py`、`test_waveform_ab.py`、`test_waveform_ambiguity.py`、`test_waveform_pri.py`与`test_waveform_integration.py`，按修改范围选择。1.4新增领域分别使用`test_waveform_doa.py`、`test_waveform_gain.py`、`test_waveform_antenna.py`、`test_waveform_sparse_design.py`、`test_radar_sync.py`和`test_waveform_radar_desktop.py`，不要因版本同步重跑未改的四个旧引擎。桌面专项为`python -m arraylab --smoke-test tmp/waveform --smoke-suite waveform`；独立程序使用`python tools/check_waveform_release.py <运行包目录> <报告路径>`，只检查雷达波形/天线及直接入口，不顺带运行其他工作台。原WaveLab项目保持只读，开发对照只使用固定快照副本。
 
 按当前维护约定，验证在推送前完成，推送后不再测试。GitHub Actions仅接受手动触发，不随push或pull_request自动运行。方案格式变更须保持旧版有效文件可读，并验证失败时原参数、文件和结果不受损。
 

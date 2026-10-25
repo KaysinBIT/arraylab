@@ -8,7 +8,7 @@ from arraylab.shared.plotting.layout import responsive_subplots
 from arraylab.shared.plotting.surface import clear_figure
 
 
-VIEWS = ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery')
+VIEWS = ('overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'antenna', 'sparse_design', 'gain_budget')
 COLORS = {'A': '#168b9c', 'B': '#c78728'}
 
 
@@ -57,6 +57,9 @@ def draw_waveform_figure(figure, report, view='overview', profile='A', chinese=F
         del figure._arraylab_responsive_plots
     figure.set_layout_engine('constrained', w_pad=.08, h_pad=.08, wspace=.13, hspace=.16)
     profile = _profile(report, profile)
+    if view in ('antenna', 'sparse_design', 'gain_budget'):
+        from .antenna_views import draw_radar_figure
+        return draw_radar_figure(figure, report, view, profile, chinese)
     analysis = report['analysis']; item = analysis['profiles'][profile]
     p, m = item['params'], item['result']['metrics']
     lines = waveform_metric_lines(report, profile, chinese)
@@ -199,6 +202,8 @@ def render_waveform_plots(directory,report,mode='all'):
     for profile in ('A','B'):
         if not report['analysis']['profiles'].get(profile):continue
         for kind in kinds:
+            if kind in ('antenna', 'sparse_design', 'gain_budget') and report.get(kind) is None:
+                continue
             with matplotlib.rc_context({'font.family':'DejaVu Sans','font.size':9,'text.usetex':False}):
                 figure=Figure(figsize=(9,6),dpi=140);FigureCanvasAgg(figure)
                 draw_waveform_figure(figure,report,kind,profile)

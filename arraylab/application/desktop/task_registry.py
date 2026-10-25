@@ -17,7 +17,7 @@ TASK_REGISTRY = TaskRegistry((
              8, 3, 'subarray_tree_item', 'F9', '优化子阵中心'),
     TaskSpec('mimo', '稀疏MIMO分析', '分别设置Tx/Rx → F5计算 → 核对虚拟位置与通道 → 查看数字波束 → 保存记录',
              9, 4, 'mimo_tree_item', 'F10', '计算MIMO阵列'),
-    TaskSpec('waveform', '雷达波形设计', '设置共用参数与A/B → F5计算 → 查看时序/频谱/解模糊 → 对比与保存',
+    TaskSpec('waveform', '雷达波形设计', 'F5分析波形与增益 → 天线设计页独立综合/验证 → 应用坐标 → F5核对 → 保存记录',
              10, 5, 'waveform_tree_item', 'F11', '计算雷达波形'),
 ))
 

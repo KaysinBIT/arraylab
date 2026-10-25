@@ -1,10 +1,12 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.25.0.dev1，正式Release保留0.23.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0) · [发行说明](docs/releases/0.23.0.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.25.0.dev2，正式Release保留0.23.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0) · [发行说明](docs/releases/0.23.0.md)。
+
+**0.25.0.dev2 同步 WaveLab 1.4**：雷达任务新增稀疏Tx/Rx反向设计、MUSIC/MVDR/LS-ESPRIT/DML角分辨判据及天线增益预算。原生Qt、无头入口和完整记录同步支持；F5分析波形/天线/增益，耗时综合通过独立按钮显式启动。旧记录保留读取能力，原雷达工程保持独立。见[操作说明](docs/radar-waveforms.md)与[迁移范围及兼容边界](docs/waveform-migration.md)。
 
 **0.25.0.dev1 结构重构**：启动与通用运行机制归入`framework`，具体组装归入`application`，八类业务及其测试就近放入`features`，真正共用的数值/绘图/文件能力放入`shared`。保留旧导入、命令、数据格式和历史路径；详见[结构问题、目录职责、迁移步骤及验证结果](docs/structure-refactor.md)。
 
-**0.25.0.dev0 雷达波形设计**：将已完成的WaveLab v1.2波形、A/B和距离解模糊能力接入原生工作台与无头入口；支持TDM/DDM、两组参数与时序、理想频谱、候选区间、8方案对比和完整记录。原工程及原对话保持独立，新反向设计/增益预算未纳入。详见[雷达波形操作说明](docs/radar-waveforms.md)与[接入来源](docs/waveform-migration.md)。
+**0.25.0.dev0 雷达波形设计**：最初接入WaveLab v1.2波形、A/B和距离解模糊能力；其后0.25.0.dev2继续同步1.4的天线设计能力。
 
 **0.24.0.dev0 稀疏雷达MIMO**：新增独立Tx/Rx的一维与二维布局、Tx–Rx通道表、虚拟位置及重复度、孔径和数字波束指标；支持完整记录恢复、CSV/PNG导出和无头运行。直线阵与二维稀疏的已计算方案可导入Tx或Rx。详见[雷达MIMO操作与模型边界](docs/mimo-arrays.md)。
 
