@@ -95,6 +95,10 @@ def exercise_sparse(app, window, output, report, check):
     QTest.mouseMove(sparse.canvas,point+QPoint(35,0),30)
     QTest.mouseRelease(sparse.canvas,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,point+QPoint(35,0));app.processEvents()
     check(not np.allclose(axes.get_xlim(),limits),'native_sparse_pan_works_after_replacing_plot')
+    figure, toolbar = sparse.figure, sparse.toolbar
+    sparse.refresh_layout();app.processEvents()
+    check(sparse.figure is figure and sparse.toolbar is toolbar and axes in sparse.figure.axes,
+          'native_sparse_resize_preserves_active_axes_and_toolbar_history')
     sparse.toolbar.pan();sparse.toolbar.home();app.processEvents()
     check(np.allclose(axes.get_xlim(),limits),'native_sparse_toolbar_home_restores_limits')
     sparse.toolbar.pan();sparse.view.setCurrentIndex(sparse.view.findData('layout'));app.processEvents();sparse.canvas.draw()
@@ -126,7 +130,14 @@ def exercise_sparse(app, window, output, report, check):
     report['sparse_results'] = {'unweighted':jsonable(bundle),'weighted':jsonable(weighted),'selected_index':len(weighted['results'])-1,'case_index':3}
     sparse.tabs.setCurrentIndex(0);sparse.view.setCurrentIndex(sparse.view.findData('pattern'));app.processEvents();sparse.canvas.draw()
     check(window.grab().save(str(output/'sparse-workbench.png')), 'sparse_integrated_screenshot_saved')
+    original_limits=sparse.figure.axes[0].get_xlim();sparse.toolbar.push_current()
+    sparse.figure.axes[0].set_xlim(-.75,.75);sparse.toolbar.push_current()
     old_size=window.size();window.resize(1100,740);app.processEvents();QTest.qWait(100);app.processEvents();sparse.canvas.draw()
+    resized_positions=[axis.get_position(original=True).bounds for axis in sparse.figure.axes]
+    sparse.toolbar.home();sparse.canvas.draw()
+    check(np.allclose(sparse.figure.axes[0].get_xlim(),original_limits)
+          and np.allclose([axis.get_position(original=True).bounds for axis in sparse.figure.axes],resized_positions),
+          'native_sparse_home_after_window_resize_keeps_current_plot_and_colorbar_layout')
     check(window.grab().save(str(output/'sparse-workbench-small.png')),'native_sparse_small_screenshot_saved')
     check(sparse.canvas.width()>200 and sparse.canvas.height()>100 and sparse.parameter_widget.isVisible(),
           'native_sparse_small_workbench_keeps_plot_and_parameters_visible')

@@ -38,6 +38,8 @@ class ScanStudyDialog(QDialog):
     def __init__(self, source_report, parent=None):
         super().__init__(parent)
         self.setWindowTitle("多扫描角电气评估")
+        from .icons import workbench_icon
+        self.setWindowIcon(workbench_icon('scan'))
         self.resize(1000, 720)
         self.report = None; self.worker = None; self._close_pending = False; self._cancel_pending = False
         if "geometry" in source_report:

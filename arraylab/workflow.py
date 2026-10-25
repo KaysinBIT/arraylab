@@ -1,7 +1,8 @@
 """Task-oriented commands shared by the toolbar, menus and shortcuts."""
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt,QSize
 from PySide6.QtGui import QAction,QKeySequence
 from PySide6.QtWidgets import QApplication,QFileDialog,QMessageBox
+from .icons import workbench_icon
 
 TASKS={
     'home':('开始','选择一项任务，或打开以前保存的计算记录。',7),
@@ -48,6 +49,7 @@ class WorkflowActions:
         self.task_header.setVisible(kind!='home');self.result_bar.setVisible(kind=='linear')
         self.state_label.setVisible(kind=='linear')
         self.task_title.setText(TASKS[kind][0]);self.task_hint.setText(TASKS[kind][1])
+        self.task_icon.setPixmap(workbench_icon(kind).pixmap(QSize(32,32),self.devicePixelRatioF()))
         self.project_tree_root.setText(0,'工作任务')
         self.tree.blockSignals(True)
         item={'home':self.home_tree_item,'linear':self.linear_tree_item,'feed':self.feed_tree_item,
@@ -244,6 +246,7 @@ class WorkflowActions:
         files=self.workbench_menu.addMenu('文件(&F)');tasks=self.workbench_menu.addMenu('任务(&T)')
         view=self.workbench_menu.addMenu('视图(&V)');help_menu=self.workbench_menu.addMenu('帮助(&H)')
         self.to_feed_action=action(tasks,'将所选阵列导入馈电设计',self.import_selected_linear_to_feed)
+        self.to_feed_action.setIcon(workbench_icon('feed'))
         self.load_parameters_action=action(files,'打开当前任务参数…',self.open_configuration_dialog,'Ctrl+Shift+O')
         self.save_parameters_action=action(files,'保存当前任务参数…',self.save_configuration_dialog,'Ctrl+Shift+S')
         files.addSeparator()
@@ -252,10 +255,13 @@ class WorkflowActions:
         self.save_action=action(files,'导出当前结果…',self.save_dialog,'Ctrl+E')
         action(files,'读入外部曲线（直线阵）…',self.import_curve_dialog)
         files.addSeparator();action(files,'退出',self.close,'Ctrl+Q')
+        self.task_actions={}
         for kind,shortcut in [('home','Ctrl+Home'),('linear',None),('feed','F6'),('planar','F7'),('sparse','F8'),('subarray','F9')]:
-            action(tasks,TASKS[kind][0],lambda checked=False,k=kind:self.activate_task(k),shortcut)
+            entry=action(tasks,TASKS[kind][0],lambda checked=False,k=kind:self.activate_task(k),shortcut)
+            entry.setIcon(workbench_icon(kind));self.task_actions[kind]=entry
         tasks.addSeparator();self.run_action=action(tasks,'运行当前任务',self.compute,'F5')
         self.scan_action=action(tasks,'评估多个扫描角',self.run_scan)
+        self.scan_action.setIcon(workbench_icon('scan'))
         action(view,'显示当前参数区',self.focus_parameters)
         for item in (self.nav_dock,self.inspector_dock,self.messages_dock):view.addAction(item.toggleViewAction())
         action(view,'恢复工作布局',self.restore_workbench)

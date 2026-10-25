@@ -109,6 +109,7 @@ def test_single_plot_install_matches_current_canvas_physical_pixels(ratio, monke
     monkeypatch.setenv('QT_QPA_PLATFORM', 'offscreen')
     app = QApplication.instance() or QApplication([])
     panel = QWidget()
+    panel.reflow_current_figure = lambda: SparsePanel.reflow_current_figure(panel)
     panel.canvas = FigureCanvasQTAgg(Figure(dpi=100))
     panel.canvas._set_device_pixel_ratio(ratio)
     panel.canvas.resize(497, 361)

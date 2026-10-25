@@ -184,7 +184,7 @@ def build_workbench(w):
     for name in ('工作', '图形与布局'):
         page=QWidget();row=QHBoxLayout(page);row.setContentsMargins(4,2,4,1);row.setSpacing(0)
         w.ribbon.addTab(page,name);pages.append(row)
-    w.home_button=ribbon_button('开始','model',lambda:w.activate_task('home'))
+    w.home_button=ribbon_button('开始','home',lambda:w.activate_task('home'))
     w.compute_button=ribbon_button('运行计算\nF5','run',w.compute)
     w.compute_button.setObjectName('compute');w.compute_button.setAccessibleName('运行当前任务')
     w.load_scheme_button=ribbon_button('打开参数','open',w.open_configuration_dialog)
@@ -196,9 +196,9 @@ def build_workbench(w):
     w.history_open_button.setToolTip('恢复直线阵/馈电计算记录，或打开馈电导出的feed-network.json')
     w.history_save_button.setToolTip('保存已有计算记录、标签及选中项；不含未计算的输入')
     w.save_button=ribbon_button('导出当前结果','save',w.save_dialog)
-    w.scan_button=ribbon_button('多角度评估','array',w.run_scan)
+    w.scan_button=ribbon_button('多角度评估','scan',w.run_scan)
     w.cancel_button=ribbon_button('取消计算','reset',w.cancel_current)
-    w.to_feed_button=ribbon_button('将该阵列\n导入馈电设计','array',w.import_selected_linear_to_feed)
+    w.to_feed_button=ribbon_button('将该阵列\n导入馈电设计','feed',w.import_selected_linear_to_feed)
     w.to_feed_button.setAccessibleName('将所选直线阵导入馈电设计')
     w.to_feed_button.setToolTip('导入所选已计算阵列的参数与目标指向；不使用尚未计算的输入。进入馈电页后按F5生成。')
     ribbon_group(pages[0],'任务',[w.home_button])
@@ -213,7 +213,7 @@ def build_workbench(w):
     w.image_button=ribbon_button('保存当前图','plot',w.save_plot)
     w.copy_button=ribbon_button('复制当前图','copy',w.copy_plot)
     w.restore_layout_button=ribbon_button('恢复布局','layout',w.restore_workbench)
-    w.example_button=ribbon_button('直线阵例题','open',w.load_example)
+    w.example_button=ribbon_button('直线阵例题','linear',w.load_example)
     ribbon_group(pages[1],'直线阵视图',[w.result_button,w.model_button,w.rect_button,w.polar_button])
     ribbon_group(pages[1],'当前图形',[w.reset_view_button,w.image_button,w.copy_button])
     ribbon_group(pages[1],'布局与帮助',[ribbon_button('显示参数','parameters',w.focus_parameters),w.restore_layout_button,w.example_button,ribbon_button('本页帮助','help',w.show_help)])
@@ -227,8 +227,11 @@ def build_workbench(w):
     layout.setSpacing(4)
     w.task_header=QWidget();task_layout=QVBoxLayout(w.task_header);task_layout.setContentsMargins(10,5,10,3);task_layout.setSpacing(3)
     w.task_title=QLabel();w.task_title.setStyleSheet('font-size:18px;font-weight:600;color:#185986;')
+    w.task_icon=QLabel();w.task_icon.setFixedSize(32,32)
+    task_heading=QHBoxLayout();task_heading.setContentsMargins(0,0,0,0);task_heading.setSpacing(8)
+    task_heading.addWidget(w.task_icon);task_heading.addWidget(w.task_title);task_heading.addStretch()
     w.task_hint=QLabel();w.task_hint.setWordWrap(True);w.task_hint.setObjectName('scope')
-    task_layout.addWidget(w.task_title);task_layout.addWidget(w.task_hint);layout.addWidget(w.task_header)
+    task_layout.addLayout(task_heading);task_layout.addWidget(w.task_hint);layout.addWidget(w.task_header)
     controls = QHBoxLayout()
     controls.addWidget(QLabel("结果"))
     w.selection = QComboBox()
@@ -304,16 +307,16 @@ def build_workbench(w):
     w.tabs.addTab(model_page, workbench_icon("model"), "模型示意")
     from .feed_widgets import FeedPanel
     w.feed_panel = FeedPanel(w)
-    w.tabs.addTab(w.feed_panel, workbench_icon("parameters"), "馈电电气设计")
+    w.tabs.addTab(w.feed_panel, workbench_icon("feed"), "馈电电气设计")
     from .planar_widgets import PlanarPanel
     w.planar_panel = PlanarPanel(w)
-    w.tabs.addTab(w.planar_panel, workbench_icon("array"), "平面阵电气")
+    w.tabs.addTab(w.planar_panel, workbench_icon("planar"), "平面阵电气")
     from .sparse_widgets import SparsePanel
     w.sparse_panel = SparsePanel(w)
     w.sparse_panel.planar_requested.connect(w.receive_sparse_layout)
-    w.tabs.addTab(w.sparse_panel, workbench_icon("array"), "二维稀疏")
+    w.tabs.addTab(w.sparse_panel, workbench_icon("sparse"), "二维稀疏")
     from .start_page import build_start_page
-    w.start_page=build_start_page(w);w.tabs.addTab(w.start_page,'开始')
+    w.start_page=build_start_page(w);w.tabs.addTab(w.start_page,workbench_icon('home'),'开始')
     w.feed_button=w.task_cards['feed'];w.planar_button=w.task_cards['planar'];w.sparse_button=w.task_cards['sparse']
     # Result controls and plots keep their readable minimum sizes when the
     # work area is short or a dock is widened. The viewport scrolls instead.
@@ -325,16 +328,16 @@ def build_workbench(w):
     root=QTreeWidgetItem(w.tree,['工作任务']);w.project_tree_root=root
     def node(parent,text,kind,data):
         item=QTreeWidgetItem(parent,[text]);item.setIcon(0,workbench_icon(kind));item.setData(0,Qt.ItemDataRole.UserRole,data);return item
-    w.home_tree_item=node(root,'开始与操作流程','open',('view',7))
-    w.linear_tree_item=node(root,'直线阵分析','array',('view',0))
+    w.home_tree_item=node(root,'开始与操作流程','home',('view',7))
+    w.linear_tree_item=node(root,'直线阵分析','linear',('view',0))
     w.plot_tree_item=node(w.linear_tree_item,'方向图','plot',('view',0))
     w.data_tree_item=node(w.linear_tree_item,'方向图数据','table',('view',1))
     node(w.linear_tree_item,'阵元激励','table',('view',2))
     w.model_tree_item=node(w.linear_tree_item,'阵列模型','model',('view',3))
     w.history_tree_item=node(w.linear_tree_item,'历史计算记录','open',None)
-    w.feed_tree_item=node(root,'直线阵馈电','parameters',('view',4))
-    w.planar_tree_item=node(root,'平面阵馈电','array',('view',5))
-    w.sparse_tree_item=node(root,'二维稀疏设计','array',('view',6))
+    w.feed_tree_item=node(root,'直线阵馈电','feed',('view',4))
+    w.planar_tree_item=node(root,'平面阵馈电','planar',('view',5))
+    w.sparse_tree_item=node(root,'二维稀疏设计','sparse',('view',6))
     w.build_sparse_navigation()
     root.setExpanded(True);w.tree.currentItemChanged.connect(w.select_result_tab)
     w.nav_dock=dock(w,'选择任务','navigationDock',Qt.DockWidgetArea.LeftDockWidgetArea,w.tree)

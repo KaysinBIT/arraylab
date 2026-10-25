@@ -2,7 +2,7 @@
 from functools import lru_cache
 from pathlib import Path
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 
 
 @lru_cache(maxsize=1)
@@ -14,8 +14,123 @@ def application_icon():
     return icon
 
 
+MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan'))
+
+
+def _draw_module(p, kind):
+    """Original module silhouettes on a 32-unit grid, independent of size."""
+    blue, teal, gold = '#285f88', '#008f9c', '#d7a13d'
+
+    def pen(color=blue, width=2):
+        p.setPen(QPen(QColor(color), width, Qt.PenStyle.SolidLine,
+                      Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+
+    def line(x1, y1, x2, y2):
+        p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+    def dot(x, y, radius, color):
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(color))
+        p.drawEllipse(QRectF(x-radius, y-radius, 2*radius, 2*radius))
+
+    def tile(x, y, size=5):
+        pen('#956b23', 1); p.setBrush(QColor('#edbf5c'))
+        p.drawRoundedRect(QRectF(x, y, size, size), .7, .7)
+
+    if kind == 'home':
+        pen(); p.setBrush(QColor('#e3eff7'))
+        p.drawPolygon(QPolygonF([QPointF(3, 14), QPointF(16, 3), QPointF(29, 14),
+                                QPointF(26, 14), QPointF(26, 29), QPointF(6, 29), QPointF(6, 14)]))
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(teal))
+        p.drawRoundedRect(QRectF(13, 20, 6, 9), 1, 1)
+        tile(9, 14, 4); tile(19, 14, 4)
+    elif kind == 'linear':
+        # A broadside lobe above a single physical row of elements.
+        pen(teal, 1.8); p.setBrush(QColor('#c7edf0'))
+        beam = QPainterPath(QPointF(16, 21))
+        beam.cubicTo(5, 16, 8, 3, 16, 3)
+        beam.cubicTo(24, 3, 27, 16, 16, 21)
+        p.drawPath(beam)
+        pen(teal, 1.3); line(16, 5, 16, 20)
+        pen(blue, 2); line(3, 29, 29, 29)
+        for x in (3, 10, 17, 24):
+            line(x+2.5, 25, x+2.5, 29)
+        for x in (3, 10, 17, 24): tile(x, 22)
+    elif kind == 'feed':
+        # One input, two junctions, four output ports.
+        pen(blue, 2.3)
+        line(16, 27, 16, 21); line(8, 21, 24, 21)
+        line(8, 21, 8, 13); line(24, 21, 24, 13)
+        pen(teal, 2.3)
+        line(4, 13, 12, 13); line(20, 13, 28, 13)
+        for x in (4, 12, 20, 28): line(x, 13, x, 8)
+        for x in (1.5, 9.5, 17.5, 25.5): tile(x, 3)
+        dot(16, 28, 2.5, blue)
+    elif kind == 'planar':
+        # A fully populated 3-by-3 aperture with visible distribution lines.
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor('#e3eff7'))
+        p.drawRoundedRect(QRectF(2, 2, 28, 28), 3, 3)
+        pen(teal, 1.8)
+        for y in (7, 16, 25): line(7, y, 25, y)
+        for x in (7, 16, 25): line(x, 7, x, 25)
+        for y in (4.5, 13.5, 22.5):
+            for x in (4.5, 13.5, 22.5): tile(x, y)
+    elif kind == 'sparse':
+        # Empty candidate positions remain visible around the selected support.
+        selected = {(0, 0), (0, 2), (1, 1), (1, 3), (2, 0), (2, 2), (3, 1), (3, 3)}
+        for row in range(4):
+            for column in range(4):
+                x, y = 5.5 + column*7, 5.5 + row*7
+                active = (row, column) in selected
+                dot(x, y, 2.8 if active else 1.35, teal if active else '#b8c8d5')
+        pen(blue, 1.5); p.setBrush(Qt.BrushStyle.NoBrush)
+        line(2, 9, 2, 2); line(2, 2, 9, 2)
+        line(23, 30, 30, 30); line(30, 30, 30, 23)
+    elif kind == 'subarray':
+        # Three intact blocks are repositioned as groups, not individual dots.
+        pen(teal, 1.6); p.setBrush(Qt.BrushStyle.NoBrush)
+        line(8, 15, 8, 21); line(8, 21, 13, 21)
+        line(24, 14, 24, 24); line(24, 24, 21, 24)
+        p.drawPolyline(QPolygonF([QPointF(10, 18), QPointF(13, 21), QPointF(10, 24)]))
+        for x, y in ((2.5, 3), (19, 3), (11, 22)):
+            pen(blue, 1.6); p.setBrush(QColor('#e3eff7'))
+            p.drawRoundedRect(QRectF(x, y, 10, 8), 1.4, 1.4)
+            dot(x+3, y+4, 1.55, gold); dot(x+7, y+4, 1.55, gold)
+    elif kind == 'scan':
+        # A tilted main beam and a curved sweep arrow share the source point.
+        pen('#a9bfce', 1.5); p.setBrush(Qt.BrushStyle.NoBrush)
+        line(16, 28, 5, 10); line(16, 28, 16, 4)
+        pen(teal, 1.8); p.setBrush(QColor('#c7edf0'))
+        beam = QPainterPath(QPointF(16, 28))
+        beam.cubicTo(14, 16, 19, 4, 25, 5)
+        beam.cubicTo(32, 7, 24, 23, 16, 28)
+        p.drawPath(beam)
+        pen(teal, 1.2); line(16, 28, 25, 7)
+        pen(blue, 2.1); p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(4, 5, 24, 25), 45*16, 88*16)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(blue))
+        p.drawPolygon(QPolygonF([QPointF(27, 7), QPointF(26, 13), QPointF(21, 9)]))
+        dot(16, 28, 2.5, gold)
+
+
+def _module_icon(kind):
+    # Rasterize from the vector geometry for each native size. Qt can then
+    # select a sharp source at both normal and high display scaling factors.
+    icon = QIcon()
+    for size in (16, 20, 24, 29, 32, 40, 48, 58, 64, 96, 128):
+        pixmap = QPixmap(size, size); pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.scale(size/32, size/32)
+        _draw_module(painter, kind)
+        painter.end()
+        icon.addPixmap(pixmap)
+    return icon
+
+
 @lru_cache(maxsize=32)
 def workbench_icon(kind):
+    if kind in MODULE_ICON_KINDS:
+        return _module_icon(kind)
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
     pixmap.setDevicePixelRatio(2)

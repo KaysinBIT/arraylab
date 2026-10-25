@@ -231,10 +231,10 @@ def attach_subarray(window):
     window.tabs.blockSignals(True)
     try:
         window.subarray_panel = SubarrayPanel(window)
-        window.tabs.addTab(window.subarray_panel, workbench_icon('array'), '子阵中心优化')
+        window.tabs.addTab(window.subarray_panel, workbench_icon('subarray'), '子阵中心优化')
         window.inspector_stack.addWidget(window.subarray_panel.parameter_widget)
         item = QTreeWidgetItem(window.project_tree_root, ['子阵中心优化'])
         item.setData(0, Qt.ItemDataRole.UserRole, ('view', 8))
-        item.setIcon(0, workbench_icon('array')); window.subarray_tree_item = item
+        item.setIcon(0, workbench_icon('subarray')); window.subarray_tree_item = item
     finally:
         window.tabs.blockSignals(False)

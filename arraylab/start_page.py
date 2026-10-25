@@ -1,5 +1,7 @@
 """Task selection and a short, actionable explanation of saving."""
 from PySide6.QtWidgets import QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QPushButton,QGroupBox,QScrollArea,QSizePolicy
+from PySide6.QtCore import QSize
+from .icons import workbench_icon
 
 
 def build_start_page(window):
@@ -19,6 +21,7 @@ def build_start_page(window):
         card.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Minimum)
         label=QLabel(description);label.setWordWrap(True);body.addWidget(label);body.addStretch()
         button=QPushButton(button_text);button.clicked.connect(lambda checked=False,k=kind:window.activate_task(k))
+        button.setIcon(workbench_icon(kind));button.setIconSize(QSize(28,28))
         button.setMinimumHeight(34);body.addWidget(button);window.task_cards[kind]=button;grid.addWidget(card,index//2,index%2)
     layout.addLayout(grid,1)
     flow=QLabel('选择任务  →  设置参数  →  运行计算  →  核对结果  →  保存或导出')

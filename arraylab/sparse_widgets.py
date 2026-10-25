@@ -83,6 +83,20 @@ class SparseWorker(QThread):
         except Exception as exc: self.error = f'{type(exc).__name__}: {exc}'
 
 
+class SparsePlotToolbar(NavigationToolbar2QT):
+    """Restore data limits while keeping layout sized for the current window."""
+    def __init__(self, canvas, panel):
+        self.panel = panel
+        super().__init__(canvas, panel)
+
+    def _update_view(self):
+        super()._update_view()
+        # Matplotlib also restores the old axes rectangles on Home/Back/Forward.
+        # Those rectangles may predate a window resize, especially for colorbars.
+        self.panel.reflow_current_figure()
+        self.canvas.draw_idle()
+
+
 class SparsePanel(QWidget):
     planar_requested = Signal(object, object, object)
     navigation_changed = Signal()
@@ -111,6 +125,8 @@ class SparsePanel(QWidget):
         self.weight_open_button = QPushButton('稀疏后加权'); self.weight_open_button.clicked.connect(self.open_weighting)
         self.export_button = QPushButton('导出结果'); self.export_button.clicked.connect(self.export)
         self.planar_button = QPushButton('送入平面阵'); self.planar_button.clicked.connect(self.send_to_planar)
+        from .icons import workbench_icon
+        self.planar_button.setIcon(workbench_icon('planar'))
         self.planar_button.setToolTip('所选理想布局与相对幅度 → 平面阵电气输入；50 Ω并联初值、连续扫描补偿。')
         for button in (self.run_button, self.cancel_button, self.weight_open_button, self.export_button, self.planar_button): actions.addWidget(button)
         actions.addStretch(); layout.addLayout(actions)
@@ -143,7 +159,7 @@ class SparsePanel(QWidget):
         self.max_button = QPushButton('放大图形'); self.max_button.clicked.connect(self.maximize_plot); views.addWidget(self.max_button)
         pl.addLayout(views); self.figure = Figure(figsize=(7, 4), dpi=100)
         self.canvas = FigureCanvasQTAgg(self.figure); self.canvas.setMinimumSize(100, 100); pl.addWidget(self.canvas, 1)
-        self.toolbar = NavigationToolbar2QT(self.canvas, self); pl.addWidget(self.toolbar); self.tabs.addTab(plot, '图形')
+        self.toolbar = SparsePlotToolbar(self.canvas, self); pl.addWidget(self.toolbar); self.tabs.addTab(plot, '图形')
         self.port_table = QTableWidget(); self.case_table = QTableWidget()
         for table in (self.port_table, self.case_table):
             table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers); table.setAlternatingRowColors(True)
@@ -170,18 +186,10 @@ class SparsePanel(QWidget):
     def refresh_layout(self):
         if self.table.isVisible() and self.table.currentRow() >= 0:
             self.table.scrollToItem(self.table.item(self.table.currentRow(), 0))
-        if self.preview_active:
-            self.canvas.draw_idle(); self._history_ui_changed()
-        elif getattr(self.figure, '_arraylab_sparse_overview', False):
-            # Resizing changes artist placement, not the selected scientific
-            # snapshot. Reuse both panels instead of sampling the field again.
-            from .plot_layout import reflow_plot_layout
-            from .pattern_metrics import draw_metric_footer
-            reflow_plot_layout(self.figure)
-            draw_metric_footer(self.figure, self.figure._arraylab_footer_lines)
-            self.canvas.draw_idle()
-        else:
-            self.redraw()
+        # Keep axes and the toolbar's navigation stack during delayed resize
+        # events, including events delivered in the middle of a pan gesture.
+        self.reflow_current_figure()
+        self.canvas.draw_idle()
 
     def initialize_history(self, path=None):
         """Read only the archive index; the selected bundle is loaded on entry."""
@@ -710,6 +718,7 @@ class SparsePanel(QWidget):
             if kind == 'structures': return structure_figure()
             if result is None: return fig
             if kind == 'comparison': return comparison_figure(self.bundle)
+            fig._arraylab_sparse_view = kind
             if kind == 'overview': draw_layout_pattern(fig, self.bundle, result, case, self.pattern_view.currentData(), self.phase_view.currentData())
             elif kind in ('layout', 'pattern', 'cuts', 'coarray'): draw_detail_plot(fig, self.bundle, result, kind, case, self.pattern_view.currentData(), phase_mode=self.phase_view.currentData())
             elif kind == 'cases': draw_case_results(fig, self.bundle, result)
@@ -730,6 +739,16 @@ class SparsePanel(QWidget):
         figure._original_dpi = original_dpi
         self.figure = figure; self.canvas.figure = figure; figure.set_canvas(self.canvas)
         self.canvas.setMinimumWidth(500 if getattr(figure, '_arraylab_sparse_overview', False) else 100)
+        self.reflow_current_figure()
+        previous = self.toolbar
+        self.toolbar = SparsePlotToolbar(self.canvas, self)
+        self.plot_layout.replaceWidget(previous, self.toolbar)
+        previous.hide(); previous.deleteLater()
+        self.canvas.draw_idle()
+
+    def reflow_current_figure(self):
+        """Resize existing artists without replacing axes or navigation state."""
+        figure = self.figure
         ratio = self.canvas.device_pixel_ratio
         figure.set_size_inches(max(1, self.canvas.width()) * ratio / figure.dpi,
                                max(1, self.canvas.height()) * ratio / figure.dpi, forward=False)
@@ -740,7 +759,7 @@ class SparsePanel(QWidget):
         if hasattr(figure, '_arraylab_footer_lines'):
             from .pattern_metrics import draw_metric_footer
             draw_metric_footer(figure, figure._arraylab_footer_lines)
-        if self.view.currentData() == 'pattern' and len(figure.axes) == 2:
+        if getattr(figure, '_arraylab_sparse_view', None) == 'pattern' and len(figure.axes) == 2:
             figure.set_layout_engine(None)
             height, width = max(1, self.canvas.height()), max(1, self.canvas.width())
             bottom = max(.20, getattr(figure, '_arraylab_footer_reserved', .12) + .09)
@@ -751,11 +770,6 @@ class SparsePanel(QWidget):
             figure.axes[1].set_ylabel(''); figure.axes[1].set_xlabel('dB', fontsize=8, labelpad=1)
             figure.axes[0].title.set_fontsize(10)
             for axis in figure.axes: axis.tick_params(labelsize=8)
-        previous = self.toolbar
-        self.toolbar = NavigationToolbar2QT(self.canvas, self)
-        self.plot_layout.replaceWidget(previous, self.toolbar)
-        previous.hide(); previous.deleteLater()
-        self.canvas.draw_idle()
 
     def refresh_result_tables(self):
         """Update saved-result tables without replacing or redrawing the figure."""
