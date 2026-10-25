@@ -2,6 +2,14 @@
 
 先查看[当前功能与运行方法](README.md)、[下一阶段计划](ROADMAP.md)和[验证边界](docs/validation.md)。
 
+## 代码组织与依赖
+
+实际实现按[结构说明](docs/structure-refactor.md)放在`arraylab/framework`、`application`、`features`和`shared`。新业务代码进入对应feature，不再加入根目录前缀文件。根目录旧文件只用于公开导入兼容，不应成为内部依赖；跨业务使用feature包的显式公开入口，数值入口不应提前加载Qt。
+
+单元测试放在对应模块的`tests/`，原`tests/test_*.py`保留转发以兼容既有命令，并只默认收集一份。`verification/`是可在独立程序中运行的桌面验收代码，不能与不进入wheel的单元测试混淆。新增任务在`application/desktop/task_registry.py`注册；新增CLI在`application/cli.py`按明确优先级注册。不要让基础框架反向导入业务，也不要把没有实际复用关系的代码放入shared。
+
+结构修改可执行`python tools/check_architecture.py --report tmp/architecture.json`检查边界与循环，再选择受影响入口、记录和界面路径验证。源码测试可直接运行就近文件，旧测试命令继续有效。现有JSON/SQLite格式、AppData位置和环境变量属于兼容范围，不随文件迁移改名。
+
 ## 开发检查
 
 建议使用Python 3.14创建独立环境。仅修改计算/无头功能时安装`.[plotting]`与pytest；修改桌面界面时安装`.[desktop]`与pytest。

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arraylab-desktop"
-version = "0.25.0.dev0"
+version = "0.25.0.dev1"
 description = "Desktop and headless electrical feed design for isotropic linear and planar arrays"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,6 +26,7 @@ arraylab-cli = "arraylab.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["arraylab*"]
+exclude = ["arraylab.*.tests", "arraylab.*.tests.*"]
 
 [tool.setuptools.package-data]
 "arraylab" = ["resources/icons/*.png", "resources/icons/*.ico"]
