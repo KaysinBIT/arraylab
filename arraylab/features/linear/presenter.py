@@ -126,9 +126,9 @@ class LinearAnalysisActions:
                 item.setData(0, Qt.ItemDataRole.UserRole, ("result", i))
                 item.setToolTip(0, data.label)
             self._history_signature = signature
-        if self.active_task()=="linear" and 0 <= self.selection.currentIndex() < len(self.datasets):
+        if not getattr(self,'_task_navigation_ready',False) and self.active_task()=="linear" and 0 <= self.selection.currentIndex() < len(self.datasets):
             self.tree.setCurrentItem(self.history_tree_item.child(self.selection.currentIndex()))
-        self.history_tree_item.setExpanded(True)
+        if not getattr(self,'_task_navigation_ready',False):self.history_tree_item.setExpanded(True)
         self.tree.blockSignals(False)
 
     def read_parameters(self):

@@ -12,6 +12,8 @@
 
 ## 开发检查
 
+任务树导航调整使用`tests/test_navigation.py`和`--smoke-suite navigation`定向验证，覆盖全部已有叶节点、双向选择与记录入口，不运行全套业务数值回归。应用层`application/desktop/navigation.py`只组合现有视图/参数控件，不启动计算或创建新历史库。
+
 建议使用Python 3.14创建独立环境。仅修改计算/无头功能时安装`.[plotting]`与pytest；修改桌面界面时安装`.[desktop]`与pytest。
 
 ```text

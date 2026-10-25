@@ -22,7 +22,10 @@ def _mimo(app,window,output):
 def _waveform(app,window,output):
     from .verification.suites import schedule_waveform_test
     return schedule_waveform_test(app,window,output)
+def _navigation(app,window,output):
+    from .verification.suites import schedule_navigation_test
+    return schedule_navigation_test(app,window,output)
 def main(argv=None):
     return run(argv,headless_main=_headless,window_factory=_window,icon_factory=_icon,version=__version__,
-               smoke_schedulers={'all':_all,'sparse-view':_sparse,'mimo':_mimo,'waveform':_waveform})
+               smoke_schedulers={'all':_all,'sparse-view':_sparse,'mimo':_mimo,'waveform':_waveform,'navigation':_navigation})
 _set_windows_application_id=set_windows_application_id

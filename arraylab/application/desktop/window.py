@@ -25,13 +25,14 @@ from arraylab.shared.qt.icons import workbench_icon
 
 from arraylab.application.desktop.workflow import WorkflowActions
 from arraylab.application.desktop.history import HistoryActions
+from arraylab.application.desktop.navigation import TaskNavigationActions
 from arraylab.features.linear import LinearAnalysisActions
 from arraylab.features.sparse import SparseNavigationActions
 from arraylab.application.bridges.mimo import MIMOWorkflowActions, attach_mimo
 from arraylab.features.waveform import attach_waveform
 
 
-class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, SparseNavigationActions, MIMOWorkflowActions, QMainWindow):
+class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, TaskNavigationActions, SparseNavigationActions, MIMOWorkflowActions, QMainWindow):
     def __init__(self, auto_compute=True, *, history_path=None, sparse_history_path=None):
         super().__init__()
         self.setWindowTitle(f"ArrayLab {__version__} · 阵列分析")
@@ -70,6 +71,7 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, SparseN
         attach_subarray(self)
         attach_mimo(self)
         attach_waveform(self)
+        self.build_task_navigation()
         for canvas in (self.plot.canvas, self.feed_panel.pattern_plot.canvas,
                        self.planar_panel.canvas, self.sparse_panel.canvas,
                        self.subarray_panel.canvas, self.mimo_panel.canvas, self.waveform_panel.canvas):
@@ -187,6 +189,9 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, SparseN
         if not payload:
             return
         kind, index = payload
+        if kind=='task_node':
+            self.navigate_task_node(*index);return
+        self.note_legacy_navigation(payload)
         if kind in ('sparse_view', 'sparse_tab', 'sparse_scheme', 'sparse_history'):
             self.navigate_sparse(kind, index)
             return
@@ -198,7 +203,7 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, SparseN
             self.open_sparse()
         elif kind == "result":
             self.selection.setCurrentIndex(index)
-            self.show_view(0)
+            self.show_view(0,preserve_tree=True)
 
 
 

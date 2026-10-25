@@ -24,7 +24,7 @@ EXPECTED_TASKS = {
     'sparse': ('二维稀疏设计', '右侧设置候选阵列与约束 → 运行综合 → 选择方案 → 调幅或继续设计馈电', 6),
     'subarray': ('子阵中心优化', '右侧设置内部模板、孔径与扫描 → 优化中心位置 → 核对实际阵元及方向图 → 导出结果', 8),
     'mimo': ('稀疏MIMO分析', '分别设置Tx/Rx → F5计算 → 核对虚拟位置与通道 → 查看数字波束 → 保存记录', 9),
-    'waveform': ('雷达波形设计', '设置共用参数与A/B → F5计算 → 查看时序/频谱/解模糊 → 对比与保存', 10),
+    'waveform': ('雷达波形设计', 'F5分析波形与增益 → 天线设计页独立综合/验证 → 应用坐标 → F5核对 → 保存记录', 10),
 }
 
 
@@ -101,7 +101,8 @@ def test_workflow_public_page_interface_and_legacy_export():
     from arraylab.workflow import TASKS as legacy
     assert legacy is canonical is TASKS
     seen = []
-    host = SimpleNamespace(task_page=lambda key: WorkflowActions.task_page(None, key), show_view=seen.append)
+    host = SimpleNamespace(task_page=lambda key: WorkflowActions.task_page(None, key),
+                           show_view=lambda page, **options: seen.append(page))
     for key in EXPECTED_TASKS:
         WorkflowActions.activate_task(host, key)
     assert seen == [row[2] for row in EXPECTED_TASKS.values()]

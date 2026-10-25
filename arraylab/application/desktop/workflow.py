@@ -29,9 +29,10 @@ class WorkflowActions:
         return task_page(key)
 
     def activate_task(self,kind):
-        self.show_view(self.task_page(kind))
+        self.show_view(self.task_page(kind),preserve_tree=True)
 
-    def show_view(self,index):
+    def show_view(self,index,*,preserve_tree=False):
+        if not preserve_tree and index in range(4):self.note_legacy_navigation(('view',index))
         self.tabs.blockSignals(True)
         self.tabs.setTabVisible(index,True);self.tabs.setCurrentIndex(index)
         self.tabs.blockSignals(False)
@@ -55,8 +56,9 @@ class WorkflowActions:
         self.project_tree_root.setText(0,'工作任务')
         self.tree.blockSignals(True)
         item=getattr(self,task.tree_attr)
-        self.tree.setCurrentItem(item);self.linear_tree_item.setExpanded(kind=='linear')
-        self.sparse_tree_item.setExpanded(kind=='sparse');self.tree.blockSignals(False)
+        if not getattr(self,'_task_navigation_ready',False):self.tree.setCurrentItem(item)
+        if previous!=kind and kind!='home':item.setExpanded(True)
+        self.tree.blockSignals(False)
         self.inspector_stack.setCurrentIndex(task.inspector)
         self.inspector_dock.setWindowTitle(task.title+' · 参数')
         self.feed_parameter_host.setVisible(kind=='feed')
@@ -123,6 +125,7 @@ class WorkflowActions:
         if hasattr(self,'to_feed_action'):
             self.to_feed_action.setVisible(kind=='linear')
             self.to_feed_action.setEnabled(self.to_feed_button.isEnabled())
+        self.sync_task_navigation()
 
     def import_selected_linear_to_feed(self):
         if self.active_task() != 'linear':
