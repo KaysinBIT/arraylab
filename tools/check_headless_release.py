@@ -25,7 +25,11 @@ def main():
     p.add_argument("release", type=Path)
     p.add_argument("report", type=Path)
     p.add_argument("--gui-smoke", action="store_true")
+    p.add_argument("--gui-suite", choices=('all', 'sparse-view'),
+                   help="Desktop check scope (default: all); requires --gui-smoke")
     args = p.parse_args()
+    if args.gui_suite and not args.gui_smoke:
+        p.error('--gui-suite requires --gui-smoke')
     release = args.release.resolve()
     output = args.report.resolve().parent
     output.mkdir(parents=True, exist_ok=True)
@@ -103,17 +107,28 @@ def main():
     checks.append("help_and_version")
     report = {"success": True, "checks": checks, "work_directory": str(work), "app_version": sample_doc["app_version"],
               "host": platform.platform(), "release_directory": str(release),
+              "gui_suite": None, "full_desktop_suite": False, "gui_cli_crosschecks": "not_requested",
               "environment_scope": "Existing host; system-only PATH, no PYTHONHOME/PYTHONPATH, fresh temp and plotting cache. Not a clean OS image."}
     if args.gui_smoke:
         gui_env = env.copy()
         gui_env["QT_QPA_PLATFORM"] = "windows"
         gui_env.pop("MPLBACKEND", None)
         smoke = work / "gui-smoke"
-        process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke)],
+        suite = args.gui_suite or 'all'
+        process = subprocess.run([str(release / "ArrayLab.exe"), "--smoke-test", str(smoke), "--smoke-suite", suite],
                                  cwd=work, env=gui_env, timeout=420)
         gui_report = json.loads((smoke / "smoke.json").read_text(encoding="utf-8"))
         assert process.returncode == 0 and gui_report["success"]
+        assert gui_report['suite'] == suite and gui_report['full_desktop_suite'] == (suite == 'all')
         report["gui_checks_passed"] = len(gui_report["checks"])
+        report.update(gui_suite=suite, gui_scope=gui_report['scope'],
+                      full_desktop_suite=gui_report['full_desktop_suite'],
+                      gui_groups=gui_report['groups'], gui_elapsed_seconds=gui_report['elapsed_seconds'])
+        if suite != 'all':
+            report['gui_cli_crosschecks'] = 'not_run_focused_gui_suite'
+            args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(json.dumps(report, ensure_ascii=True))
+            return
         scheme_result = json.loads(run("--config", smoke / "中文 分析方案.json").stdout)
         assert scheme_result["parameters"] == gui_report["scheme_result"]["parameters"]
         assert scheme_result["metrics"] == gui_report["scheme_result"]["metrics"]
@@ -203,6 +218,7 @@ def main():
         svg = (branch_directory/'feed-network.svg').read_text(encoding='utf-8')
         assert '405 deg' in svg and 'D1:' in svg and 'C1:' in svg
         checks.append('matched_branch_delay_GUI_CLI_complete_report_and_SVG_match')
+        report['gui_cli_crosschecks'] = 'completed'
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))
 

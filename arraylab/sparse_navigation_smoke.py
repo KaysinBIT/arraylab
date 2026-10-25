@@ -101,7 +101,7 @@ def exercise_sparse_navigation(app, output, report, check):
             target = (target + 1) % len(panel.bundle['results'])
             click_item(window, window._sparse_scheme_nodes[target])
             check(panel.table.currentRow() == target and panel.scheme_selector.currentIndex() == target
-                  and panel.tabs.currentIndex() == 0 and panel.view.currentData() == 'layout',
+                  and panel.tabs.currentIndex() == 0 and panel.view.currentData() == 'overview',
                   'sparse_navigation_left_scheme_selects_same_result')
 
             window.navigate_sparse('sparse_view', 'layout'); panel.preview_element(); settle()
@@ -121,9 +121,9 @@ def exercise_sparse_navigation(app, output, report, check):
             click_item(window, window._sparse_history_nodes[last['id']])
             check(panel.current_history_id == last['id'] and panel.bundle.get('audit_note') == 'second immutable snapshot',
                   'sparse_navigation_can_open_another_saved_run')
-            window.navigate_sparse('sparse_view', 'pattern'); settle(220)
+            window.navigate_sparse('sparse_view', 'overview'); settle(220)
             window.activate_task('linear'); window.activate_task('sparse'); settle()
-            check(selected_payload(window) == ('sparse_view', 'pattern') and panel.current_history_id == last['id'],
+            check(selected_payload(window) == ('sparse_view', 'overview') and panel.current_history_id == last['id'],
                   'sparse_navigation_return_to_task_keeps_active_result_view')
             for entry in (first, last):
                 check(snapshot_bytes(real_load(store, entry['id'])['bundle']) == original_payloads[entry['id']],

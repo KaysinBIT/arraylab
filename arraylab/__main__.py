@@ -29,7 +29,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="ArrayLab desktop")
     parser.add_argument("--headless", action="store_true", help="Run without windows; use --headless --help for calculation options")
     parser.add_argument("--smoke-test", metavar="OUTPUT_DIR", help="Run the packaged Qt integration check and exit")
+    parser.add_argument("--smoke-suite", choices=('all', 'sparse-view'),
+                        help="Desktop check scope (default: all); requires --smoke-test")
     args = parser.parse_args(argv)
+    if args.smoke_suite and not args.smoke_test:
+        parser.error('--smoke-suite requires --smoke-test OUTPUT_DIR')
     os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "arraylab-matplotlib"))
     _set_windows_application_id()
     from PySide6.QtWidgets import QApplication
@@ -48,8 +52,12 @@ def main(argv=None):
     window.resize(min(1440, screen.width() - 60), min(900, screen.height() - 80))
     window.show()
     if args.smoke_test:
-        from .smoke import schedule_smoke_test
-        schedule_smoke_test(app, window, Path(args.smoke_test))
+        if args.smoke_suite == 'sparse-view':
+            from .smoke_suites import schedule_sparse_view_test
+            schedule_sparse_view_test(app, window, Path(args.smoke_test))
+        else:
+            from .smoke import schedule_smoke_test
+            schedule_smoke_test(app, window, Path(args.smoke_test))
     return app.exec()
 
 

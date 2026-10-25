@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import sys
+import time
 import traceback
 
 import numpy as np
@@ -11,13 +12,16 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog, QLineEdit,
 
 from .dataio import read_pattern
 from .configuration import load_configuration
+from .smoke_suites import new_report, SmokeGroup, run_group
 
 
 def schedule_smoke_test(app, window, output: Path):
     output.mkdir(parents=True, exist_ok=True)
 
     def run():
-        report = {"packaged": bool(getattr(sys, "frozen", False)), "qt_platform": app.platformName(), "checks": []}
+        report = new_report(app.platformName(), "all")
+        started = time.perf_counter()
+        core_group = SmokeGroup(report, "desktop-core")
         code = 1
 
         def check(condition, name):
@@ -488,44 +492,51 @@ def schedule_smoke_test(app, window, output: Path):
                 dataset = window.selected_dataset()
                 check(dataset.result is None and np.allclose(dataset.db, values, rtol=0, atol=1e-8),
                       f"{Path(filename).name}_desktop_import_without_inferred_directivity")
+            core_group.finish(True)
+            core_group = None
             from .study_smoke import exercise_scan_dialogs
-            exercise_scan_dialogs(app, window, output, report, check)
+            run_group(report, 'scan-dialogs', lambda: exercise_scan_dialogs(app, window, output, report, check))
             from .sparse_smoke import exercise_sparse
-            exercise_sparse(app, window, output, report, check)
+            run_group(report, 'sparse-workflow', lambda: exercise_sparse(app, window, output, report, check))
+            from .sparse_overview_smoke import exercise as exercise_sparse_overview
+            run_group(report, "sparse-overview", lambda: exercise_sparse_overview(app, window, output, check, click, report))
             from .sparse_navigation_smoke import exercise_sparse_navigation
-            exercise_sparse_navigation(app, output, report, check)
+            run_group(report, 'sparse-navigation', lambda: exercise_sparse_navigation(app, output, report, check))
             from .sparse_history_smoke import exercise_sparse_history
-            exercise_sparse_history(app, output, report, check)
+            run_group(report, 'sparse-history', lambda: exercise_sparse_history(app, output, report, check))
             from .pointing_smoke import exercise_pointing
-            exercise_pointing(app, window, output, report, check)
+            run_group(report, 'pointing', lambda: exercise_pointing(app, window, output, report, check))
             from .multicore_smoke import exercise_multicore
-            exercise_multicore(app, window, output, report, check)
+            run_group(report, 'multicore', lambda: exercise_multicore(app, window, output, report, check))
             from .history_smoke import exercise_history
-            exercise_history(app, window, output, report, check)
+            run_group(report, 'feed-history', lambda: exercise_history(app, window, output, report, check))
             from .workflow_smoke import exercise_workflow
-            exercise_workflow(app, window, output, report, check)
+            run_group(report, 'workflow', lambda: exercise_workflow(app, window, output, report, check))
             from .linear_workflow_smoke import exercise_linear_feed_handoff
-            exercise_linear_feed_handoff(app, window, output, report, check)
+            run_group(report, 'linear-feed-handoff', lambda: exercise_linear_feed_handoff(app, window, output, report, check))
             from .linear_history_smoke import exercise_linear_history
-            exercise_linear_history(app, output, report, check)
+            run_group(report, 'linear-history', lambda: exercise_linear_history(app, output, report, check))
             from .layout_smoke import exercise_layout
-            exercise_layout(app, output, check, report, window)
+            run_group(report, 'layout', lambda: exercise_layout(app, output, check, report, window))
             from .next_stage_smoke import exercise_next_stage
-            exercise_next_stage(app, window, output, report, check)
+            run_group(report, 'next-stage', lambda: exercise_next_stage(app, window, output, report, check))
             from .branch_lengths_smoke import exercise_branch_lengths
-            exercise_branch_lengths(app, window, output, report, check)
+            run_group(report, 'branch-lengths', lambda: exercise_branch_lengths(app, window, output, report, check))
             from .sparse_responsiveness_smoke import exercise_sparse_responsiveness
-            exercise_sparse_responsiveness(app, window, output, report, check)
+            run_group(report, 'sparse-responsiveness', lambda: exercise_sparse_responsiveness(app, window, output, report, check))
             from .sparse_size_smoke import exercise_sparse_sizes
-            exercise_sparse_sizes(app, window, output, report, check)
+            run_group(report, 'sparse-sizes', lambda: exercise_sparse_sizes(app, window, output, report, check))
             from .interaction_smoke import exercise_3d_interaction
-            exercise_3d_interaction(app, window, output, report, check)
+            run_group(report, '3d-interaction', lambda: exercise_3d_interaction(app, window, output, report, check))
             report["success"] = True
             code = 0
         except Exception:
             report["success"] = False
             report["error"] = traceback.format_exc()
         finally:
+            if core_group is not None:
+                core_group.finish(False)
+            report["elapsed_seconds"] = round(time.perf_counter() - started, 6)
             (output / "smoke.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             app.exit(code)
 

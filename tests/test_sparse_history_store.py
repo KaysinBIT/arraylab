@@ -101,7 +101,7 @@ def test_selection_update_never_changes_snapshot_and_can_restore_every_view(bund
     store = SparseHistoryStore(tmp_path/'view.sqlite3')
     row = store.append(bundle)
     original = payload_bytes(store.path, row['id'])
-    for view in ('layout','pattern','cuts','coarray','cases','weights','quantization','element','comparison','structures'):
+    for view in ('overview','layout','pattern','cuts','coarray','cases','weights','quantization','element','comparison','structures'):
         state = normalize_view_state(bundle, {'view':view,'tab':2,'result_index':1,'case_index':1})
         store.update_view_state(row['id'], state)
         assert store.load_record(row['id'])['view_state'] == state

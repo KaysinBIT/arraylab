@@ -25,7 +25,7 @@ from .sparse2d.headless import save_bundle, read_json, validate_request
 from .feed import write_text_atomic
 from .sparse2d.phase_quantization import excitation_phases
 from .sparse2d.runtime_paths import resource_path
-from .sparse2d.plots import (style, draw_detail_plot, draw_case_results, draw_weight_comparison,
+from .sparse2d.plots import (style, draw_detail_plot, draw_layout_pattern, draw_case_results, draw_weight_comparison,
     draw_phase_comparison, draw_element, comparison_figure, structure_figure, result_name)
 from .sparse_bridge import planar_from_sparse
 
@@ -136,7 +136,7 @@ class SparsePanel(QWidget):
         self.tabs = QTabWidget(); body.addWidget(self.tabs, 1)
         plot = QWidget(); pl = QVBoxLayout(plot); pl.setContentsMargins(0, 0, 0, 0); self.plot_layout = pl
         views = QHBoxLayout(); self.view = QComboBox()
-        for label, key in [('阵列布局', 'layout'), ('二维方向图', 'pattern'), ('扫描切线', 'cuts'), ('差分共阵', 'coarray'),
+        for label, key in [('布局与二维方向图', 'overview'), ('阵列布局（单图）', 'layout'), ('二维方向图（单图）', 'pattern'), ('扫描切线', 'cuts'), ('差分共阵', 'coarray'),
                            ('工况比较', 'cases'), ('加权前后', 'weights'), ('量化复核', 'quantization'), ('单元快照', 'element'),
                            ('方法比较', 'comparison'), ('结构化共阵', 'structures')]: self.view.addItem(label, key)
         views.addWidget(QLabel('图形')); views.addWidget(self.view, 1)
@@ -172,6 +172,14 @@ class SparsePanel(QWidget):
             self.table.scrollToItem(self.table.item(self.table.currentRow(), 0))
         if self.preview_active:
             self.canvas.draw_idle(); self._history_ui_changed()
+        elif getattr(self.figure, '_arraylab_sparse_overview', False):
+            # Resizing changes artist placement, not the selected scientific
+            # snapshot. Reuse both panels instead of sampling the field again.
+            from .plot_layout import reflow_plot_layout
+            from .pattern_metrics import draw_metric_footer
+            reflow_plot_layout(self.figure)
+            draw_metric_footer(self.figure, self.figure._arraylab_footer_lines)
+            self.canvas.draw_idle()
         else:
             self.redraw()
 
@@ -702,7 +710,8 @@ class SparsePanel(QWidget):
             if kind == 'structures': return structure_figure()
             if result is None: return fig
             if kind == 'comparison': return comparison_figure(self.bundle)
-            if kind in ('layout', 'pattern', 'cuts', 'coarray'): draw_detail_plot(fig, self.bundle, result, kind, case, self.pattern_view.currentData(), phase_mode=self.phase_view.currentData())
+            if kind == 'overview': draw_layout_pattern(fig, self.bundle, result, case, self.pattern_view.currentData(), self.phase_view.currentData())
+            elif kind in ('layout', 'pattern', 'cuts', 'coarray'): draw_detail_plot(fig, self.bundle, result, kind, case, self.pattern_view.currentData(), phase_mode=self.phase_view.currentData())
             elif kind == 'cases': draw_case_results(fig, self.bundle, result)
             elif kind == 'weights': draw_weight_comparison(fig, self.bundle, result, case)
             elif kind == 'quantization': draw_phase_comparison(fig, self.bundle, result, case)
@@ -720,6 +729,7 @@ class SparsePanel(QWidget):
         figure.set_dpi(self.canvas.figure.dpi)
         figure._original_dpi = original_dpi
         self.figure = figure; self.canvas.figure = figure; figure.set_canvas(self.canvas)
+        self.canvas.setMinimumWidth(500 if getattr(figure, '_arraylab_sparse_overview', False) else 100)
         ratio = self.canvas.device_pixel_ratio
         figure.set_size_inches(max(1, self.canvas.width()) * ratio / figure.dpi,
                                max(1, self.canvas.height()) * ratio / figure.dpi, forward=False)

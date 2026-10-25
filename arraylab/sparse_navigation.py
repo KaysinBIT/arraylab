@@ -26,14 +26,15 @@ class SparseNavigationActions:
             item.setToolTip(0, text)
             return item
 
-        for text, key, icon in [('阵列布局', 'layout', 'model'), ('二维方向图', 'pattern', 'plot'),
+        for text, key, icon in [('布局与二维方向图', 'overview', 'model'),
                                 ('扫描切线', 'cuts', 'plot')]:
             node(self.sparse_tree_item, text, icon, ('sparse_view', key))
         for text, tab in [('阵元幅相', 1), ('工况指标', 2)]:
             node(self.sparse_tree_item, text, 'table', ('sparse_tab', tab))
         node(self.sparse_tree_item, '方法比较', 'plot', ('sparse_view', 'comparison'))
         more = node(self.sparse_tree_item, '更多分析', 'open')
-        for text, key in [('差分共阵', 'coarray'), ('工况比较', 'cases'),
+        for text, key in [('阵列布局（单图）', 'layout'), ('二维方向图（单图）', 'pattern'),
+                          ('差分共阵', 'coarray'), ('工况比较', 'cases'),
                           ('加权前后', 'weights'), ('量化复核', 'quantization'),
                           ('单元快照', 'element'), ('结构化共阵示例', 'structures')]:
             node(more, text, 'plot', ('sparse_view', key))
@@ -80,7 +81,7 @@ class SparseNavigationActions:
                     item = QTreeWidgetItem(self.sparse_schemes_tree_item, [label])
                     item.setIcon(0, workbench_icon('plot'))
                     item.setData(0, Qt.ItemDataRole.UserRole, ('sparse_scheme', index))
-                    item.setToolTip(0, label + '\n查看该方案的阵列布局；可再选择方向图或其他结果视图。')
+                    item.setToolTip(0, label + '\n并排查看该方案的阵列布局与二维方向图。')
                     self._sparse_scheme_nodes[index] = item
                 if not schemes:
                     item = QTreeWidgetItem(self.sparse_schemes_tree_item, ['尚无综合方案'])
@@ -176,7 +177,7 @@ class SparseNavigationActions:
                 if not 0 <= target < panel.table.rowCount(): raise ValueError('所选综合方案已不存在。')
                 panel.tabs.setCurrentIndex(0)
                 with QSignalBlocker(panel.view), QSignalBlocker(panel.table):
-                    panel.view.setCurrentIndex(panel.view.findData('layout'))
+                    panel.view.setCurrentIndex(panel.view.findData('overview'))
                     panel.table.selectRow(target)
                 panel.select_result()
             elif kind == 'sparse_history':

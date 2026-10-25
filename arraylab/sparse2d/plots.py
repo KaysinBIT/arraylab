@@ -157,6 +157,30 @@ def detail_figure(bundle,result,phase_mode='ideal'):
     return fig
 
 
+def draw_layout_pattern(fig,bundle,result,case_index=None,view_mode='total',phase_mode='ideal'):
+    """Show the same selected layout and its field together, without synthesis.
+
+    Both axes share the result, case and phase selection. Resizing reflows the
+    existing artists only; exported figures use the same vector layout.
+    """
+    fig.clear()
+    fig._arraylab_sparse_overview = True
+    fig.set_layout_engine('constrained',w_pad=.06,h_pad=.06,wspace=.10)
+    axes = [fig.add_subplot(1,2,index+1) for index in range(2)]
+    for ax,kind in zip(axes,('layout','pattern')):
+        _draw_detail_axes(fig,ax,kind,bundle,result,case_index,view_mode,phase_mode)
+        ax.tick_params(labelsize=8)
+        ax.xaxis.label.set_fontsize(8); ax.yaxis.label.set_fontsize(8)
+    axes[0].set_title(f'Array layout | N={len(result["xy"])}',fontsize=9)
+    axes[1].set_title(axes[1].get_title().replace(': ',':\n',1),fontsize=9)
+    colorbar = fig.axes[-1]
+    colorbar.set_ylabel(''); colorbar.set_xlabel('dB',fontsize=8,labelpad=2)
+    colorbar.tick_params(labelsize=7)
+    _metric_footer(fig,bundle,result,case_index,view_mode,phase_mode)
+    responsive_subplots(fig,axes,2,column_width=220,row_height=210)
+    return axes
+
+
 def _metric_footer(fig,bundle,result,case_index,view_mode,phase_mode):
     from .pattern_metrics import sparse_pattern_summary, sparse_metric_lines
     from ..pattern_metrics import draw_metric_footer

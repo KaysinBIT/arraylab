@@ -24,7 +24,7 @@ MAX_BYTES = 256 * 1024 * 1024
 MAX_TEXT = 1024 * 1024
 MAX_DEPTH = 40
 MAX_RESULTS = 10000
-_VIEWS = {'layout', 'pattern', 'cuts', 'coarray', 'cases', 'weights',
+_VIEWS = {'overview', 'layout', 'pattern', 'cuts', 'coarray', 'cases', 'weights',
           'quantization', 'element', 'comparison', 'structures'}
 _TABS = ('plot', 'ports', 'cases', 'weight', 'manual')
 _STATE_KEYS = {'result_index', 'case_index', 'view', 'tab', 'pattern_view', 'phase_view'}
@@ -237,7 +237,7 @@ def _summary(bundle):
 
 def _state_from_summary(summary, state):
     result = {'result_index': summary['default_result'], 'case_index': summary['default_case'],
-              'view': 'layout', 'tab': 'plot', 'pattern_view': 'total',
+              'view': 'overview', 'tab': 'plot', 'pattern_view': 'total',
               'phase_view': 'quantized' if summary['config_summary']['phase_bits'] else 'ideal'}
     if state is not None:
         if not isinstance(state, dict) or set(state) - _STATE_KEYS:

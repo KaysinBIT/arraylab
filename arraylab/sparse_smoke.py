@@ -84,9 +84,8 @@ def exercise_sparse(app, window, output, report, check):
     index=source_index(bundle,'annealing');sparse.table.selectRow(index);app.processEvents()
     sparse.case_selector.setCurrentIndex(3);app.processEvents()
     check(sparse.case_selector.currentIndex()==3, 'sparse_selected_case_switch')
-    for kind in ('layout','pattern','cuts','coarray','cases','quantization','element','comparison','structures'):
-        sparse.view.setCurrentIndex(sparse.view.findData(kind));sparse.canvas.draw();app.processEvents()
-        check(bool(sparse.figure.axes),'native_sparse_'+kind+'_view')
+    # View routing is covered by sparse_navigation_smoke; this group verifies
+    # actual synthesis, interaction, exports and transfer across workbenches.
     check(sparse.port_table.rowCount()==8 and sparse.case_table.rowCount()==4,'native_sparse_amplitude_phase_and_case_tables')
     sparse.view.setCurrentIndex(sparse.view.findData('cuts'));app.processEvents();sparse.canvas.draw()
     axes=sparse.figure.axes[0];limits=axes.get_xlim();box=axes.get_window_extent()
