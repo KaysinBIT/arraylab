@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.23.0.dev0，正式Release保留0.22.1，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.1) · [发行说明](docs/releases/0.22.1.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.23.0.dev1，正式Release保留0.22.1，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.1) · [发行说明](docs/releases/0.22.1.md)。
+
+**0.23.0.dev1 馈电曲线显示**：“显示曲线”现在同时控制二维、极坐标和三维图，默认单独显示最终输出。需要同时查看目标、未补偿和最终三条曲线时，显式选择“补偿前后对比”。修复选择最终输出却仍自动叠画未补偿偏转曲线的问题，电气计算不变。
 
 **0.23.0.dev0 直线阵操作流程**：每次成功F5自动保存到“历史计算记录”，重启后恢复；“叠加比较”只控制绘图，不再删除旧记录。选中一条已计算阵列后，点击顶部“将该阵列导入馈电设计”，按所选快照恢复阵列和扫描角，建立均匀幅度、连续扫描补偿的馈电输入，再按F5生成。不会把尚未计算的输入或旧馈电附加相位混入原阵列。本功能尚未进入0.22.1正式下载包。
 
@@ -40,7 +42,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.23.0.dev0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.23.0.dev1/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -53,7 +55,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.23.0.dev0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.23.0.dev1\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -229,7 +231,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.23.0.dev0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.23.0.dev1/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

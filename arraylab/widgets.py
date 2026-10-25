@@ -32,6 +32,7 @@ class PatternSet:
     result: ArrayResult | None = None
     feed_report: dict | None = None
     pattern_key: str = "output"
+    color: str | None = None
 
 
 class NumericTableModel(QAbstractTableModel):
@@ -222,7 +223,7 @@ class PatternPlot(QWidget):
         for i, data in enumerate(datasets):
             y = np.maximum(data.db, floor)
             ax.plot(np.deg2rad(data.angles) if polar else data.angles,
-                    y - floor if polar else y, color=colors[i % len(colors)],
+                    y - floor if polar else y, color=data.color or colors[i % len(colors)],
                     lw=2.1 if i == selected else 1.25, alpha=1 if i == selected else .62,
                     label=data.label)
         if polar:

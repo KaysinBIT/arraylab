@@ -318,7 +318,11 @@ def schedule_smoke_test(app, window, output: Path):
             check(abs(metrics["main_lobe_angle_deg"] - 30) < 1e-7 and feed.report["electrical"]["metrics"]["max_active_phase_error_deg"] < 1e-9,
                   "taylor_weighted_scan_compensation_reaches_target")
             feed.result_tabs.setCurrentIndex(3)
+            check(len(feed.pattern_plot.datasets) == 1 and feed.pattern_plot.datasets[0].pattern_key == "output",
+                  "electrical_final_source_displays_only_final_output")
+            feed.pattern_source.setCurrentIndex(feed.pattern_source.findData("comparison"))
             check(len(feed.pattern_plot.datasets) == 3, "electrical_target_raw_output_patterns_displayed")
+            feed.pattern_source.setCurrentIndex(feed.pattern_source.findData("output"))
             feed.result_tabs.setCurrentIndex(2)
             previewed = []
             def accept_preview():

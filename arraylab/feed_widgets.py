@@ -184,11 +184,14 @@ class FeedPanel(QWidget):
         view_row = QHBoxLayout()
         self.pattern_view = QComboBox(); self.pattern_view.addItems(["直角坐标", "极坐标", "三维方向图"])
         self.pattern_source = QComboBox()
-        for label, key in [("目标激励", "target"), ("网络原始输出（未补偿）", "uncompensated"), ("电气模型输出（最终）", "output")]:
+        for label, key in [("目标激励", "target"), ("网络原始输出（未补偿）", "uncompensated"),
+                           ("电气模型输出（最终）", "output"), ("补偿前后对比", "comparison")]:
             self.pattern_source.addItem(label, key)
         self.pattern_source.setCurrentIndex(2)
+        self.pattern_source.setAccessibleName("馈电方向图显示曲线")
+        self.pattern_source.setToolTip("选择实际显示的曲线；补偿前后对比仅用于二维图，其图下指标对应最终输出。")
         view_row.addWidget(QLabel("显示方式")); view_row.addWidget(self.pattern_view)
-        view_row.addWidget(QLabel("指标／三维来源")); view_row.addWidget(self.pattern_source, 1)
+        view_row.addWidget(QLabel("显示曲线")); view_row.addWidget(self.pattern_source, 1)
         pattern_layout.addLayout(view_row)
         self.pattern_view.currentIndexChanged.connect(self.change_pattern_view)
         self.pattern_source.currentIndexChanged.connect(self.redraw_patterns)
@@ -530,7 +533,25 @@ class FeedPanel(QWidget):
         self.pattern_polar = index == 1
         self.redraw_patterns()
 
+    def _sync_pattern_source_view(self):
+        """A surface has one excitation source, never a mixed comparison key."""
+        three_dimensional = self.pattern_view.currentIndex() == 2
+        comparison = self.pattern_source.findData("comparison")
+        item = self.pattern_source.model().item(comparison)
+        switched = three_dimensional and self.pattern_source.currentData() == "comparison"
+        with QSignalBlocker(self.pattern_source):
+            if item.isEnabled() == three_dimensional:
+                item.setEnabled(not three_dimensional)
+            if switched:
+                self.pattern_source.setCurrentIndex(self.pattern_source.findData("output"))
+        if switched:
+            message = ("三维历史视图显示当前选中记录的最终输出。" if self.compare_history.isChecked() else
+                       "补偿前后对比仅适用于二维图；三维已切换为电气模型输出（最终）。")
+            self.window.statusBar().showMessage(message)
+        return three_dimensional
+
     def redraw_patterns(self):
+        three_dimensional = self._sync_pattern_source_view()
         if self.report is None or not hasattr(self, "pattern_plot"):
             return
         patterns = self.report["electrical"]["patterns"]
@@ -539,16 +560,31 @@ class FeedPanel(QWidget):
                                np.array(record["report"]["electrical"]["patterns"]["output"]["pattern_db"]),
                                feed_report=record["report"]) for record in self.history]
             selected = self.history_selection.currentIndex()
-            self.pattern_hint.setText("历史比较：每条曲线使用其目标相干和作参考；配置与归一化定义随记录一同导出。")
+            self.pattern_hint.setText(
+                ("历史记录：三维只显示当前选中设计的最终输出。" if three_dimensional else
+                 "历史比较：显示各次设计的最终输出，图下指标对应当前选中记录；不是补偿前后对比。")
+                + "每条曲线使用其目标相干幅度和作参考。")
         else:
-            data = [PatternSet(label, np.array(patterns[key]["angles_deg"]), np.array(patterns[key]["pattern_db"]),
-                               feed_report=self.report, pattern_key=key)
-                    for key, label in [("target", "目标激励"), ("uncompensated", "网络原始输出（未补偿）"), ("output", "电气模型输出（最终）")]]
-            selected = self.pattern_source.currentIndex()
-            self.pattern_hint.setText("目标激励对应待实现阵列；最终指向看电气模型输出，网络原始输出仅为未补偿对照。各曲线共用目标相干幅度和作0 dB参考。")
+            source = self.pattern_source.currentData()
+            labels = {"target": "目标激励", "uncompensated": "网络原始输出（未补偿）", "output": "电气模型输出（最终）"}
+            colors = {"target": "#087fa8", "uncompensated": "#d77a28", "output": "#6c5bc4"}
+            keys = ("target", "uncompensated", "output") if source == "comparison" else (source,)
+            data = [PatternSet(labels[key], np.array(patterns[key]["angles_deg"]), np.array(patterns[key]["pattern_db"]),
+                               feed_report=self.report, pattern_key=key, color=colors[key])
+                    for key in keys]
+            selected = 2 if source == "comparison" else 0
+            mode = self.report["settings"]["phase_mode"]
+            mode_note = {"none": "本次未做目标相位补偿；最终输出包含网络相位和当前设置的扰动。",
+                         "equalize": "本次设计采用正侧向0°补偿。",
+                         "scan": "本次设计采用目标指向补偿。"}[mode]
+            if source == "comparison":
+                description = "补偿前后对比：目标激励、未补偿网络、最终输出；图下指标对应最终输出。"
+            else:
+                description = "当前仅显示" + labels[source] + "，图下指标与该曲线一致。"
+            self.pattern_hint.setText(description + mode_note + "各曲线共用目标相干幅度和作0 dB参考。")
         self.pattern_source.setEnabled(not self.compare_history.isChecked())
         self.pattern_plot.draw_sets(data, selected, polar=getattr(self,'pattern_polar',False), floor=-60,
-                                   view="3d" if self.pattern_view.currentIndex() == 2 else None)
+                                   view="3d" if three_dimensional else None)
         target, output = patterns["target"]["metrics"], patterns["output"]["metrics"]
         def number(value):
             return "未定义" if value is None else f"{0 if abs(value)<1e-9 else value:.4g}"
