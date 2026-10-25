@@ -10,11 +10,12 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform')
 SCOPES = {
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
     'sparse-view': 'Focused sparse overview, navigation and automatic-history acceptance; excludes other workbenches and large-array performance.',
     'mimo': 'Focused radar MIMO calculation, array handoff, records and view acceptance; excludes other complete workbench workflows.',
+    'waveform': 'Only new waveform/A-B/distance-recovery and directly affected task/record entrypoints; no unrelated calculations.',
 }
 
 
@@ -60,6 +61,10 @@ def schedule_mimo_test(app, window, output):
     schedule_feature_test(app, window, output, 'mimo')
 
 
+def schedule_waveform_test(app, window, output):
+    schedule_feature_test(app, window, output, 'waveform')
+
+
 def schedule_feature_test(app, window, output, suite):
     """Reuse real Qt exercises with isolated history, without full-suite setup."""
     from PySide6.QtCore import QTimer, Qt
@@ -83,7 +88,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'mimo':
+            if suite == 'waveform':
+                from .waveform_smoke import exercise_waveform
+                run_group(report, 'waveform', lambda: exercise_waveform(app, window, output, report, check))
+            elif suite == 'mimo':
                 from .mimo_smoke import exercise_mimo
                 run_group(report, 'mimo', lambda: exercise_mimo(app, window, output, report, check))
             else:

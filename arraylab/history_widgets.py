@@ -35,6 +35,9 @@ class HistoryActions:
     """MainWindow actions; the window owns all widgets and task routing."""
 
     def _require_history_idle(self):
+        waveform = getattr(self, 'waveform_panel', None)
+        if waveform is not None and (waveform._busy or waveform.thread is not None):
+            raise ValueError('波形任务仍在计算或保存，请完成后再恢复记录。')
         mimo = getattr(self, 'mimo_panel', None)
         if mimo is not None and (mimo._busy or mimo.thread is not None):
             raise ValueError('MIMO任务仍在计算或保存，请完成后再恢复记录。')
@@ -47,6 +50,8 @@ class HistoryActions:
 
     def save_history_path(self, path):
         kind = self.active_task()
+        if kind == 'waveform':
+            self.waveform_panel.save_record_path(path); return
         if kind == 'mimo':
             self.mimo_panel.save_record_path(path); return
         if kind == "linear":
@@ -68,6 +73,10 @@ class HistoryActions:
 
     def load_history_path(self, path):
         self._require_history_idle()
+        from .waveform_io import is_waveform_record
+        if is_waveform_record(path):
+            self.waveform_panel.load_record_path(path)
+            self.activate_task('waveform'); return
         from .mimo_io import is_mimo_record
         if is_mimo_record(path):
             self.mimo_panel.load_record_path(path)
@@ -130,6 +139,8 @@ class HistoryActions:
 
     def save_history_dialog(self):
         kind = self.active_task()
+        if kind == 'waveform':
+            self.waveform_panel.save_record_dialog(); return
         if kind == 'mimo':
             self.mimo_panel.save_record_dialog(); return
         if kind not in ("linear", "feed"):

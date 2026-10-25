@@ -1,0 +1,70 @@
+{
+  "format": "arraylab.waveform",
+  "schema_version": 1,
+  "configuration": {
+    "params": {
+      "startGHz": 77,
+      "slopeMHzUs": 12,
+      "rampUs": 34,
+      "idleUs": 4,
+      "adcStartUs": 3,
+      "samples": 512,
+      "sampleRateMsps": 20,
+      "loops": 128,
+      "txCount": 3,
+      "rxCount": 4,
+      "frameMs": 50,
+      "ifBandwidthMHz": 10,
+      "rangeFft": 1024,
+      "dopplerFft": 128,
+      "window": "hann",
+      "mode": "tdm",
+      "ddmSlots": 4,
+      "targetRange": 60,
+      "targetVelocity": 1
+    },
+    "abOptions": {
+      "enabled": true,
+      "layout": "blocks",
+      "switchGapUs": 5
+    },
+    "rangeOptions": {
+      "method": "off",
+      "secondSampleRateMsps": 5,
+      "secondSlopeMHzUs": 9.6,
+      "searchMaxM": 120,
+      "knownVelocityMps": 0,
+      "toleranceBins": 0.75
+    },
+    "priOptions": {
+      "method": "off",
+      "period1Us": 38,
+      "period2Us": 43,
+      "searchMaxM": 20000,
+      "timingResolutionNs": 2,
+      "targetRangeM": 8000
+    },
+    "profileB": {
+      "startGHz": 77,
+      "slopeMHzUs": 15.0,
+      "rampUs": 42,
+      "idleUs": 12,
+      "adcStartUs": 3,
+      "samples": 512,
+      "sampleRateMsps": 20,
+      "loops": 128,
+      "txCount": 3,
+      "rxCount": 4,
+      "frameMs": 50,
+      "ifBandwidthMHz": 10,
+      "rangeFft": 1024,
+      "dopplerFft": 128,
+      "window": "hann",
+      "mode": "tdm",
+      "ddmSlots": 4,
+      "targetRange": 60,
+      "targetVelocity": 1
+    },
+    "activeProfile": "A"
+  }
+}

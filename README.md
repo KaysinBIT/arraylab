@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.24.0.dev1，正式Release保留0.23.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0) · [发行说明](docs/releases/0.23.0.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.25.0.dev0，正式Release保留0.23.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0) · [发行说明](docs/releases/0.23.0.md)。
+
+**0.25.0.dev0 雷达波形设计**：将已完成的WaveLab v1.2波形、A/B和距离解模糊能力接入原生工作台与无头入口；支持TDM/DDM、两组参数与时序、理想频谱、候选区间、8方案对比和完整记录。原工程及原对话保持独立，新反向设计/增益预算未纳入。详见[雷达波形操作说明](docs/radar-waveforms.md)与[接入来源](docs/waveform-migration.md)。
 
 **0.24.0.dev0 稀疏雷达MIMO**：新增独立Tx/Rx的一维与二维布局、Tx–Rx通道表、虚拟位置及重复度、孔径和数字波束指标；支持完整记录恢复、CSV/PNG导出和无头运行。直线阵与二维稀疏的已计算方案可导入Tx或Rx。详见[雷达MIMO操作与模型边界](docs/mimo-arrays.md)。
 
@@ -50,7 +52,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.24.0.dev1/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.25.0.dev0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -63,7 +65,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.24.0.dev1\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.25.0.dev0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -239,7 +241,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.24.0.dev1/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.25.0.dev0/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

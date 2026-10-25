@@ -193,7 +193,7 @@ def build_workbench(w):
     w.save_scheme_button.setToolTip('只保存当前输入，下次打开需重新计算')
     w.history_open_button=ribbon_button('打开记录','open',w.load_history_dialog)
     w.history_save_button=ribbon_button('保存记录','save',w.save_history_dialog)
-    w.history_open_button.setToolTip('恢复直线阵/馈电/MIMO计算记录，或打开馈电导出的feed-network.json')
+    w.history_open_button.setToolTip('恢复直线阵/馈电/MIMO/波形计算记录，或打开馈电导出的feed-network.json')
     w.history_save_button.setToolTip('保存已有计算记录、标签及选中项；不含未计算的输入')
     w.save_button=ribbon_button('导出当前结果','save',w.save_dialog)
     w.scan_button=ribbon_button('多角度评估','scan',w.run_scan)

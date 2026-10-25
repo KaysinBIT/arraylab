@@ -494,6 +494,8 @@ def schedule_smoke_test(app, window, output: Path):
                       f"{Path(filename).name}_desktop_import_without_inferred_directivity")
             core_group.finish(True)
             core_group = None
+            from .waveform_smoke import exercise_waveform
+            run_group(report, 'waveform', lambda: exercise_waveform(app, window, output, report, check))
             from .mimo_smoke import exercise_mimo
             run_group(report, 'mimo', lambda: exercise_mimo(app, window, output, report, check))
             from .study_smoke import exercise_scan_dialogs

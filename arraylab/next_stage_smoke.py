@@ -94,8 +94,8 @@ def exercise_next_stage(app, window, output, report, check):
 
         watcher.timeout.connect(dismiss_unexpected_modal); watcher.start(50)
         settle(120)
-        check(set(probe.task_cards) == {"linear", "feed", "planar", "sparse", "subarray", "mimo"},
-              "next_home_contains_six_task_cards")
+        check(set(probe.task_cards) == {"linear", "feed", "planar", "sparse", "subarray", "mimo", "waveform"},
+              "next_home_contains_seven_task_cards")
         check(probe.active_task() == "home" and probe.subarray_panel.report is None
               and probe.subarray_panel.thread is None, "next_home_has_no_subarray_auto_run")
         QTest.keyClick(probe, Qt.Key.Key_F9); settle()

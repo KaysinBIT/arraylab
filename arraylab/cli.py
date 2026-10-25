@@ -33,6 +33,7 @@ def parser(planar=False):
     if not planar:
         p.add_argument("--sparse", action="store_true", help="Sparse planar arrays: --sparse --help (or --sparse planar --help)")
         p.add_argument("--mimo-config", metavar="JSON", help="Independent radar Tx/Rx geometry and virtual beam: mimo --help")
+        p.add_argument("--waveform-config", metavar="JSON", help="FMCW, A/B, TDM/DDM and distance recovery: waveform --help")
         p.add_argument("--study", choices=["scan"], help="Electrical multi-angle scan: use --study scan --help")
         p.add_argument("--study-config", type=Path, help="Saved multi-angle electrical scan configuration")
         p.add_argument("--planar", action="store_true", help="Planar arrays: use --planar --help for geometry and plot options")
@@ -280,6 +281,12 @@ def feed_settings_from_args(args, parameters, base=None):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     routed = [value for value in argv if value != "--headless"]
+    if routed and routed[0] == 'waveform':
+        from .waveform_cli import main as waveform_main
+        return waveform_main(routed[1:])
+    if any(value == '--waveform-config' or value.startswith('--waveform-config=') for value in argv):
+        from .waveform_cli import main as waveform_main
+        return waveform_main(routed)
     if routed and routed[0] == 'mimo':
         from .mimo_cli import main as mimo_main
         return mimo_main(routed[1:])

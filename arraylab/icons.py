@@ -14,7 +14,7 @@ def application_icon():
     return icon
 
 
-MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan', 'mimo'))
+MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan', 'mimo', 'waveform'))
 
 
 def _draw_module(p, kind):
@@ -95,6 +95,11 @@ def _draw_module(p, kind):
             pen(blue, 1.6); p.setBrush(QColor('#e3eff7'))
             p.drawRoundedRect(QRectF(x, y, 10, 8), 1.4, 1.4)
             dot(x+3, y+4, 1.55, gold); dot(x+7, y+4, 1.55, gold)
+    elif kind == 'waveform':
+        pen(blue, 1.3); line(3, 28, 29, 28); line(3, 3, 3, 28)
+        pen(teal, 2); p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(5, 22), QPointF(13, 5), QPointF(13, 22), QPointF(21, 5), QPointF(21, 22), QPointF(29, 5)]))
+        pen(gold, 2); line(6, 25, 12, 25); line(16, 25, 22, 25); line(26, 25, 29, 25)
     elif kind == 'mimo':
         # Independent Tx and Rx rows form a larger virtual aperture.
         for x in (4, 23): tile(x, 3, 5)

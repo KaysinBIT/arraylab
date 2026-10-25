@@ -27,6 +27,7 @@ from .workflow import WorkflowActions
 from .history_widgets import HistoryActions, pattern_from_record
 from .sparse_navigation import SparseNavigationActions
 from .mimo_workflow import MIMOWorkflowActions, attach_mimo
+from .waveform_workflow import attach_waveform
 
 
 class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, MIMOWorkflowActions, QMainWindow):
@@ -67,9 +68,10 @@ class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, MIMOW
         from .subarray_widgets import attach_subarray
         attach_subarray(self)
         attach_mimo(self)
+        attach_waveform(self)
         for canvas in (self.plot.canvas, self.feed_panel.pattern_plot.canvas,
                        self.planar_panel.canvas, self.sparse_panel.canvas,
-                       self.subarray_panel.canvas, self.mimo_panel.canvas):
+                       self.subarray_panel.canvas, self.mimo_panel.canvas, self.waveform_panel.canvas):
             canvas.setMinimumSize(480, 360)
 
 
@@ -88,6 +90,14 @@ class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, MIMOW
         self.show(); self.raise_(); self.activateWindow()
 
     def closeEvent(self, event):
+        waveform = getattr(self, 'waveform_panel', None)
+        if waveform is not None and (waveform.thread is not None or waveform._busy):
+            if waveform.thread is not None:
+                self._waveform_close_pending = True; waveform.cancel()
+                self.statusBar().showMessage('正在停止波形计算，随后关闭窗口。')
+            else:
+                self.statusBar().showMessage('波形结果正在保存或导出，请完成后关闭。')
+            event.ignore(); return
         mimo = getattr(self, 'mimo_panel', None)
         if mimo is not None and (mimo.thread is not None or mimo._busy):
             if mimo.thread is not None:
