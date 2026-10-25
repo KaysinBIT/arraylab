@@ -25,7 +25,7 @@ def main():
     p.add_argument("release", type=Path)
     p.add_argument("report", type=Path)
     p.add_argument("--gui-smoke", action="store_true")
-    p.add_argument("--gui-suite", choices=('all', 'sparse-view'),
+    p.add_argument("--gui-suite", choices=('all', 'sparse-view', 'mimo'),
                    help="Desktop check scope (default: all); requires --gui-smoke")
     args = p.parse_args()
     if args.gui_suite and not args.gui_smoke:
@@ -218,6 +218,15 @@ def main():
         svg = (branch_directory/'feed-network.svg').read_text(encoding='utf-8')
         assert '405 deg' in svg and 'D1:' in svg and 'C1:' in svg
         checks.append('matched_branch_delay_GUI_CLI_complete_report_and_SVG_match')
+        for kind in ('linear', 'planar'):
+            mimo_directory = work / ('cli-mimo-' + kind)
+            actual = json.loads(run('--mimo-config', smoke / f'mimo-{kind}-config.json',
+                                    '--output-dir', mimo_directory, '--plot', 'all', '--workers', '1').stdout)['mimo']
+            reference = gui_report['mimo_results'][kind]
+            for key in ('parameters', 'counts', 'geometry', 'aggregation', 'patterns', 'metrics'):
+                assert same_numbers(actual[key], reference[key]), (kind, key)
+            assert all((mimo_directory / f'mimo-{view}.png').is_file() for view in ('layout', 'cut', 'map'))
+            checks.append(f'{kind}_MIMO_GUI_CLI_geometry_beams_records_and_PNG_match')
         report['gui_cli_crosschecks'] = 'completed'
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True))

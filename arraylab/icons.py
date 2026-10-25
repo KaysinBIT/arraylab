@@ -14,7 +14,7 @@ def application_icon():
     return icon
 
 
-MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan'))
+MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan', 'mimo'))
 
 
 def _draw_module(p, kind):
@@ -95,6 +95,15 @@ def _draw_module(p, kind):
             pen(blue, 1.6); p.setBrush(QColor('#e3eff7'))
             p.drawRoundedRect(QRectF(x, y, 10, 8), 1.4, 1.4)
             dot(x+3, y+4, 1.55, gold); dot(x+7, y+4, 1.55, gold)
+    elif kind == 'mimo':
+        # Independent Tx and Rx rows form a larger virtual aperture.
+        for x in (4, 23): tile(x, 3, 5)
+        for x in (5, 12, 20, 27): dot(x, 27, 2.1, teal)
+        pen(blue, 1.5); line(6, 10, 6, 13); line(25, 10, 25, 13)
+        line(6, 13, 25, 13); line(16, 13, 16, 16)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(blue))
+        p.drawPolygon(QPolygonF([QPointF(13, 14), QPointF(19, 14), QPointF(16, 18)]))
+        for x in (4, 8, 12, 16, 20, 24, 28): dot(x, 20, 1.4, gold)
     elif kind == 'scan':
         # A tilted main beam and a curved sweep arrow share the source point.
         pen('#a9bfce', 1.5); p.setBrush(Qt.BrushStyle.NoBrush)

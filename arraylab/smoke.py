@@ -494,6 +494,8 @@ def schedule_smoke_test(app, window, output: Path):
                       f"{Path(filename).name}_desktop_import_without_inferred_directivity")
             core_group.finish(True)
             core_group = None
+            from .mimo_smoke import exercise_mimo
+            run_group(report, 'mimo', lambda: exercise_mimo(app, window, output, report, check))
             from .study_smoke import exercise_scan_dialogs
             run_group(report, 'scan-dialogs', lambda: exercise_scan_dialogs(app, window, output, report, check))
             from .sparse_smoke import exercise_sparse

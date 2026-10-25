@@ -26,9 +26,10 @@ from .icons import workbench_icon
 from .workflow import WorkflowActions
 from .history_widgets import HistoryActions, pattern_from_record
 from .sparse_navigation import SparseNavigationActions
+from .mimo_workflow import MIMOWorkflowActions, attach_mimo
 
 
-class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, QMainWindow):
+class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, MIMOWorkflowActions, QMainWindow):
     def __init__(self, auto_compute=True, *, history_path=None, sparse_history_path=None):
         super().__init__()
         self.setWindowTitle(f"ArrayLab {__version__} · 阵列分析")
@@ -65,9 +66,10 @@ class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, QMain
         build_workbench(self)
         from .subarray_widgets import attach_subarray
         attach_subarray(self)
+        attach_mimo(self)
         for canvas in (self.plot.canvas, self.feed_panel.pattern_plot.canvas,
                        self.planar_panel.canvas, self.sparse_panel.canvas,
-                       self.subarray_panel.canvas):
+                       self.subarray_panel.canvas, self.mimo_panel.canvas):
             canvas.setMinimumSize(480, 360)
 
 
@@ -86,6 +88,14 @@ class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, QMain
         self.show(); self.raise_(); self.activateWindow()
 
     def closeEvent(self, event):
+        mimo = getattr(self, 'mimo_panel', None)
+        if mimo is not None and (mimo.thread is not None or mimo._busy):
+            if mimo.thread is not None:
+                self._mimo_close_pending = True; mimo.cancel()
+                self.statusBar().showMessage('正在停止MIMO计算，随后关闭窗口。')
+            else:
+                self.statusBar().showMessage('MIMO结果正在保存或导出，请完成后关闭。')
+            event.ignore(); return
         subarray = getattr(self, 'subarray_panel', None)
         if subarray is not None and (subarray.thread is not None or subarray._busy):
             self.statusBar().showMessage('子阵任务仍在计算或导出，请完成后关闭。')

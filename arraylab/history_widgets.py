@@ -35,6 +35,9 @@ class HistoryActions:
     """MainWindow actions; the window owns all widgets and task routing."""
 
     def _require_history_idle(self):
+        mimo = getattr(self, 'mimo_panel', None)
+        if mimo is not None and (mimo._busy or mimo.thread is not None):
+            raise ValueError('MIMO任务仍在计算或保存，请完成后再恢复记录。')
         subarray = getattr(self, 'subarray_panel', None)
         if subarray is not None and (subarray._busy or subarray.thread is not None):
             raise ValueError('子阵任务仍在计算或导出，请完成后再恢复历史记录。')
@@ -44,6 +47,8 @@ class HistoryActions:
 
     def save_history_path(self, path):
         kind = self.active_task()
+        if kind == 'mimo':
+            self.mimo_panel.save_record_path(path); return
         if kind == "linear":
             records = [dict(label=data.label, angles=data.angles, db=data.db,
                             phase=data.phase, result=data.result) for data in self.datasets]
@@ -63,6 +68,10 @@ class HistoryActions:
 
     def load_history_path(self, path):
         self._require_history_idle()
+        from .mimo_io import is_mimo_record
+        if is_mimo_record(path):
+            self.mimo_panel.load_record_path(path)
+            self.activate_task('mimo'); return
         # Complete validation and object construction before touching live widgets.
         document = load_history(path)
         kind, selected = document["kind"], document["selected"]
@@ -121,6 +130,8 @@ class HistoryActions:
 
     def save_history_dialog(self):
         kind = self.active_task()
+        if kind == 'mimo':
+            self.mimo_panel.save_record_dialog(); return
         if kind not in ("linear", "feed"):
             QMessageBox.warning(self, "历史保存", "请选择直线阵或馈电设计后保存完整历史。")
             return
@@ -144,7 +155,7 @@ class HistoryActions:
             self.record_message(str(exc))
             return
         path, _ = QFileDialog.getOpenFileName(self, "打开记录或馈电结果（不重新计算）", self.last_directory,
-                                            "ArrayLab历史、馈电结果或旧对比 (*.json)",
+                                            "ArrayLab历史、MIMO记录、馈电结果或旧对比 (*.json)",
                                             options=QFileDialog.Option.DontUseNativeDialog)
         if path:
             try:

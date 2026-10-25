@@ -29,7 +29,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="ArrayLab desktop")
     parser.add_argument("--headless", action="store_true", help="Run without windows; use --headless --help for calculation options")
     parser.add_argument("--smoke-test", metavar="OUTPUT_DIR", help="Run the packaged Qt integration check and exit")
-    parser.add_argument("--smoke-suite", choices=('all', 'sparse-view'),
+    parser.add_argument("--smoke-suite", choices=('all', 'sparse-view', 'mimo'),
                         help="Desktop check scope (default: all); requires --smoke-test")
     args = parser.parse_args(argv)
     if args.smoke_suite and not args.smoke_test:
@@ -52,7 +52,10 @@ def main(argv=None):
     window.resize(min(1440, screen.width() - 60), min(900, screen.height() - 80))
     window.show()
     if args.smoke_test:
-        if args.smoke_suite == 'sparse-view':
+        if args.smoke_suite == 'mimo':
+            from .smoke_suites import schedule_mimo_test
+            schedule_mimo_test(app, window, Path(args.smoke_test))
+        elif args.smoke_suite == 'sparse-view':
             from .smoke_suites import schedule_sparse_view_test
             schedule_sparse_view_test(app, window, Path(args.smoke_test))
         else:

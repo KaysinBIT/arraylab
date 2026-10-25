@@ -10,10 +10,11 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view')
+SUITES = ('all', 'sparse-view', 'mimo')
 SCOPES = {
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
     'sparse-view': 'Focused sparse overview, navigation and automatic-history acceptance; excludes other workbenches and large-array performance.',
+    'mimo': 'Focused radar MIMO calculation, array handoff, records and view acceptance; excludes other complete workbench workflows.',
 }
 
 
@@ -52,6 +53,14 @@ def run_group(report, name, callback):
 
 
 def schedule_sparse_view_test(app, window, output):
+    schedule_feature_test(app, window, output, 'sparse-view')
+
+
+def schedule_mimo_test(app, window, output):
+    schedule_feature_test(app, window, output, 'mimo')
+
+
+def schedule_feature_test(app, window, output, suite):
     """Reuse real Qt exercises with isolated history, without full-suite setup."""
     from PySide6.QtCore import QTimer, Qt
     from PySide6.QtTest import QTest
@@ -60,7 +69,7 @@ def schedule_sparse_view_test(app, window, output):
     output.mkdir(parents=True, exist_ok=True)
 
     def run():
-        report = new_report(app.platformName(), 'sparse-view')
+        report = new_report(app.platformName(), suite)
         started = time.perf_counter()
         code = 1
 
@@ -74,15 +83,19 @@ def schedule_sparse_view_test(app, window, output):
             app.processEvents()
 
         try:
-            from .sparse_overview_smoke import exercise
-            run_group(report, 'sparse-overview',
-                      lambda: exercise(app, window, output, check, click, report))
-            from .sparse_navigation_smoke import exercise_sparse_navigation
-            run_group(report, 'sparse-navigation',
-                      lambda: exercise_sparse_navigation(app, output, report, check))
-            from .sparse_history_smoke import exercise_sparse_history
-            run_group(report, 'sparse-history',
-                      lambda: exercise_sparse_history(app, output, report, check))
+            if suite == 'mimo':
+                from .mimo_smoke import exercise_mimo
+                run_group(report, 'mimo', lambda: exercise_mimo(app, window, output, report, check))
+            else:
+                from .sparse_overview_smoke import exercise
+                run_group(report, 'sparse-overview',
+                          lambda: exercise(app, window, output, check, click, report))
+                from .sparse_navigation_smoke import exercise_sparse_navigation
+                run_group(report, 'sparse-navigation',
+                          lambda: exercise_sparse_navigation(app, output, report, check))
+                from .sparse_history_smoke import exercise_sparse_history
+                run_group(report, 'sparse-history',
+                          lambda: exercise_sparse_history(app, output, report, check))
             report['success'] = True
             code = 0
         except Exception:

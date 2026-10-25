@@ -25,6 +25,8 @@ python -m arraylab --smoke-test tmp/sparse-view --smoke-suite sparse-view
 
 独立包可向`tools/check_headless_release.py`传入`--gui-smoke --gui-suite sparse-view`。该模式只包含基础无头验收和稀疏专项，不运行需要全量桌面产物的GUI/CLI联验；报告明确标记范围。发布或改动跨模块逻辑时，省略suite参数执行默认完整检查。不要把专项通过数量作为全软件验收结果。
 
+MIMO功能可先执行`python -m pytest -q tests/test_mimo.py tests/test_mimo_io.py tests/test_mimo_cli.py`与`python -m arraylab --smoke-test tmp/mimo --smoke-suite mimo`。MIMO专项使用独立窗口/记录和实际后台计算，涵盖阵列交接及失败恢复；完整冻结验收额外比较一维、二维桌面快照与无头输出，并验证PNG导出。相关说明见[雷达MIMO](docs/mimo-arrays.md)。
+
 按当前维护约定，验证在推送前完成，推送后不再测试。GitHub Actions仅接受手动触发，不随push或pull_request自动运行。方案格式变更须保持旧版有效文件可读，并验证失败时原参数、文件和结果不受损。
 
 ## 提交内容

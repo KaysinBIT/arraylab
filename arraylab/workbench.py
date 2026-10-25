@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget, QFrame, QToolButton,
     QGroupBox, QFormLayout, QLineEdit, QComboBox, QCheckBox, QPushButton,
     QDockWidget, QScrollArea, QTreeWidget, QTreeWidgetItem, QPlainTextEdit, QStackedWidget,
-    QSizePolicy,
+    QSizePolicy, QMenu,
 )
 from .icons import application_icon, workbench_icon
 from .widgets import GeometryView, PatternPlot
@@ -193,7 +193,7 @@ def build_workbench(w):
     w.save_scheme_button.setToolTip('只保存当前输入，下次打开需重新计算')
     w.history_open_button=ribbon_button('打开记录','open',w.load_history_dialog)
     w.history_save_button=ribbon_button('保存记录','save',w.save_history_dialog)
-    w.history_open_button.setToolTip('恢复直线阵/馈电计算记录，或打开馈电导出的feed-network.json')
+    w.history_open_button.setToolTip('恢复直线阵/馈电/MIMO计算记录，或打开馈电导出的feed-network.json')
     w.history_save_button.setToolTip('保存已有计算记录、标签及选中项；不含未计算的输入')
     w.save_button=ribbon_button('导出当前结果','save',w.save_dialog)
     w.scan_button=ribbon_button('多角度评估','scan',w.run_scan)
@@ -201,10 +201,17 @@ def build_workbench(w):
     w.to_feed_button=ribbon_button('将该阵列\n导入馈电设计','feed',w.import_selected_linear_to_feed)
     w.to_feed_button.setAccessibleName('将所选直线阵导入馈电设计')
     w.to_feed_button.setToolTip('导入所选已计算阵列的参数与目标指向；不使用尚未计算的输入。进入馈电页后按F5生成。')
+    w.to_mimo_button=ribbon_button('送入MIMO','mimo',lambda:None)
+    w.to_mimo_button.setAccessibleName('将所选阵列导入MIMO')
+    w.to_mimo_button.setToolTip('将已计算坐标与相对幅度导入Tx或Rx；在MIMO页设置目标指向。')
+    mimo_menu=QMenu(w.to_mimo_button)
+    for label,side in [('作为Tx发射阵列','tx'),('作为Rx接收阵列','rx')]:
+        mimo_menu.addAction(label,lambda checked=False,s=side:w.import_selected_to_mimo(s))
+    w.to_mimo_button.setMenu(mimo_menu);w.to_mimo_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
     ribbon_group(pages[0],'任务',[w.home_button])
     ribbon_group(pages[0],'1. 参数',[w.load_scheme_button,w.save_scheme_button])
     ribbon_group(pages[0],'2. 计算',[w.compute_button,w.cancel_button,w.scan_button])
-    ribbon_group(pages[0],'3. 保存与继续',[w.history_save_button,w.history_open_button,w.save_button,w.to_feed_button])
+    ribbon_group(pages[0],'3. 保存与继续',[w.history_save_button,w.history_open_button,w.save_button,w.to_feed_button,w.to_mimo_button])
     w.result_button=ribbon_button('方向图','plot',lambda:w.show_view(0))
     w.model_button=ribbon_button('模型视图','model',lambda:w.show_view(3))
     w.rect_button=ribbon_button('直角坐标','plot',lambda:w.set_plot_view(0))
@@ -453,7 +460,7 @@ def build_workbench(w):
     w.worker_choice.addItem("自动（最多4路）",0)
     for count in range(1,9): w.worker_choice.addItem("单核" if count==1 else f"{count}路并行",count)
     w.worker_choice.setCurrentIndex(w.worker_choice.findData(requested_workers()))
-    w.worker_choice.setToolTip("用于之后启动的扫描、平面阵方向图和稀疏复核；自动模式小任务串行。运行设置不写入阵列方案。")
+    w.worker_choice.setToolTip("用于之后启动的扫描、平面阵方向图、稀疏复核和MIMO场采样；自动模式小任务串行。运行设置不写入阵列方案。")
     w.worker_choice.currentIndexChanged.connect(lambda:set_workers(w.worker_choice.currentData()))
     w.statusBar().addPermanentWidget(w.worker_choice)
     w.statusBar().showMessage("就绪。可设置参数，或载入说明书例题。")

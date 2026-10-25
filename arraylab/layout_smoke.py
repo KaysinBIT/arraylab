@@ -19,7 +19,7 @@ from .window import MainWindow
 
 
 _CONTROLS = (QLabel, QLineEdit, QComboBox, QPushButton, QCheckBox, QAbstractSpinBox)
-_TASKS = ("home", "linear", "feed", "planar", "sparse", "subarray")
+_TASKS = ("home", "linear", "feed", "planar", "sparse", "subarray", "mimo")
 
 
 def _name(widget):
@@ -72,7 +72,7 @@ def _caller_state(window):
 
 
 def exercise_layout(app, output, check, report, window=None):
-    """Check the six task layouts in an isolated, hidden native Qt window."""
+    """Check every task layout in an isolated, hidden native Qt window."""
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     caller = _caller_state(window)
@@ -106,12 +106,14 @@ def exercise_layout(app, output, check, report, window=None):
             "planar": probe.planar_panel.settings_tabs,
             "sparse": probe.sparse_panel.settings_tabs,
             "subarray": probe.subarray_panel.parameter_widget,
+            "mimo": probe.mimo_panel.parameter_widget,
         }
         tab_indices = {key: tabs.currentIndex() for key, tabs in parameter_tabs.items()}
         canvases = {
             "linear": probe.plot.canvas, "feed": probe.feed_panel.pattern_plot.canvas,
             "planar": probe.planar_panel.canvas, "sparse": probe.sparse_panel.canvas,
             "subarray": probe.subarray_panel.canvas,
+            "mimo": probe.mimo_panel.canvas,
         }
 
         for width, height in ((1440, 900), (1100, 740), (1100, 640)):
@@ -146,7 +148,7 @@ def exercise_layout(app, output, check, report, window=None):
                 if kind == "home":
                     home_issues = _contents_issues(probe.start_page.widget())
                     row["home_issues"] = home_issues
-                    check(len(probe.task_cards) == 5 and not home_issues,
+                    check(len(probe.task_cards) == 6 and not home_issues,
                           f"layout_home_cards_and_text_fit_{width}x{height}")
                     continue
 
@@ -198,9 +200,9 @@ def exercise_layout(app, output, check, report, window=None):
                 })
             check(all(not item["issues"] for item in row["parameters"]),
                   f"layout_all_parameter_tabs_bottom_reachable_{width}x{height}")
-            check(len(row["canvases"]) == 5 and all(
+            check(len(row["canvases"]) == len(canvases) and all(
                 item["visible"] and item["size"][0] >= 480 and item["size"][1] >= 360
-                for item in row["canvases"]), f"layout_five_canvases_keep_readable_minimum_{width}x{height}")
+                for item in row["canvases"]), f"layout_all_canvases_keep_readable_minimum_{width}x{height}")
             if height == 640:
                 check(all(item["vertical_max"] > 0
                           and item["vertical_value"] == item["vertical_max"]
