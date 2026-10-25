@@ -12,7 +12,7 @@ python -m pytest -q
 python -m arraylab --smoke-test tmp/qt-smoke
 ```
 
-最后一项是Qt自动交互检查，不等同于手工视觉或干净电脑验收。提交前检查输入、单位、特殊条件、GUI/CLI结果一致性，以及相应文件读写。
+以上完整命令保留供明确需要时使用，不作为每次修改的默认步骤。按用户维护要求，每次只测试修改或新增的功能及其直接影响路径，不自动执行全量回归。Qt自动交互检查不等同于手工视觉或干净电脑验收；根据改动选择相关输入、单位、边界、GUI/CLI或文件读写检查。
 
 修改二维稀疏的图形、菜单或历史联动时，可先用专项入口缩短反馈周期：
 
@@ -23,7 +23,7 @@ python -m arraylab --smoke-test tmp/sparse-view --smoke-suite sparse-view
 
 专项包含并排图的真实Qt交互、全部稀疏导航和自动历史；基本综合/导出/馈电交接保留在完整检查。删除重复的“仅判断存在坐标轴”循环，由导航组统一覆盖入口。`smoke.json`列出本次范围、每组通过数量与耗时，失败组也留下已完成检查。数值测试负责场/指标一致性和图元边界，Qt检查负责实际选择、平移、放大、图片导出、小窗口及恢复，避免在多个层次反复启动相同综合。
 
-独立包可向`tools/check_headless_release.py`传入`--gui-smoke --gui-suite sparse-view`。该模式只包含基础无头验收和稀疏专项，不运行需要全量桌面产物的GUI/CLI联验；报告明确标记范围。发布或改动跨模块逻辑时，省略suite参数执行默认完整检查。不要把专项通过数量作为全软件验收结果。
+独立包可向`tools/check_headless_release.py`传入`--gui-smoke --gui-suite sparse-view`。该模式只包含基础无头验收和稀疏专项，不运行需要全量桌面产物的GUI/CLI联验；报告明确标记范围。跨模块修改时只补充直接受影响的检查，完整回归需用户明确要求。不要把专项通过数量作为全软件验收结果。
 
 MIMO功能可先执行`python -m pytest -q tests/test_mimo.py tests/test_mimo_io.py tests/test_mimo_cli.py`与`python -m arraylab --smoke-test tmp/mimo --smoke-suite mimo`。MIMO专项使用独立窗口/记录和实际后台计算，涵盖阵列交接及失败恢复；完整冻结验收额外比较一维、二维桌面快照与无头输出，并验证PNG导出。相关说明见[雷达MIMO](docs/mimo-arrays.md)。
 

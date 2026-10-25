@@ -163,8 +163,8 @@ class MIMOPanel(QWidget):
         grid.currentIndexChanged.connect(self.mark_dirty)
         self.angle_note = QLabel(); self.angle_note.setWordWrap(True); body.addWidget(self.angle_note)
         presets = QHBoxLayout()
-        for text, kind in [('一维2Tx×4Rx', 'linear'), ('二维稀疏例题', 'planar')]:
-            button = QPushButton(text); button.clicked.connect(lambda checked=False, k=kind: self.load_example(k)); presets.addWidget(button)
+        button = QPushButton('二维稀疏例题')
+        button.clicked.connect(lambda: self.load_example('planar')); presets.addWidget(button)
         body.addLayout(presets)
         note = QLabel('幅度是数字通道合成的可分离系数，默认均匀；并非发射机功率。阵元列表只列出实际使用位置，不要求规则网格。')
         note.setWordWrap(True); body.addWidget(note); body.addStretch()
@@ -184,12 +184,23 @@ class MIMOPanel(QWidget):
             self.parameter_widget.addTab(scroll, label)
         self.inputs['dimension'].currentIndexChanged.connect(self.dimension_changed)
         self.inputs['coordinate_unit'].currentIndexChanged.connect(self.mark_dirty)
+        self.inputs['coordinate_unit'].currentIndexChanged.connect(self.update_parameter_hints)
         self.update_parameter_hints()
 
     def update_parameter_hints(self):
         linear = self.inputs['dimension'].currentData() == 'linear'
-        note = '每行 x,数字幅度；幅度可省略（默认1）。一维y固定为0。' if linear else '每行 x,y,数字幅度；幅度可省略（默认1）。'
-        for hint in self.coordinate_notes.values(): hint.setText(note)
+        unit = 'λ' if self.inputs['coordinate_unit'].currentData() == 'lambda' else 'mm'
+        unit_label = 'λ（当前频率的波长）' if unit == 'λ' else 'mm（毫米）'
+        for side, hint in self.coordinate_notes.items():
+            if linear:
+                note = (f'每行填写一个{side.upper()}阵元的x坐标，单位：{unit_label}。\n'
+                        f'例如分两行填写0和2，表示两个阵元分别位于0{unit}和2{unit}。\n'
+                        '如需加权，填写“x,权重”，例如“2,0.5”；只填坐标时权重为1。\n')
+            else:
+                note = (f'每行填写一个{side.upper()}阵元的“x,y”坐标，用英文逗号分隔，单位：{unit_label}。\n'
+                        f'例如“1,2”表示一个阵元，位置为x=1{unit}、y=2{unit}。\n'
+                        '如需加权，填写“x,y,权重”，例如“1,2,0.5”；省略权重时为1。\n')
+            hint.setText(note + '权重须大于0，表示数字合成的相对幅度，不是发射功率。')
         self.angle_note.setText('θ从+z朝+x，范围−90°至90°；一维φ和切面φ固定为0°。' if linear else
                                'θ从+z量起（0–90°），φ从+x朝+y（−180–180°）。切面φ可与目标φ不同。')
         for key in ('phi_deg', 'cut_phi_deg'): self.inputs[key].setEnabled(not linear)
