@@ -11,6 +11,8 @@ output/
 results/
 linear-history.sqlite3
 linear-history.sqlite3-*
+sparse-history.sqlite3
+sparse-history.sqlite3-*
 *.pdf
 *.zip
 *.exe

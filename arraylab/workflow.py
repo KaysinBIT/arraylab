@@ -52,7 +52,8 @@ class WorkflowActions:
         self.tree.blockSignals(True)
         item={'home':self.home_tree_item,'linear':self.linear_tree_item,'feed':self.feed_tree_item,
               'planar':self.planar_tree_item,'sparse':self.sparse_tree_item,'subarray':self.subarray_tree_item}[kind]
-        self.tree.setCurrentItem(item);self.linear_tree_item.setExpanded(kind=='linear');self.tree.blockSignals(False)
+        self.tree.setCurrentItem(item);self.linear_tree_item.setExpanded(kind=='linear')
+        self.sparse_tree_item.setExpanded(kind=='sparse');self.tree.blockSignals(False)
         self.inspector_stack.setCurrentIndex({'sparse':1,'planar':2,'subarray':3}.get(kind,0))
         self.inspector_dock.setWindowTitle(TASKS[kind][0]+' · 参数')
         self.feed_parameter_host.setVisible(kind=='feed')
@@ -68,6 +69,10 @@ class WorkflowActions:
             self.results_scroll.horizontalScrollBar().setValue(0)
             self.statusBar().showMessage(TASKS[kind][1])
         self.context_caption.setText(TASKS[kind][0])
+        if kind == 'sparse':
+            if not getattr(self, '_sparse_nav_updating', False):
+                self.sparse_panel.ensure_history_restored()
+            self.sync_sparse_navigation()
         self.refresh_actions()
 
     def refresh_actions(self):

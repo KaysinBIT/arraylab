@@ -25,10 +25,11 @@ from .icons import workbench_icon
 
 from .workflow import WorkflowActions
 from .history_widgets import HistoryActions, pattern_from_record
+from .sparse_navigation import SparseNavigationActions
 
 
-class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
-    def __init__(self, auto_compute=True, *, history_path=None):
+class MainWindow(WorkflowActions, HistoryActions, SparseNavigationActions, QMainWindow):
+    def __init__(self, auto_compute=True, *, history_path=None, sparse_history_path=None):
         super().__init__()
         self.setWindowTitle(f"ArrayLab {__version__} · 阵列分析")
         available = self.screen().availableGeometry()
@@ -53,6 +54,12 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         self.update_selection()
         self.activate_task("home")
         self._initialize_linear_history(history_path)
+        sparse_directory = os.environ.get('ARRAYLAB_SPARSE_HISTORY_DIR')
+        sparse_path = (Path(sparse_history_path) if sparse_history_path is not None else
+            Path(sparse_directory) / 'sparse-history.sqlite3' if sparse_directory else
+            Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)) / 'history' / 'sparse-history.sqlite3')
+        self.sparse_panel.initialize_history(sparse_path if auto_compute or sparse_history_path is not None else None)
+        self.sync_sparse_navigation()
 
     def build_ui(self):
         build_workbench(self)
@@ -93,6 +100,8 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
             event.ignore(); return
         self._persist_pending_history()
         self._persist_history_selection()
+        if not self.sparse_panel.can_close_history():
+            event.ignore(); return
         if self._history_requested and any(getattr(data, "_archive_id", None) is None for data in self.datasets):
             answer = QMessageBox.question(self, "计算历史尚未自动保存",
                 "自动保存未成功，部分结果目前仅在本次会话内。\n"
@@ -502,6 +511,9 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         if not payload:
             return
         kind, index = payload
+        if kind in ('sparse_view', 'sparse_tab', 'sparse_scheme', 'sparse_history'):
+            self.navigate_sparse(kind, index)
+            return
         if kind == "view":
             self.show_view(index)
         elif kind == "parameters":

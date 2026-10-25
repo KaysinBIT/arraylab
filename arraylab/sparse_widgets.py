@@ -9,7 +9,7 @@ import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTabWidget, QScrollArea, QSplitter,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QDialog, QTextBrowser)
@@ -85,6 +85,7 @@ class SparseWorker(QThread):
 
 class SparsePanel(QWidget):
     planar_requested = Signal(object, object, object)
+    navigation_changed = Signal()
 
     def __init__(self, host):
         super().__init__()
@@ -92,6 +93,14 @@ class SparsePanel(QWidget):
         self._busy = False; self._last_error = None; self._initializing = True; self._last_selected_row = None
         self._cancel_pending = False; self._job_kind = None; self.inputs = {}
         self._job_started = None; self._progress_stage = ''
+        self.preview_active = False
+        self.history_entries = []; self.current_history_id = None
+        self._history_path = None; self._history_store = None; self._history_loading = False
+        self._history_restore_pending = False; self._history_restore_id = None
+        self._history_pending = []; self._history_current_pending = None
+        self._history_view_dirty = False; self._history_saved_view = None; self._history_warning = ''
+        self.history_timer = QTimer(self); self.history_timer.setSingleShot(True)
+        self.history_timer.timeout.connect(self._persist_history_view)
         self.progress_timer = QTimer(self); self.progress_timer.setInterval(250)
         self.progress_timer.timeout.connect(self.refresh_progress)
         self.build_parameters()
@@ -145,6 +154,7 @@ class SparsePanel(QWidget):
         self.result_splitter.addWidget(results); self.result_splitter.setStretchFactor(0, 0); self.result_splitter.setStretchFactor(1, 1)
         self.result_splitter.setSizes([105, 450]); layout.addWidget(self.result_splitter, 1)
         for combo in (self.view, self.case_selector, self.pattern_view, self.phase_view): combo.currentIndexChanged.connect(self.redraw)
+        self.tabs.currentChanged.connect(self._history_ui_changed)
         self.resize_timer = QTimer(self); self.resize_timer.setSingleShot(True); self.resize_timer.timeout.connect(self.refresh_layout)
         self._compact = None; self._initializing = False; self.set_busy(False); self.update_controls()
 
@@ -160,7 +170,219 @@ class SparsePanel(QWidget):
     def refresh_layout(self):
         if self.table.isVisible() and self.table.currentRow() >= 0:
             self.table.scrollToItem(self.table.item(self.table.currentRow(), 0))
-        self.redraw()
+        if self.preview_active:
+            self.canvas.draw_idle(); self._history_ui_changed()
+        else:
+            self.redraw()
+
+    def initialize_history(self, path=None):
+        """Read only the archive index; the selected bundle is loaded on entry."""
+        self._history_path = Path(path) if path is not None else None
+        self._history_store = None; self.history_entries = []
+        self.current_history_id = None; self._history_restore_id = None
+        self._history_restore_pending = False; self._history_saved_view = None
+        if self._history_path is not None:
+            try:
+                from .sparse_history_store import SparseHistoryStore
+                self._history_store = SparseHistoryStore(self._history_path)
+                entries, selected = self._history_store.list_records()
+                self.history_entries = entries
+                self._history_restore_id = selected if selected is not None and selected >= 0 else None
+                self._history_restore_pending = self._history_restore_id is not None
+            except (OSError, ValueError, ArithmeticError) as exc:
+                self._history_failure('稀疏历史无法读取；原档案未覆盖', exc)
+        self.navigation_changed.emit()
+
+    def ensure_history_restored(self):
+        if not self._history_restore_pending or self._busy or self.thread is not None:
+            return False
+        self._history_restore_pending = False
+        if self.bundle is not None:
+            return False
+        return self.restore_history(self._history_restore_id)
+
+    def history_view_state(self):
+        names = ('plot', 'ports', 'cases', 'weight', 'manual')
+        return {'result_index': max(0, self.table.currentRow()),
+                'case_index': max(0, self.case_selector.currentIndex()),
+                'view': self.view.currentData(), 'tab': names[self.tabs.currentIndex()],
+                'pattern_view': self.pattern_view.currentData(), 'phase_view': self.phase_view.currentData()}
+
+    def _history_ui_changed(self, *_):
+        if self._initializing or self._history_loading:
+            return
+        self.navigation_changed.emit()
+        self.host.refresh_actions()
+        if self._history_path is None or self.bundle is None or self.preview_active:
+            return
+        state = self.history_view_state()
+        if self._history_current_pending is not None:
+            self._history_current_pending['view_state'] = state
+        elif self.current_history_id is not None and state != self._history_saved_view:
+            self._history_view_dirty = True
+            if not self.history_timer.isActive():
+                self.history_timer.start(180)
+
+    def _history_failure(self, message, error):
+        self._history_warning = f'{message}：{error}'
+        self.set_state(self._history_warning)
+        self.host.statusBar().showMessage(self._history_warning)
+        self.host.record_message(self._history_warning)
+
+    def _persist_history_view(self, *, force=False):
+        if (self._history_loading or self.preview_active or self.bundle is None
+                or self._history_store is None or self.current_history_id is None
+                or self._history_current_pending is not None):
+            return
+        if not force and not self._history_view_dirty:
+            return
+        state = self.history_view_state()
+        try:
+            self._history_store.select(self.current_history_id, view_state=state)
+            self._history_saved_view = state; self._history_view_dirty = False
+            if not self._history_pending:
+                self._history_warning = ''
+        except (OSError, ValueError, ArithmeticError) as exc:
+            self._history_view_dirty = True
+            self._history_failure('稀疏历史视图状态未保存，已有计算快照保留', exc)
+
+    def _record_completed_history(self, kind):
+        if self._history_path is None:
+            self.navigation_changed.emit()
+            return
+        c = self.bundle['config']
+        label = f"{'综合' if kind == 'synthesis' else '加权'} · {c['nx']}×{c['ny']} · K={c['k']} · {datetime.now():%m-%d %H:%M:%S}"
+        pending = {'bundle': self.bundle, 'label': label, 'kind': kind,
+                   'view_state': self.history_view_state()}
+        self._history_pending.append(pending); self._history_current_pending = pending
+        self.current_history_id = None; self._history_saved_view = None
+        self.retry_history_save()
+
+    def retry_history_save(self):
+        """Persist only new successful snapshots; never flush a stale view."""
+        if self._history_path is None:
+            return True
+        self.history_timer.stop()
+        written = False
+        try:
+            if self._history_store is None and self._history_pending:
+                from .sparse_history_store import SparseHistoryStore
+                self._history_store = SparseHistoryStore(self._history_path)
+            while self._history_pending:
+                item = self._history_pending[0]
+                entry = self._history_store.append(item['bundle'], item['label'],
+                                                  kind=item['kind'], view_state=item['view_state'])
+                self._history_pending.pop(0); written = True
+                if self._history_current_pending is item:
+                    self.current_history_id = entry['id']; self._history_current_pending = None
+                    self._history_saved_view = dict(item['view_state'])
+                # The append is committed even if a later index refresh fails.
+                if not any(existing['id'] == entry['id'] for existing in self.history_entries):
+                    self.history_entries.append(entry)
+            if written:
+                self.history_entries, _ = self._history_store.list_records()
+                self._history_warning = ''
+        except (OSError, ValueError, ArithmeticError) as exc:
+            self._history_failure('自动保存稀疏历史失败，新结果仍在内存；请导出当前结果备份', exc)
+        if not self._busy:
+            self._persist_history_view(force=written)
+        self.navigation_changed.emit()
+        return not self._history_pending
+
+    def can_close_history(self):
+        self.retry_history_save()
+        if not self._history_pending:
+            return True
+        answer = QMessageBox.question(self, '稀疏历史尚未自动保存',
+            f'有{len(self._history_pending)}份成功计算快照尚未自动保存。\n'
+            '“导出当前结果”只备份当前显示的一份；其他待存快照需在存储恢复后重试保存。\n'
+            '选择“否”返回；选择“是”将退出并放弃全部尚未保存的快照。\n\n'
+            + self._history_warning + '\n\n仍要退出吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        return answer == QMessageBox.StandardButton.Yes
+
+    def _capture_input_state(self):
+        controls = list(self.inputs.values()) + [self.hole_shape, self.element_model, self.element_axis,
+            self.element_import_mode, self.lp_solver, self.element_file, self.joint_scans, self.joint_frequencies,
+            self.weight_method, self.weight_dr, self.weight_sll, self.weight_nbar, self.weight_sigma]
+        return [(control, control.currentIndex() if isinstance(control, QComboBox) else
+                 control.text() if isinstance(control, QLineEdit) else control.value()) for control in controls]
+
+    def _restore_input_state(self, states):
+        previous = self._initializing; self._initializing = True
+        try:
+            for control, value in states:
+                if isinstance(control, QComboBox): control.setCurrentIndex(value)
+                elif isinstance(control, QLineEdit): control.setText(value)
+                else: control.setValue(value)
+        finally:
+            self._initializing = previous
+        self.update_controls()
+
+    def _apply_history_view(self, state):
+        with QSignalBlocker(self.view), QSignalBlocker(self.pattern_view), QSignalBlocker(self.phase_view), QSignalBlocker(self.tabs):
+            for control, key in ((self.view, 'view'), (self.pattern_view, 'pattern_view'), (self.phase_view, 'phase_view')):
+                control.setCurrentIndex(control.findData(state[key]))
+            tabs = {'plot': 0, 'ports': 1, 'cases': 2, 'weight': self.weight_tab, 'manual': self.manual_tab}
+            self.tabs.setCurrentIndex(tabs[state['tab']])
+
+    def restore_history(self, record_id):
+        if self._busy or self.thread is not None or self._history_store is None:
+            return False
+        self.history_timer.stop()
+        self._persist_history_view()
+        try:
+            record = self._history_store.load_record(record_id)
+            bundle, state = record['bundle'], record['view_state']
+            config = Config(**bundle['config'])
+        except (OSError, ValueError, ArithmeticError) as exc:
+            self._history_failure('稀疏历史恢复失败；当前输入和结果保留', exc)
+            return False
+        old = (self.bundle, self.history_view_state(), self.figure, self.preview_active,
+               self.current_history_id, self._history_current_pending, self._history_saved_view)
+        inputs = self._capture_input_state()
+        self.history_timer.stop(); self._history_loading = True
+        try:
+            self.set_config(config)
+            self.receive(bundle, draw=False, selected_index=state['result_index'], case_index=state['case_index'], preserve_snapshot=True)
+            self._apply_history_view(state)
+            selected = self.selected_result()
+            weighting = selected.get('weighting') if selected is not None else None
+            if weighting:
+                self.weight_method.setCurrentIndex(self.weight_method.findData(weighting['method']))
+                for control, key in ((self.weight_dr, 'dr_db'), (self.weight_sll, 'sll_db'),
+                                     (self.weight_nbar, 'nbar'), (self.weight_sigma, 'sigma')):
+                    control.setValue(weighting[key])
+            self.redraw()
+            self.current_history_id = record['id']; self._history_current_pending = None
+            self._history_saved_view = None; self._history_view_dirty = True
+            self._history_restore_pending = False
+        except Exception as exc:
+            self.bundle, previous_view, old_figure, self.preview_active, self.current_history_id, self._history_current_pending, self._history_saved_view = old
+            self._restore_input_state(inputs)
+            try:
+                if self.bundle is not None:
+                    self.receive(self.bundle, draw=False, selected_index=previous_view['result_index'],
+                                 case_index=previous_view['case_index'], preserve_snapshot=True)
+                else:
+                    self.table.setRowCount(0); self.scheme_selector.clear(); self.case_selector.clear()
+                    self.summary.setText('尚无稀疏方案。'); self.port_table.setRowCount(0); self.case_table.setRowCount(0)
+                self._apply_history_view(previous_view)
+                self.refresh_result_tables()
+                self.install_figure(old_figure); self.preview_active = old[3]
+            except Exception:
+                self.summary.setText('历史显示失败；原计算数据仍保留。')
+            self._history_failure('稀疏历史显示失败；当前输入和结果已恢复', exc)
+            return False
+        finally:
+            self._history_loading = False
+            self.navigation_changed.emit(); self.host.refresh_actions()
+        self._persist_history_view(force=True)
+        suffix = ('；' + self._history_warning) if self._history_view_dirty else ''
+        self.set_state(f"已恢复稀疏历史：{record['label']}；显示保存的结果，未重新综合或加权。" + suffix)
+        self.host.statusBar().showMessage('稀疏历史已恢复；参数、方案和工况来自所选快照。')
+        self.set_busy(False)
+        return True
 
     def build_parameters(self):
         self.parameter_widget = QWidget(); layout = QVBoxLayout(self.parameter_widget); layout.setContentsMargins(5, 5, 5, 5)
@@ -327,6 +549,7 @@ class SparsePanel(QWidget):
             self.host.save_button.setEnabled(ready)
             if hasattr(self.host, 'save_action'): self.host.save_action.setEnabled(ready)
         self.host.refresh_actions()
+        self.navigation_changed.emit()
 
     def start(self):
         if self.thread is not None or self._busy: return
@@ -340,6 +563,7 @@ class SparsePanel(QWidget):
         self.begin_worker(SparseWorker(config=config, parent=self), 'synthesis')
 
     def begin_worker(self, worker, kind):
+        self.history_timer.stop(); self._persist_history_view()
         self._last_error = None; self._cancel_pending = False; self._job_kind = kind; self.thread = worker; self.set_busy(True)
         self._job_started = time.monotonic(); self._progress_stage = '正在启动后台计算'
         self.refresh_progress(); self.progress_timer.start()
@@ -367,21 +591,31 @@ class SparsePanel(QWidget):
         selection = (self.table.currentRow(), self.case_selector.currentIndex(), self.phase_view.currentIndex())
         previous_view, previous_tab = self.view.currentIndex(), self.tabs.currentIndex()
         previous_figure = self.figure
+        previous_preview = self.preview_active
+        previous_history = (self.current_history_id, self._history_current_pending, self._history_saved_view)
+        kind, succeeded = self._job_kind, False
+        history_loading = self._history_loading; self._history_loading = True
         try:
             if worker.cancelled or self._cancel_pending: self.set_state('已取消，保留上一份结果。')
             elif worker.error:
                 self._last_error = worker.error; self.set_state('计算失败，保留上一份结果：' + worker.error)
-            else: self.receive(worker.result)
+            else:
+                self.receive(worker.result)
+                succeeded = True
         except Exception as exc:
             self._last_error = f'{type(exc).__name__}: {exc}'
             self.bundle = previous
+            self.current_history_id, self._history_current_pending, self._history_saved_view = previous_history
             try:
                 self.view.blockSignals(True); self.view.setCurrentIndex(previous_view); self.view.blockSignals(False)
                 self.tabs.setCurrentIndex(previous_tab)
                 if previous is not None:
-                    self.receive(previous, draw=False, selected_index=selection[0], case_index=selection[1])
+                    self.receive(previous, draw=False, selected_index=selection[0], case_index=selection[1], preserve_snapshot=True)
                     self.phase_view.blockSignals(True); self.phase_view.setCurrentIndex(selection[2]); self.phase_view.blockSignals(False)
-                    self.redraw()
+                    if previous_preview:
+                        self.install_figure(previous_figure); self.preview_active = True
+                    else:
+                        self.redraw()
                 else:
                     self.table.setRowCount(0); self.scheme_selector.clear(); self.case_selector.clear()
                     self.summary.setText('尚无稀疏方案。'); self.port_table.setRowCount(0); self.case_table.setRowCount(0)
@@ -392,7 +626,10 @@ class SparsePanel(QWidget):
                 self.summary.setText('结果显示失败；已保留上一份计算数据。')
             self.set_state('结果显示失败，保留上一份结果：' + self._last_error)
         finally:
+            self._history_loading = history_loading
             self.thread = None; worker.deleteLater(); self._job_kind = None; self.set_busy(False)
+            if succeeded:
+                self._record_completed_history(kind)
             if getattr(self.host, '_sparse_close_pending', False):
                 self.host._sparse_close_pending = False; QTimer.singleShot(0, self.host.close)
 
@@ -412,8 +649,12 @@ class SparsePanel(QWidget):
                 value = row.get(key); text = '—' if value is None else (f'{value:.6g}' if isinstance(value, (float, np.floating)) else str(value)); table.setItem(i, j, QTableWidgetItem(text))
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
-    def receive(self, bundle, *, draw=True, selected_index=None, case_index=None):
-        bundle['integration'] = {'arraylab_version': __version__, 'source_engine': 'Sparse2D 1.3.0'}; self.bundle = bundle; self._last_selected_row = None
+    def receive(self, bundle, *, draw=True, selected_index=None, case_index=None, preserve_snapshot=False):
+        if not preserve_snapshot:
+            bundle['integration'] = {'arraylab_version': __version__, 'source_engine': 'Sparse2D 1.3.0'}
+        if not self._history_loading and bundle is not self.bundle:
+            self.current_history_id = None; self._history_current_pending = None; self._history_saved_view = None
+        self.bundle = bundle; self._last_selected_row = None; self.preview_active = False
         controls = (self.table, self.scheme_selector, self.case_selector, self.phase_view, self.view)
         blocked = [control.blockSignals(True) for control in controls]
         try:
@@ -440,6 +681,7 @@ class SparsePanel(QWidget):
         resources=f" · 复核{execution['workers']}路" if execution.get('scope')=='sparse_layout_validation' else ''
         self.set_state(f"已完成 {len(bundle['results'])} 个方案、{len(bundle['scenarios'])} 个工况{resources}；" + suffix)
         self.host.statusBar().showMessage('稀疏结果已更新；选中方案可送入平面阵电气设计。')
+        self._history_ui_changed()
 
     def select_result(self):
         row = self.table.currentRow()
@@ -505,8 +747,8 @@ class SparsePanel(QWidget):
         previous.hide(); previous.deleteLater()
         self.canvas.draw_idle()
 
-    def redraw(self):
-        if self._initializing: return
+    def refresh_result_tables(self):
+        """Update saved-result tables without replacing or redrawing the figure."""
         result = self.selected_result()
         if result is not None:
             ci = max(0, self.case_selector.currentIndex()); case = self.bundle['scenarios'][ci]; m = result['metrics']; config = Config(**self.bundle['config'])
@@ -521,7 +763,23 @@ class SparsePanel(QWidget):
                 quant = result.get('phase_quantization', {}).get('scenarios', [])
                 cases.append({**item, 'quantized_psl': quant[i]['validation_psl_db'] if quant else None, 'loss': quant[i]['steering_loss_db'] if quant else None})
             self.fill_table(self.case_table, [('frequency_ghz','GHz'),('theta','θ°'),('phi','φ°'),('validation_psl_db','理想PSL/dB'),('quantized_psl','量化PSL/dB'),('loss','扫描损失/dB'),('hpbw_u','HPBW u'),('hpbw_v','HPBW v')], cases)
+        else:
+            self.summary.setText('尚无稀疏方案。'); self.port_table.setRowCount(0); self.case_table.setRowCount(0)
+
+    def redraw(self):
+        if self._initializing: return
+        was_preview = self.preview_active
+        self.preview_active = False
+        self.refresh_result_tables()
         self.install_figure(self.make_figure())
+        if was_preview:
+            if self.bundle is None:
+                self.set_state('已退出待计算单元预览；尚无综合结果，请设置参数后开始综合。')
+            else:
+                try: dirty = self.config_from_inputs() != Config(**self.bundle['config'])
+                except (ValueError, OverflowError): dirty = True
+                self.set_state('已返回已计算快照；' + ('当前输入仍待综合。' if dirty else '结果与当前参数一致。'))
+        self._history_ui_changed()
 
     def maximize_plot(self):
         dialog = QDialog(self); dialog.setWindowTitle('稀疏图形 · ' + self.view.currentText()); dialog.resize(1000, 720)
@@ -552,8 +810,10 @@ class SparsePanel(QWidget):
             c = self.config_from_inputs().validate(); element = build_element(c)
             for case in scenarios(c): element.steering_response(case)
         except (ValueError, OSError) as exc: QMessageBox.warning(self, '单元检查失败', str(exc)); return
+        self.preview_active = True
         self.tabs.setCurrentIndex(0); self.install_figure(self.make_figure((c, element, scenarios(c)[0]['frequency_ghz'])))
         self.set_state('当前图形为待计算单元预览；方案、表格和导出仍使用已计算快照。')
+        self.navigation_changed.emit(); self.host.refresh_actions()
 
     def send_to_planar(self):
         if self._busy or self.bundle is None: return

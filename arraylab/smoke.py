@@ -492,6 +492,10 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_scan_dialogs(app, window, output, report, check)
             from .sparse_smoke import exercise_sparse
             exercise_sparse(app, window, output, report, check)
+            from .sparse_navigation_smoke import exercise_sparse_navigation
+            exercise_sparse_navigation(app, output, report, check)
+            from .sparse_history_smoke import exercise_sparse_history
+            exercise_sparse_history(app, output, report, check)
             from .pointing_smoke import exercise_pointing
             exercise_pointing(app, window, output, report, check)
             from .multicore_smoke import exercise_multicore

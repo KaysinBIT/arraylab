@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.23.0.dev1，正式Release保留0.22.1，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.1) · [发行说明](docs/releases/0.22.1.md)。
+用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.23.0.dev2，正式Release保留0.22.1，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.22.1) · [发行说明](docs/releases/0.22.1.md)。
+
+**0.23.0.dev2 二维稀疏导航与历史**：左侧可直接进入布局、方向图、切线、阵元幅相、工况指标、方法比较和加权；“本次综合方案”与“历史计算记录”分开显示。成功综合、成功加权会自动留存，重启后按需打开历史快照，不重新优化。更多分析集中在折叠分组中。
 
 **0.23.0.dev1 馈电曲线显示**：“显示曲线”现在同时控制二维、极坐标和三维图，默认单独显示最终输出。需要同时查看目标、未补偿和最终三条曲线时，显式选择“补偿前后对比”。修复选择最终输出却仍自动叠画未补偿偏转曲线的问题，电气计算不变。
 
@@ -16,7 +18,7 @@
 
 本版按操作顺序组织界面：启动先选任务，右侧设置当前任务的参数，中间核对结果，顶部完成计算、保存和导出。直线阵分析、直线阵馈电、平面阵馈电、二维稀疏设计、子阵中心优化各有独立入口，进入任务不会自动计算。首次使用请从[五步快速上手](docs/quickstart.md)开始。
 
-直线阵与直线阵馈电现在支持保存并重新打开完整计算记录，恢复曲线、标签、选中项及已有结果，不重新计算；也能打开旧版馈电比较文件。保存参数、保存记录、导出结果各有明确入口，详见[计算记录与文件选择](docs/calculation-history.md)。平面阵、二维稀疏设计和子阵中心优化尚不支持这项完整多次历史恢复。
+直线阵与直线阵馈电支持保存并重新打开JSON计算记录，也能打开旧版馈电比较文件。直线阵自动保留每次成功F5；二维稀疏通过左侧自动历史恢复每次成功综合和加权，使用独立档案。保存参数、保存记录、导出结果的区别见[计算记录与文件选择](docs/calculation-history.md)。平面阵和子阵中心优化尚未提供完整多次历史恢复。
 
 原有有界多核及无头功能保留：扫描点、平面阵三组方向图、稀疏方案复核可并行。右下角可选自动（最多4路）、单核或2–8路；小任务自动串行。无头使用`--workers`，详见[多核范围与资源控制](docs/multicore.md)。物理尺寸和误差统计继续暂缓。
 
@@ -42,7 +44,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.23.0.dev1/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.23.0.dev2/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -55,7 +57,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.23.0.dev1\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.23.0.dev2\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -120,7 +122,7 @@ GUI入口也支持`ArrayLab.exe --headless --output-dir ...`，但Windows窗口�
 | 保存记录（Ctrl+S） | 导出直线阵已有历史，或馈电最近5项设计、标签及选中项 | 打开记录（Ctrl+O）不重算；直线阵追加到历史，馈电恢复设计列表 |
 | 导出当前结果（Ctrl+E） | 当前所选结果的数据或报告，文件种类随任务变化 | 供外部查看、绘图或后续处理 |
 
-计算记录不包含尚未计算的输入，也不是包含全部任务与窗口布局的完整项目文件。平面阵和二维稀疏仍使用各自的参数保存及结果导出。恢复范围、64 MiB文件上限与旧馈电比较文件兼容说明见[计算记录指南](docs/calculation-history.md)。
+计算记录不包含尚未计算的输入，也不是包含全部任务与窗口布局的完整项目文件。二维稀疏的自动历史入口位于左侧，同时保留参数保存及完整结果导出；平面阵仍使用参数文件和结果导出。JSON记录的64 MiB限制与稀疏自动档案的单条256 MiB限制分别适用，详见[计算记录指南](docs/calculation-history.md)与[二维稀疏指南](docs/sparse-arrays.md)。
 
 直线阵参数文件包含阵元数、频率、间距、间距单位、扫描角和采样步长，不含结果曲线或导入数据。打开参数不会自动计算或清除已有曲线。旧版平铺参数JSON可直接打开，新保存统一使用版本1格式。
 
@@ -231,7 +233,7 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
 - Windows独立运行包构建：`python tools/build_release.py`
-- 运行包检查：`dist/ArrayLab-0.23.0.dev1/ArrayLab.exe --smoke-test tmp/frozen-smoke`
+- 运行包检查：`dist/ArrayLab-0.23.0.dev2/ArrayLab.exe --smoke-test tmp/frozen-smoke`
 - 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。

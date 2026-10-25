@@ -21,7 +21,9 @@ def exercise_sparse(app, window, output, report, check):
     check(sparse.isVisible() and sparse.bundle is None, 'sparse_workbench_opens_without_auto_calculation')
     check(not sparse.isWindow() and sparse.window() is window and window.tabs.currentWidget() is sparse,
           'sparse_is_native_page_inside_main_workbench')
-    check(window.tree.currentItem() is window.sparse_tree_item,'native_sparse_navigation_tracks_active_page')
+    check(window.sparse_tree_item.isExpanded()
+          and tuple(window.tree.currentItem().data(0, Qt.ItemDataRole.UserRole)) == ('sparse_view', sparse.view.currentData()),
+          'native_sparse_navigation_tracks_active_result_view')
     check(window.inspector_stack.currentWidget() is sparse.parameter_widget and not window.result_bar.isVisible(),
           'sparse_parameters_use_shared_inspector_and_hide_linear_result_selector')
     check('arraylab.sparse2d.gui' not in sys.modules and 'arraylab.sparse2d.detail_view' not in sys.modules,

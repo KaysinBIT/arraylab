@@ -335,6 +335,7 @@ def build_workbench(w):
     w.feed_tree_item=node(root,'直线阵馈电','parameters',('view',4))
     w.planar_tree_item=node(root,'平面阵馈电','array',('view',5))
     w.sparse_tree_item=node(root,'二维稀疏设计','array',('view',6))
+    w.build_sparse_navigation()
     root.setExpanded(True);w.tree.currentItemChanged.connect(w.select_result_tab)
     w.nav_dock=dock(w,'选择任务','navigationDock',Qt.DockWidgetArea.LeftDockWidgetArea,w.tree)
     w.nav_dock.setMinimumWidth(175)
