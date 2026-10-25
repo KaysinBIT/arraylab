@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication,QFileDialog,QMessageBox
 
 TASKS={
     'home':('开始','选择一项任务，或打开以前保存的计算记录。',7),
-    'linear':('直线阵分析','右侧设置阵列与扫描角 → 运行计算 → 查看方向图、数据与模型 → 保存记录',0),
+    'linear':('直线阵分析','设置参数 → F5计算并自动留存 → 选择历史结果 → 将该阵列导入馈电设计',0),
     'feed':('直线阵馈电','右侧设置阵列、馈电拓扑与幅相 → 运行设计 → 核对端口与方向图 → 保存记录',4),
     'planar':('平面阵馈电','右侧设置二维布局、目标角与馈电 → 运行设计 → 查看结果 → 导出结果',5),
     'sparse':('二维稀疏设计','右侧设置候选阵列与约束 → 运行综合 → 选择方案 → 调幅或继续设计馈电',6),
@@ -81,6 +81,10 @@ class WorkflowActions:
         self.compute_button.setText(run_text+'\nF5');self.compute_button.setEnabled(kind!='home' and not busy)
         self.compute_button.ensurePolished()
         self.compute_button.setMinimumHeight(max(66,self.compute_button.sizeHint().height()))
+        source=self.selected_dataset()
+        self.to_feed_button.setVisible(kind=='linear')
+        self.to_feed_button.setEnabled(kind=='linear' and source is not None and source.result is not None)
+        self.to_feed_button.setMinimumHeight(max(66,self.to_feed_button.sizeHint().height()))
         self.save_button.setEnabled(ready and not busy);self.save_button.setText('导出所选曲线' if kind=='linear' else '导出当前结果')
         self.load_scheme_button.setEnabled(kind!='home' and not busy);self.save_scheme_button.setEnabled(kind!='home' and not busy)
         self.history_save_button.setVisible(kind in ('linear','feed'))
@@ -105,6 +109,21 @@ class WorkflowActions:
                 action.setVisible(kind in ('linear','feed') if name=='history_save_action' else kind in ('feed','planar') if name=='scan_action' else True)
         if hasattr(self,'run_action'):self.run_action.setText(run_text)
         if hasattr(self,'save_action'):self.save_action.setText(self.save_button.text()+'…')
+        if hasattr(self,'to_feed_action'):
+            self.to_feed_action.setVisible(kind=='linear')
+            self.to_feed_action.setEnabled(self.to_feed_button.isEnabled())
+
+    def import_selected_linear_to_feed(self):
+        if self.active_task() != 'linear':
+            return
+        try:
+            self.feed_panel.import_linear_result(self.selected_dataset())
+        except (ValueError, ArithmeticError) as exc:
+            QMessageBox.warning(self,'阵列导入失败',str(exc))
+            return
+        self.activate_task('feed')
+        self.statusBar().showMessage('已导入所选直线阵记录；请按F5生成馈电设计。')
+        self.focus_parameters()
 
     def compute(self):
         kind=self.active_task()
@@ -206,7 +225,7 @@ class WorkflowActions:
         if kind=='sparse':self.sparse_panel.tabs.setCurrentIndex(self.sparse_panel.manual_tab);return
         if kind=='subarray':
             QMessageBox.information(self,'子阵中心优化',TASKS[kind][1]+'\n\n固定内部矩形模板、朝向与子阵数量，在孔径内连续优化中心位置。内部阵元随各工况理想调相。检查实际阵元间距与子阵包络不交叠；指标为采样估计。\n\n保存参数可供下次重新计算；导出包含布局、激励、报告及图形。');return
-        note={'linear':'直线阵：输入频率、阵元数、间距与扫描角。中间标签切换方向图、数据、激励和模型。',
+        note={'linear':'直线阵：输入频率、阵元数、间距与扫描角。每次成功F5自动保存历史，重启后恢复。勾选“叠加比较”只影响显示。选择已计算结果后，用顶部“将该阵列导入馈电设计”继续。',
               'feed':'直线阵馈电：先设阵列，再选并联、串行或1分2对称串馈。目标角需配合“按目标指向补偿”模式；端口表和方向图用于核对输出。',
               'planar':'平面阵馈电：选择矩形阵或导入x-y坐标，设置θ/φ和馈电。切面φ与目标φ分别设置。参数独立于直线阵。'}[kind]
         QMessageBox.information(self,TASKS[kind][0]+' · 操作说明',note+'\n\n'+TASKS[kind][1]+
@@ -219,6 +238,7 @@ class WorkflowActions:
             a.triggered.connect(callback);menu.addAction(a);return a
         files=self.workbench_menu.addMenu('文件(&F)');tasks=self.workbench_menu.addMenu('任务(&T)')
         view=self.workbench_menu.addMenu('视图(&V)');help_menu=self.workbench_menu.addMenu('帮助(&H)')
+        self.to_feed_action=action(tasks,'将所选阵列导入馈电设计',self.import_selected_linear_to_feed)
         self.load_parameters_action=action(files,'打开当前任务参数…',self.open_configuration_dialog,'Ctrl+Shift+O')
         self.save_parameters_action=action(files,'保存当前任务参数…',self.save_configuration_dialog,'Ctrl+Shift+S')
         files.addSeparator()

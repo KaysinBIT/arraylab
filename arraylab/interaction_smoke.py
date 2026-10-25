@@ -301,7 +301,7 @@ def exercise_3d_interaction(app, window, output, report, check):
     try:
         # Other suite stages use their own windows. Prepare real results here,
         # independent of the caller's history, inputs, and prior suite ordering.
-        probe = MainWindow()
+        probe = MainWindow(auto_compute=False)
         planar = probe.planar_panel
         subarray = probe.subarray_panel
         planar.report = design_planar(planar.read_parameters(), planar.read_settings(), workers=1)

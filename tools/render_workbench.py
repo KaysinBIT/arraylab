@@ -22,7 +22,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
     app = QApplication([]); app.setStyle("Fusion")
-    window = MainWindow()
+    window = MainWindow(auto_compute=False)
     window.show()
 
     def capture():

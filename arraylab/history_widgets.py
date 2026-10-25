@@ -10,6 +10,16 @@ from .history_io import array_result_from_snapshot, load_history, save_history
 from .widgets import PatternSet
 
 
+def pattern_from_record(record):
+    result = array_result_from_snapshot(record["result"]) if record["result"] is not None else None
+    # A validated calculated record duplicates these arrays in its JSON envelope;
+    # share the immutable restored arrays instead of keeping both copies in RAM.
+    return PatternSet(record["label"], result.angles_deg if result is not None else np.array(record["angles"], dtype=float),
+                      result.pattern_db if result is not None else np.array(record["db"], dtype=float),
+                      result.phase_deg if result is not None else (
+                          None if record["phase"] is None else np.array(record["phase"], dtype=float)), result)
+
+
 def _history_sequence(records):
     """Continue generated labels even when older entries have been discarded."""
     numbers = [len(records)]
@@ -58,14 +68,7 @@ class HistoryActions:
         kind, selected = document["kind"], document["selected"]
         parameters = prepared = None
         if kind == "linear":
-            records = []
-            for record in document["records"]:
-                result = (array_result_from_snapshot(record["result"])
-                          if record["result"] is not None else None)
-                records.append(PatternSet(record["label"], np.array(record["angles"], dtype=float),
-                                          np.array(record["db"], dtype=float),
-                                          None if record["phase"] is None else np.array(record["phase"], dtype=float),
-                                          result))
+            records = [pattern_from_record(record) for record in document["records"]]
             if records[selected].result is not None:
                 parameters = records[selected].result.parameters
         elif kind == "feed":
@@ -79,12 +82,14 @@ class HistoryActions:
         if kind == "linear":
             if parameters is not None:
                 self.apply_parameters(parameters)
-            self.datasets = records
-            self.sequence = sequence
+            offset = len(self.datasets)
+            self.datasets.extend(records)
+            self.sequence = max(self.sequence, sequence)
+            self._persist_pending_history()
             with QSignalBlocker(self.selection):
                 self.selection.clear()
-                self.selection.addItems([record.label for record in records])
-                self.selection.setCurrentIndex(selected)
+                self.selection.addItems([record.label for record in self.datasets])
+                self.selection.setCurrentIndex(offset + selected)
             self.keep_history.setChecked(True)
             self.activate_task(kind)
             self.update_selection()
@@ -105,7 +110,10 @@ class HistoryActions:
                 panel._changing = False
         self.last_directory = str(Path(path).parent)
         self.change_workbench_context(self.tabs.currentIndex())
-        message = f"已恢复{len(records)}条历史快照：{Path(path).name}；显示保存时的结果，未重新计算。"
+        verb = "已追加" if kind == "linear" else "已恢复"
+        message = f"{verb}{len(records)}条历史快照：{Path(path).name}；显示保存时的结果，未重新计算。"
+        if kind == "linear" and self._history_warning:
+            message += " " + self._history_warning
         if kind == "linear":
             self.state_label.setText(message + (" 所选外部曲线不含参数，当前输入已保留。" if parameters is None else ""))
         self.statusBar().showMessage(message)

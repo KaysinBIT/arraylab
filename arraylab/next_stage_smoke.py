@@ -111,10 +111,14 @@ def exercise_next_stage(app, window, output, report, check):
               "next_linear_3d_uses_selected_history")
         history_path = output / "next-linear-history.json"
         probe.save_history_path(history_path)
+        before_import = list(probe.datasets)
         probe.selection.setCurrentIndex(1); probe.load_history_path(history_path); settle()
-        check(probe.selection.currentIndex() == 0 and probe.plot.three_dimensional
+        check(probe.selection.currentIndex() == len(before_import)
+              and len(probe.datasets) == len(before_import) * 2
+              and all(a is b for a, b in zip(probe.datasets, before_import))
+              and probe.plot.three_dimensional
               and probe.plot.current_metrics["target_scan_deg"] == 24,
-              "next_linear_history_restores_selected_3d_snapshot")
+              "next_linear_history_appends_and_restores_selected_3d_snapshot")
 
         task("feed")
         feed = probe.feed_panel

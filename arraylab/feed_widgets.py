@@ -145,6 +145,7 @@ class FeedPanel(QWidget):
         layout.addLayout(actions)
         self.state = QLabel("请设置参数后点击“生成电气设计”。50 Ω为初值，请按设计条件修改。")
         self.state.setWordWrap(True); self.state.setObjectName("state")
+        self.state.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.state)
         history_row = QHBoxLayout()
         history_row.addWidget(QLabel("设计记录"))
@@ -183,7 +184,7 @@ class FeedPanel(QWidget):
         view_row = QHBoxLayout()
         self.pattern_view = QComboBox(); self.pattern_view.addItems(["直角坐标", "极坐标", "三维方向图"])
         self.pattern_source = QComboBox()
-        for label, key in [("目标激励", "target"), ("网络原始输出", "uncompensated"), ("电气模型输出", "output")]:
+        for label, key in [("目标激励", "target"), ("网络原始输出（未补偿）", "uncompensated"), ("电气模型输出（最终）", "output")]:
             self.pattern_source.addItem(label, key)
         self.pattern_source.setCurrentIndex(2)
         view_row.addWidget(QLabel("显示方式")); view_row.addWidget(self.pattern_view)
@@ -243,6 +244,45 @@ class FeedPanel(QWidget):
         settings = FeedSettings(topology=self.topology.currentData(), **values, **electrical, **branch)
         settings.validate()
         return settings
+
+    def import_linear_result(self, data):
+        """Load a selected analysis snapshot as inputs, preserving old results."""
+        from .linear_feed_import import prepare_linear_feed_import
+        # Ignore stale/invalid electrical controls which this handoff resets.
+        # Validate the retained impedances before changing any live widget.
+        impedances = {}
+        for key, edit in self.fields.items():
+            try:
+                impedances[key] = float(edit.text().strip())
+            except ValueError as exc:
+                raise ValueError(f"当前馈电设置“{edit.accessibleName()}”无效，请修正后导入。") from exc
+        network = FeedSettings(topology=self.topology.currentData(), **impedances)
+        plan = prepare_linear_feed_import(data, network)
+        changing = self._changing
+        self._changing = True
+        try:
+            self.window.apply_parameters(plan.parameters)
+            self.topology.setCurrentIndex(self.topology.findData(plan.settings.topology))
+            for key, edit in self.fields.items():
+                edit.setText(str(getattr(plan.settings, key)))
+            self.electrical.apply(plan.settings)
+            self.apply_branch_delays(plan.settings)
+        finally:
+            self._changing = changing
+        self.linear_import_source = plan
+        self._linear_import_select_output = True
+        p = plan.parameters
+        label = " ".join(plan.source_label.split())[:100]
+        unit = "λ" if p.spacing_unit == "lambda" else "mm"
+        message = (f"已导入直线阵记录：{label}；N={p.elements}，d={p.spacing:g}{unit}，θ={p.scan_deg:g}°。"
+                   "已设为均匀幅度、按目标指向连续补偿，并清除旧幅相扰动和支路附加延迟。"
+                   + " ".join(plan.notes)
+                   + " 请按F5生成馈电设计；原阵列对应目标激励，最终指向看电气模型输出。已有表格和图形仍是原设计结果。")
+        self.state.setText(message)
+        self.window.statusBar().showMessage("已导入所选直线阵记录；请按F5生成馈电设计。")
+        self.window.record_message(message)
+        self.window.refresh_actions()
+        return plan
 
     def apply_branch_delays(self, settings):
         self.branch_delays_deg = tuple(settings.branch_delays_deg)
@@ -318,6 +358,13 @@ class FeedPanel(QWidget):
             self._changing = True
             try: self.electrical.phase_mode.setCurrentIndex(self.electrical.phase_mode.findData("scan"))
             finally: self._changing = False
+        if getattr(self, "_linear_import_select_output", False):
+            # Switch the view only when the imported inputs have produced a new
+            # result. Until then, old controls and old figures remain consistent.
+            with QSignalBlocker(self.compare_history), QSignalBlocker(self.pattern_source):
+                self.compare_history.setChecked(False)
+                self.pattern_source.setCurrentIndex(self.pattern_source.findData("output"))
+            self._linear_import_select_output = False
         self.report = report
         self.sequence += 1
         s, p = report["settings"], report["array_parameters"]
@@ -433,6 +480,7 @@ class FeedPanel(QWidget):
 
     def restore_report(self, report, prepared=None):
         parameters, settings = prepared or self.prepare_restore_report(report)
+        self._linear_import_select_output = False
         changing = self._changing
         self._changing = True
         try:
@@ -495,9 +543,9 @@ class FeedPanel(QWidget):
         else:
             data = [PatternSet(label, np.array(patterns[key]["angles_deg"]), np.array(patterns[key]["pattern_db"]),
                                feed_report=self.report, pattern_key=key)
-                    for key, label in [("target", "目标激励"), ("uncompensated", "网络原始输出"), ("output", "电气模型输出")]]
+                    for key, label in [("target", "目标激励"), ("uncompensated", "网络原始输出（未补偿）"), ("output", "电气模型输出（最终）")]]
             selected = self.pattern_source.currentIndex()
-            self.pattern_hint.setText("共同0 dB参考：该设计目标激励的相干幅度和；未单独抬高各曲线峰值。")
+            self.pattern_hint.setText("目标激励对应待实现阵列；最终指向看电气模型输出，网络原始输出仅为未补偿对照。各曲线共用目标相干幅度和作0 dB参考。")
         self.pattern_source.setEnabled(not self.compare_history.isChecked())
         self.pattern_plot.draw_sets(data, selected, polar=getattr(self,'pattern_polar',False), floor=-60,
                                    view="3d" if self.pattern_view.currentIndex() == 2 else None)

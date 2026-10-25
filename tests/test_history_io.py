@@ -226,7 +226,7 @@ def test_opening_parameters_as_results_explains_the_correct_action(format, tmp_p
 @pytest.mark.parametrize("changes", [
     {"schema_version": 2}, {"schema_version": True}, {"schema_version": 1.0}, {"format": "other.app"},
     {"kind": "planar"}, {"kind": {}}, {"selected": True}, {"selected": 1}, {"selected": -1},
-    {"selected": "0"}, {"records": []}, {"records": {}}, {"records": [external_record()] * (MAX_RECORDS + 1)},
+    {"selected": "0"}, {"records": []}, {"records": {}},
     {"extra": "unknown"},
 ])
 def test_invalid_envelope_rejected_without_partial_results(changes, tmp_path):

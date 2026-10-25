@@ -159,13 +159,15 @@ def schedule_smoke_test(app, window, output: Path):
             click(window.example_button)
             check(abs(window.selected_dataset().result.directivity_dbi - 7.06756660928) < 1e-8, "manual_page48_example")
             window.keep_history.setChecked(True)
+            first_new_record = len(window.datasets)
             for scan in (0, 10, 20, 30, 40, 50):
                 window.inputs["scan_deg"].setText(str(scan))
                 click(window.compute_button)
-            check(len(window.datasets) == 5, "history_bounded_at_five")
-            window.selection.setCurrentIndex(0)
-            check(window.selected_dataset().result.parameters.scan_deg == 10, "history_selection_drives_metrics")
-            window.tree.setCurrentItem(window.history_tree_item.child(1))
+            check(len(window.datasets) == first_new_record + 6, "history_retains_every_successful_calculation")
+            check(len(window.plot.datasets) <= 5, "history_plot_overlay_is_bounded_without_discarding_records")
+            window.selection.setCurrentIndex(first_new_record)
+            check(window.selected_dataset().result.parameters.scan_deg == 0, "history_selection_drives_metrics")
+            window.tree.setCurrentItem(window.history_tree_item.child(first_new_record + 2))
             app.processEvents()
             check(window.selected_dataset().result.parameters.scan_deg == 20, "history_tree_selects_matching_dataset")
             window.selection.setCurrentIndex(0)
@@ -191,7 +193,12 @@ def schedule_smoke_test(app, window, output: Path):
             check(bool(dismissed) and window.focusWidget() is window.inputs["elements"], "invalid_input_dialog_and_focus")
             window.import_path(file)
             check(window.metrics["directivity"].text() == "—", "import_does_not_invent_directivity")
+            before_removal = len(window.datasets)
             click(window.remove_button)
+            check(len(window.datasets) == before_removal - 1,
+                  "remove_result_keeps_other_historical_calculations")
+            while window.datasets:
+                click(window.remove_button)
             check(window.selected_dataset() is None and not window.save_button.isEnabled(), "last_result_removal_disables_save")
             window.plot_type.setCurrentIndex(0)
             window.ribbon.setCurrentIndex(1)
@@ -489,6 +496,10 @@ def schedule_smoke_test(app, window, output: Path):
             exercise_history(app, window, output, report, check)
             from .workflow_smoke import exercise_workflow
             exercise_workflow(app, window, output, report, check)
+            from .linear_workflow_smoke import exercise_linear_feed_handoff
+            exercise_linear_feed_handoff(app, window, output, report, check)
+            from .linear_history_smoke import exercise_linear_history
+            exercise_linear_history(app, output, report, check)
             from .layout_smoke import exercise_layout
             exercise_layout(app, output, check, report, window)
             from .next_stage_smoke import exercise_next_stage

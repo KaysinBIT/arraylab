@@ -1,11 +1,12 @@
 from dataclasses import asdict
 from pathlib import Path
 import math
+import os
 import time
 from datetime import datetime
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSignalBlocker, QStandardPaths
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QHeaderView, QMainWindow, QMessageBox, QTableView,
@@ -23,11 +24,11 @@ from .icons import workbench_icon
 
 
 from .workflow import WorkflowActions
-from .history_widgets import HistoryActions
+from .history_widgets import HistoryActions, pattern_from_record
 
 
 class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
-    def __init__(self, auto_compute=True):
+    def __init__(self, auto_compute=True, *, history_path=None):
         super().__init__()
         self.setWindowTitle(f"ArrayLab {__version__} · 阵列分析")
         available = self.screen().availableGeometry()
@@ -35,6 +36,12 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         self.setMinimumSize(1100, 640)
         self.datasets: list[PatternSet] = []
         self.sequence = 0
+        self._history_store = None
+        self._history_path = None
+        self._history_warning = ""
+        self._history_loading = True
+        self._history_requested = bool(auto_compute) or history_path is not None
+        self._persisted_selection = None
         self.last_directory = str(Path.home())
         self._changing = False
         self._spacing_unit = "lambda"
@@ -45,6 +52,7 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         self.reset_parameters()
         self.update_selection()
         self.activate_task("home")
+        self._initialize_linear_history(history_path)
 
     def build_ui(self):
         build_workbench(self)
@@ -83,7 +91,106 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
             else:
                 self.statusBar().showMessage('二维稀疏结果正在导出，请完成后关闭。')
             event.ignore(); return
+        self._persist_pending_history()
+        self._persist_history_selection()
+        if self._history_requested and any(getattr(data, "_archive_id", None) is None for data in self.datasets):
+            answer = QMessageBox.question(self, "计算历史尚未自动保存",
+                "自动保存未成功，部分结果目前仅在本次会话内。\n"
+                "请选择“否”返回并使用“保存记录”备份；选择“是”将退出并放弃尚未自动保存的结果。\n\n"
+                + self._history_warning + "\n\n仍要退出吗？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer != QMessageBox.StandardButton.Yes:
+                event.ignore(); return
         super().closeEvent(event)
+
+    def _initialize_linear_history(self, explicit_path):
+        """Normal launches restore history; smoke/probe windows stay isolated."""
+        if not self._history_requested:
+            self._history_loading = False
+            return
+        directory = os.environ.get("ARRAYLAB_HISTORY_DIR")
+        self._history_path = Path(explicit_path) if explicit_path is not None else (
+            Path(directory) / "linear-history.sqlite3" if directory else
+            Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)) / "history" / "linear-history.sqlite3")
+        try:
+            from .linear_history_store import LinearHistoryStore
+            store = LinearHistoryStore(self._history_path)
+            entries, sequence, selected_id = store.load()
+            restored = []
+            for row_id, record in entries:
+                data = pattern_from_record(record)
+                data._archive_id = row_id
+                restored.append(data)
+            self._history_store = store
+            self.datasets = restored
+            self.sequence = sequence
+            selected = next((i for i, data in enumerate(restored) if data._archive_id == selected_id), len(restored) - 1)
+            with QSignalBlocker(self.selection):
+                self.selection.clear()
+                self.selection.addItems([data.label for data in restored])
+                self.selection.setCurrentIndex(selected)
+            if selected >= 0 and restored[selected].result is not None:
+                self.apply_parameters(restored[selected].result.parameters)
+            self._persisted_selection = restored[selected]._archive_id if selected >= 0 else None
+            self.update_selection()
+            if restored:
+                message = f"已自动恢复{len(restored)}条历史计算记录，未重新计算。"
+                self.statusBar().showMessage(message)
+                self.record_message(message)
+        except (OSError, ValueError, ArithmeticError) as exc:
+            self._history_warning = f"自动历史无法读取，原档案未覆盖：{exc}"
+            self.statusBar().showMessage(self._history_warning)
+            self.record_message(self._history_warning)
+        finally:
+            self._history_loading = False
+            self.history_tree_item.setToolTip(0, f"自动保存位置：{self._history_path}" + (
+                "\n" + self._history_warning if self._history_warning else ""))
+
+    def _persist_pending_history(self):
+        if not self._history_requested or self._history_loading:
+            return
+        pending = [(index, data) for index, data in enumerate(self.datasets) if getattr(data, "_archive_id", None) is None]
+        if not pending:
+            return
+        try:
+            if self._history_store is None:
+                from .linear_history_store import LinearHistoryStore
+                store = LinearHistoryStore(self._history_path)
+                store.load()  # Do not append to a damaged, unreadable archive.
+                self._history_store = store
+            for index, data in pending:
+                record = dict(label=data.label, angles=data.angles, db=data.db, phase=data.phase, result=data.result)
+                row_id, sequence, label = self._history_store.append(record,
+                    getattr(data, "_history_sequence", self.sequence),
+                    generated=getattr(data, "_history_generated", False))
+                data._archive_id = row_id
+                data._history_sequence = sequence
+                data.label = label
+                if self.selection.count() == len(self.datasets):
+                    with QSignalBlocker(self.selection):
+                        self.selection.setItemText(index, label)
+                self.sequence = max(self.sequence, sequence)
+                self._persisted_selection = row_id
+            self._history_warning = ""
+        except (OSError, ValueError, ArithmeticError) as exc:
+            self._history_warning = f"历史自动保存失败；未保存结果仍保留在本次会话，请用“保存记录”备份。{exc}"
+            self.statusBar().showMessage(self._history_warning)
+            self.record_message(self._history_warning)
+
+    def _persist_history_selection(self):
+        if self._history_loading or self._history_store is None:
+            return
+        data = self.selected_dataset()
+        row_id = getattr(data, "_archive_id", None)
+        if row_id is None or row_id == self._persisted_selection:
+            return
+        try:
+            self._history_store.select(row_id)
+            self._persisted_selection = row_id
+        except (OSError, ValueError) as exc:
+            self._history_warning = str(exc)
+            self.record_message(str(exc))
 
 
 
@@ -265,19 +372,23 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
             return
         self.sequence += 1
         label = f"#{self.sequence}  N={p.elements} · d={p.spacing_lambda:.4g}λ · θ₀={p.scan_deg:g}°"
-        self.add_dataset(PatternSet(label, result.angles_deg, result.pattern_db, result.phase_deg, result))
+        data = PatternSet(label, result.angles_deg, result.pattern_db, result.phase_deg, result)
+        self.add_dataset(data, generated=True)
+        label = data.label
         self.tabs.setCurrentIndex(0)
-        self.state_label.setText(f"计算完成  {label}   |   峰值归一化为 0 dB · 方向性使用全空间积分")
-        self.statusBar().showMessage(f"计算耗时 {elapsed:.1f} ms（不含绘图）  ·  {len(result.angles_deg)} 个采样点  ·  最多保留最近 5 条曲线")
+        self.state_label.setText(f"计算完成  {label}   |   峰值归一化为 0 dB · 方向性使用全空间积分" + (
+            "；" + self._history_warning if self._history_warning else ""))
+        self.statusBar().showMessage(f"计算耗时 {elapsed:.1f} ms（不含绘图）  ·  {len(result.angles_deg)} 个采样点  ·  已保留{len(self.datasets)}条历史" + (
+            "；" + self._history_warning if self._history_warning else ""))
         self.record_message(f"结果 {label}：方向性 {result.directivity_dbi:.4f} dBi。")
         for notice in result.notices:
             self.record_message(notice)
 
-    def add_dataset(self, data):
-        if not self.keep_history.isChecked():
-            self.datasets.clear()
+    def add_dataset(self, data, *, generated=False):
+        data._history_generated = generated
+        data._history_sequence = self.sequence
         self.datasets.append(data)
-        self.datasets = self.datasets[-5:]
+        self._persist_pending_history()
         self.selection.blockSignals(True)
         self.selection.clear()
         self.selection.addItems([d.label for d in self.datasets])
@@ -288,6 +399,15 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
     def remove_selected(self):
         i = self.selection.currentIndex()
         if 0 <= i < len(self.datasets):
+            row_id = getattr(self.datasets[i], "_archive_id", None)
+            if row_id is not None and self._history_store is not None:
+                next_index = i - 1 if i > 0 else 1
+                next_id = getattr(self.datasets[next_index], "_archive_id", -1) if next_index < len(self.datasets) else -1
+                try:
+                    self._history_store.remove(row_id, next_id)
+                except (OSError, ValueError) as exc:
+                    QMessageBox.warning(self, "历史删除失败", str(exc))
+                    return
             self.datasets.pop(i)
             self.selection.blockSignals(True)
             self.selection.clear()
@@ -360,12 +480,19 @@ class MainWindow(WorkflowActions, HistoryActions, QMainWindow):
         for field in self.metrics.values():
             field.setAccessibleName(field.text())
         self.sync_history_tree()
+        self._persist_history_selection()
         self.redraw()
         self.refresh_actions()
 
     def redraw(self):
         if hasattr(self, "plot"):
-            self.plot.draw_sets(self.datasets, self.selection.currentIndex(),
+            selected = self.selection.currentIndex()
+            indices = ([selected] if 0 <= selected < len(self.datasets) else [])
+            if self.keep_history.isChecked() and indices:
+                # Bound graph work independently of the complete archive.
+                indices = sorted(set(range(max(0, len(self.datasets) - 4), len(self.datasets))) | {selected})
+            displayed = [self.datasets[index] for index in indices]
+            self.plot.draw_sets(displayed, indices.index(selected) if selected in indices else -1,
                                 self.plot_type.currentIndex() == 1,
                                 [-30, -40, -60, -80][self.floor_combo.currentIndex()],
                                 view="3d" if self.plot_type.currentIndex() == 2 else None)

@@ -102,6 +102,11 @@ def exercise_history(app, window, output, report, check):
         check("未重新计算" in owner.state_label.text(), f"{name}_identifies_saved_snapshot")
 
     window.activate_task("linear")
+    # Comparing curves no longer clears history. Start this fixture using the
+    # explicit removal action, as a user would, instead of a display checkbox.
+    while window.datasets:
+        window.selection.setCurrentIndex(0)
+        window.remove_selected()
     window.keep_history.setChecked(False)
     for index, parameters in enumerate((
             ArrayParameters(elements=6, scan_deg=-12, step_deg=1),

@@ -86,7 +86,7 @@ def exercise_workflow(app, window, output, report, check):
 
     try:
         set_workers(1)
-        probe = MainWindow()
+        probe = MainWindow(auto_compute=False)
         probe.show()
         probe.raise_()
         probe.activateWindow()

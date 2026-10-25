@@ -26,6 +26,7 @@ FORMAT = "arraylab.calculation_history"
 SCHEMA_VERSION = 1
 MAX_BYTES = 64 * 1024 * 1024
 MAX_RECORDS = 5
+MAX_LINEAR_RECORDS = 100_000
 MAX_POINTS = 100_000
 MAX_DEPTH = 32
 MAX_STRING = 1024 * 1024
@@ -413,7 +414,8 @@ def _validate_document(document):
         _fail("记录文件", "不支持的格式或版本。")
     if document["kind"] not in ("linear", "feed"):
         _fail("记录文件", "kind须为linear或feed。")
-    records = _list(document["records"], "计算记录", 1, MAX_RECORDS)
+    limit = MAX_LINEAR_RECORDS if document["kind"] == "linear" else MAX_RECORDS
+    records = _list(document["records"], "计算记录", 1, limit)
     _integer(document["selected"], "所选记录", 0, len(records) - 1)
     validate = _validate_linear if document["kind"] == "linear" else _validate_feed
     for record in records:
@@ -432,6 +434,29 @@ def _unique_keys(pairs):
 
 def _invalid_constant(value):
     _fail("记录文件", "非法JSON数值 " + value)
+
+
+def linear_record_bytes(record):
+    """Encode one strictly validated snapshot for the automatic archive."""
+    value = _plain(record)
+    _validate_linear(value)
+    raw = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    if len(raw) > MAX_BYTES:
+        _fail("自动历史记录", "单条快照不能超过64 MiB；结果仍保留在本次会话中。")
+    return raw
+
+
+def linear_record_from_bytes(raw):
+    """Read one archive entry without invoking a calculation engine."""
+    if not isinstance(raw, bytes) or len(raw) > MAX_BYTES:
+        _fail("自动历史记录", "记录类型错误或单条快照超过64 MiB。")
+    try:
+        value = _plain(json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_keys,
+                                  parse_constant=_invalid_constant))
+        _validate_linear(value)
+    except RecursionError as exc:
+        raise ValueError("自动历史记录嵌套过深。") from exc
+    return value
 
 
 def load_history(path):
