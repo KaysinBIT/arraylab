@@ -15,19 +15,28 @@ def zip_files(target, paths, base, prefix):
             archive.write(path, str(Path(prefix) / path.relative_to(base)))
 
 
+def source_files():
+    """Return the explicit source allowlist without constructing an archive."""
+    sources = [ROOT / p for p in ["README.md", "ROADMAP.md", "CONTRIBUTING.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "pyproject.toml", "requirements-lock.txt", ".gitignore", ".gitattributes", "launch.py", "launch_cli.py", "ArrayLab.spec", "启动 ArrayLab.cmd"]]
+    for directory in ["arraylab", "tests", "tools"]:
+        sources.extend((ROOT / directory).rglob("*.py"))
+    sources.extend(p for p in (ROOT / "arraylab/sparse2d/resources").rglob("*") if p.is_file() and p.suffix in {".md", ".csv"})
+    sources.extend(p for p in (ROOT / "arraylab/features/equation/data").rglob("*") if p.is_file() and p.suffix in {".json", ".md"})
+    sources.extend(ROOT / "arraylab/resources/icons" / name for name in ("arraylab.png", "arraylab.ico"))
+    sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
+    # Synthetic sample terrain only; do not collect arbitrary local GeoTIFFs.
+    sources.append(ROOT / "examples/pulse-demo-hill-utm.tif")
+    sources.extend((ROOT / ".github").rglob("*.yml"))
+    sources.extend(p for p in (ROOT / "docs").rglob("*") if p.is_file() and p.suffix in {".md", ".png"})
+    return sources
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     portable = ROOT / "dist" / f"ArrayLab-{VERSION}"
     assert (portable / "ArrayLab.exe").exists()
     zip_files(OUT / f"ArrayLab-{VERSION}-windows-x64.zip", [p for p in portable.rglob("*") if p.is_file()], portable, "ArrayLab")
-    sources = [ROOT / p for p in ["README.md", "ROADMAP.md", "CONTRIBUTING.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "pyproject.toml", "requirements-lock.txt", ".gitignore", ".gitattributes", "launch.py", "launch_cli.py", "ArrayLab.spec", "启动 ArrayLab.cmd"]]
-    for directory in ["arraylab", "tests", "tools"]:
-        sources.extend((ROOT / directory).rglob("*.py"))
-    sources.extend(p for p in (ROOT / "arraylab/sparse2d/resources").rglob("*") if p.is_file() and p.suffix in {".md", ".csv"})
-    sources.extend(ROOT / "arraylab/resources/icons" / name for name in ("arraylab.png", "arraylab.ico"))
-    sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
-    sources.extend((ROOT / ".github").rglob("*.yml"))
-    sources.extend(p for p in (ROOT / "docs").rglob("*") if p.is_file() and p.suffix in {".md", ".png"})
+    sources = source_files()
     zip_files(OUT / f"ArrayLab-{VERSION}-source.zip", sources, ROOT, "ArrayLab-source")
     hashes = []
     for p in sorted(OUT.glob("*.zip")):

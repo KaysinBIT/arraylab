@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "name": "77 GHz · 自定义双目标多径",
+  "waveform": {
+    "kind": "fmcw",
+    "fc_hz": 77000000000.0,
+    "bandwidth_hz": 160000000.0,
+    "ramp_s": 6.4e-05,
+    "adc_start_s": 4e-06,
+    "fs_hz": 5000000.0,
+    "samples": 256,
+    "pulse_width_s": 1e-06,
+    "pri_s": 8e-05,
+    "pulses": 32,
+    "range_fft": 256,
+    "doppler_fft": 32,
+    "range_max_m": 140,
+    "recovery_s": 1e-07,
+    "rx_bandwidth_hz": 2300000.0
+  },
+  "radar": {
+    "power_w": 0.01,
+    "power_basis": "per_tx",
+    "tx_gain_dbi": 12.0,
+    "rx_gain_dbi": 12.0,
+    "loss_db": 3.0,
+    "noise_mode": "nf",
+    "antenna_temperature_k": 290.0,
+    "noise_figure_db": 10.0,
+    "system_temperature_k": 2900.0,
+    "noise_enabled": true
+  },
+  "array": {
+    "mode": "simo",
+    "tx_count": 1,
+    "rx_count": 4,
+    "tx_positions_m": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "rx_positions_m": [
+      [
+        0.0,
+        -0.002920056409090909,
+        0.0
+      ],
+      [
+        0.0,
+        -0.0009733521363636363,
+        0.0
+      ],
+      [
+        0.0,
+        0.0009733521363636363,
+        0.0
+      ],
+      [
+        0.0,
+        0.002920056409090909,
+        0.0
+      ]
+    ],
+    "pointing_deg": [
+      0.0,
+      0.0
+    ],
+    "tx_weights": [
+      [
+        1.0,
+        0.0
+      ]
+    ],
+    "rx_weights": [
+      [
+        1.0,
+        0.0
+      ],
+      [
+        1.0,
+        0.0
+      ],
+      [
+        1.0,
+        0.0
+      ],
+      [
+        1.0,
+        0.0
+      ]
+    ],
+    "ddm_slots": 4
+  },
+  "scene": {
+    "radar_height_m": 1.0,
+    "targets": [
+      {
+        "name": "目标 1",
+        "range_m": 50.0,
+        "az_deg": 0.0,
+        "height_m": 1.0,
+        "velocity_mps": 0.0,
+        "rcs_m2": 1.0,
+        "swerling": 0,
+        "phase_model": "fixed"
+      },
+      {
+        "name": "目标 2",
+        "range_m": 90.0,
+        "az_deg": 3.0,
+        "height_m": 1.0,
+        "velocity_mps": -2.0,
+        "rcs_m2": 2.0,
+        "swerling": 1,
+        "phase_model": "random"
+      }
+    ]
+  },
+  "propagation": {
+    "model": "custom",
+    "polarization": "horizontal",
+    "epsilon_r": 4.0,
+    "conductivity_s_m": 0.01,
+    "custom_paths": [
+      {
+        "extra_delay_s": 6e-08,
+        "attenuation_db": 6.0,
+        "phase_deg": 90.0,
+        "doppler_hz": 100.0,
+        "departure_deg": [
+          0,
+          0
+        ],
+        "arrival_deg": [
+          5,
+          0
+        ]
+      }
+    ],
+    "atmosphere": {
+      "enabled": false,
+      "pressure_hpa": 1013.25,
+      "temperature_k": 288.15,
+      "vapor_density_g_m3": 7.5,
+      "rain_rate_mm_h": 0.0,
+      "polarization_tilt_deg": 0.0
+    }
+  },
+  "clutter": {
+    "kind": "none",
+    "cnr_db": 0.0,
+    "scatterers": 32,
+    "range_min_m": 10.0,
+    "range_max_m": 130.0,
+    "az_span_deg": 20.0,
+    "doppler_hz": 0.0,
+    "doppler_width_hz": 50.0,
+    "edge_range_m": 80.0,
+    "edge_db": 12.0,
+    "shape": 0.7,
+    "fixed": false,
+    "seed": 314
+  },
+  "processing": {
+    "fast_window": "rect",
+    "slow_window": "rect",
+    "looks": 1
+  },
+  "detection": {
+    "method": "ca",
+    "pfa": 0.001,
+    "training": [
+      4,
+      2
+    ],
+    "guard": [
+      1,
+      1
+    ],
+    "rank_fraction": 0.75,
+    "fixed_snr_db": 13.0,
+    "threshold_mode": "analytic",
+    "calibration_factor": null,
+    "calibration_hash": null,
+    "ddm_gap_db": 3.0,
+    "ddm_residual_limit": 0.65
+  },
+  "requirements": {
+    "range_m": 100.0,
+    "snr_db": 13.0,
+    "margin_db": 3.0,
+    "pd": 0.9,
+    "pfa": 0.001
+  },
+  "experiment": {
+    "seed": 42,
+    "trials": 256,
+    "confidence": 0.95,
+    "cut_range_m": 50.0,
+    "cut_velocity_mps": 0.0,
+    "distance_min_m": 10.0,
+    "distance_max_m": 130.0,
+    "distance_count": 9,
+    "roc_points": 9,
+    "memory_mib": 1024
+  }
+}

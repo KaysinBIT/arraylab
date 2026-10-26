@@ -190,3 +190,18 @@ def test_resize_during_3d_gesture_restores_surface_and_retains_camera(app):
         assert not canvas.resize_pending and surface.get_visible()
         assert (ax.elev,ax.azim)==camera
     finally:canvas.close()
+
+
+def test_preview_keeps_last_completed_frame_when_layout_allocates_renderer(app):
+    canvas,ax,line=make_canvas()
+    try:
+        previous=np.asarray(canvas.renderer.buffer_rgba()).copy()
+        canvas.figure.set_size_inches(10,7,forward=False)
+        canvas.get_renderer()  # Layout/annotation measurement, not a rendered frame.
+        canvas.resize(750,510);app.processEvents()
+        assert canvas.resize_pending and canvas._resize_image is not None
+        image=canvas._resize_image
+        actual=np.frombuffer(image.constBits(),dtype=np.uint8).reshape(image.height(),image.width(),4)
+        np.testing.assert_array_equal(actual,previous)
+        settle();assert not canvas.resize_pending
+    finally:canvas.close()

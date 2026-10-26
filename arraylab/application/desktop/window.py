@@ -71,6 +71,8 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, TaskNav
         attach_subarray(self)
         attach_mimo(self)
         attach_waveform(self)
+        from .simulation_tasks import attach_simulations
+        attach_simulations(self)
         self.build_task_navigation()
         for canvas in (self.plot.canvas, self.feed_panel.pattern_plot.canvas,
                        self.planar_panel.canvas, self.sparse_panel.canvas,
@@ -93,6 +95,13 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, TaskNav
         self.show(); self.raise_(); self.activateWindow()
 
     def closeEvent(self, event):
+        if getattr(self,'_record_reader',None) is not None:
+            self._record_close_pending=True;self.statusBar().showMessage('正在读取记录，完成后关闭窗口。');event.ignore();return
+        for panel in getattr(self,'simulation_panels',{}).values():
+            if panel.thread is not None or panel._busy:
+                self._simulation_close_pending=True;panel.cancel()
+                self.statusBar().showMessage('正在结束雷达任务并回收资源，随后关闭窗口。')
+                event.ignore();return
         waveform = getattr(self, 'waveform_panel', None)
         if waveform is not None and (waveform.thread is not None or waveform._busy):
             if waveform.thread is not None:

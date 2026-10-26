@@ -1,0 +1,44 @@
+{
+  "format": "array-studio",
+  "schemaVersion": 2,
+  "version": "1.1.0",
+  "config": {
+    "name": "二维稀疏综合 · 15 工况教学设置",
+    "geometry": "rectangular",
+    "nx": 11,
+    "ny": 11,
+    "dx": 0.5,
+    "dy": 0.5,
+    "referenceGHz": 10,
+    "frequencyGHz": 10,
+    "steerX": 0,
+    "steerY": 0,
+    "window": "uniform",
+    "sidelobeDb": -30,
+    "phaseBits": 0,
+    "phaseMode": "phase",
+    "elementPower": 0,
+    "custom": []
+  },
+  "synthesis": {
+    "type": "planar2d",
+    "options": {
+      "count": 32,
+      "gridNx": 11,
+      "gridNy": 11,
+      "dx": 0.5,
+      "dy": 0.5,
+      "minSpacing": 0.5,
+      "scans": [{"x":0,"y":0},{"x":20,"y":0},{"x":-20,"y":0},{"x":0,"y":20},{"x":0,"y":-20}],
+      "frequencies": [9,10,11],
+      "targetSll": -10,
+      "maxHpbwX": 18,
+      "maxHpbwY": 18,
+      "mainlobeRadiusU": 0.24,
+      "mainlobeRadiusV": 0.24,
+      "iterations": 500,
+      "seed": 42
+    }
+  },
+  "notes": "此文件只包含二维综合设置。导入后切换二维稀疏综合并运行；它不是预先证明达标的布局或报告。"
+}

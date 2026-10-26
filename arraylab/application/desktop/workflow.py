@@ -20,6 +20,20 @@ def picture_pixmap(widget):
 
 
 class WorkflowActions:
+    def refresh_simulation_handoffs(self):
+        from .simulation_tasks import refresh_handoffs
+        refresh_handoffs(self)
+
+    def simulation_busy(self, requester=None):
+        if getattr(self,'_record_reader',None) is not None:
+            self.statusBar().showMessage('正在读取完整记录，请稍候再运行。');return True
+        panels=[getattr(self,key+'_panel',None) for key in ('sparse','subarray','mimo','waveform')]
+        panels+=list(getattr(self,'simulation_panels',{}).values())
+        for panel in panels:
+            if panel is not None and panel is not requester and (getattr(panel,'_busy',False) or getattr(panel,'thread',None) is not None):
+                self.statusBar().showMessage('已有后台任务正在运行，请先完成或取消该任务。');return True
+        return False
+
     def create_scan_dialog(self, report, parent):
         """Application composition owns the optional scan-study dependency."""
         from arraylab.features.studies import ScanStudyDialog
@@ -87,12 +101,16 @@ class WorkflowActions:
     def refresh_actions(self):
         if not getattr(self,'_workflow_ready',False) or not hasattr(self,'waveform_panel'):return
         kind=self.active_task()
-        panel={'sparse':self.sparse_panel,'subarray':self.subarray_panel,'mimo':self.mimo_panel,'waveform':self.waveform_panel}.get(kind)
+        simulation=getattr(self,'simulation_panels',{})
+        panel={**{'sparse':self.sparse_panel,'subarray':self.subarray_panel,'mimo':self.mimo_panel,'waveform':self.waveform_panel},**simulation}.get(kind)
         busy=panel is not None and (panel._busy or panel.thread is not None)
+        any_busy=any(p._busy or p.thread is not None for p in
+                     (self.sparse_panel,self.subarray_panel,self.mimo_panel,self.waveform_panel,*simulation.values()))
         ready={'home':False,'linear':bool(self.selected_dataset()),'feed':bool(self.feed_panel.report),
-               'planar':bool(self.planar_panel.report),'sparse':bool(self.sparse_panel.bundle),'subarray':bool(self.subarray_panel.report),'mimo':bool(self.mimo_panel.report),'waveform':bool(self.waveform_panel.report)}[kind]
-        run_text=task_spec(kind).run_label
-        self.compute_button.setText(run_text+'\nF5');self.compute_button.setEnabled(kind!='home' and not busy)
+               'planar':bool(self.planar_panel.report),'sparse':bool(self.sparse_panel.bundle),'subarray':bool(self.subarray_panel.report),'mimo':bool(self.mimo_panel.report),'waveform':bool(self.waveform_panel.report),
+               **{key:bool(p.report) for key,p in simulation.items()}}[kind]
+        run_text=simulation[kind].action.currentText() if kind in simulation else task_spec(kind).run_label
+        self.compute_button.setText(run_text+'\nF5');self.compute_button.setEnabled(kind!='home' and not any_busy)
         self.compute_button.ensurePolished()
         self.compute_button.setMinimumHeight(max(66,self.compute_button.sizeHint().height()))
         source=self.selected_dataset()
@@ -104,12 +122,12 @@ class WorkflowActions:
         self.to_mimo_button.setEnabled(can_transfer and not busy and not self.mimo_panel._busy and self.mimo_panel.thread is None)
         self.save_button.setEnabled(ready and not busy);self.save_button.setText('导出所选曲线' if kind=='linear' else '导出当前结果')
         self.load_scheme_button.setEnabled(kind!='home' and not busy);self.save_scheme_button.setEnabled(kind!='home' and not busy)
-        self.history_save_button.setVisible(kind in ('linear','feed','mimo','waveform'))
-        self.history_save_button.setEnabled((bool(self.waveform_panel.report) if kind=='waveform' else bool(self.mimo_panel.report) if kind=='mimo' else bool(self.datasets if kind=='linear' else self.feed_panel.history)) and not busy)
-        self.history_open_button.setEnabled(not any(p._busy or p.thread is not None for p in (self.sparse_panel,self.subarray_panel,self.mimo_panel,self.waveform_panel)))
+        self.history_save_button.setVisible(kind in ('linear','feed','mimo','waveform',*simulation))
+        self.history_save_button.setEnabled((bool(simulation[kind].report) if kind in simulation else bool(self.waveform_panel.report) if kind=='waveform' else bool(self.mimo_panel.report) if kind=='mimo' else bool(self.datasets if kind=='linear' else self.feed_panel.history)) and not busy)
+        self.history_open_button.setEnabled(not any(p._busy or p.thread is not None for p in (self.sparse_panel,self.subarray_panel,self.mimo_panel,self.waveform_panel,*simulation.values())))
         self.resume_button.setEnabled(self.history_open_button.isEnabled())
         self.scan_button.setVisible(kind in ('feed','planar'));self.scan_button.setEnabled(ready)
-        self.cancel_button.setVisible(kind in ('sparse','subarray','mimo','waveform'));self.cancel_button.setEnabled(busy)
+        self.cancel_button.setVisible(kind in ('sparse','subarray','mimo','waveform',*simulation));self.cancel_button.setEnabled(busy and getattr(getattr(panel,'thread',None),'cancellable',True))
         self.model_button.setEnabled(kind=='linear');self.result_button.setEnabled(kind=='linear')
         for widget in (self.rect_button,self.polar_button):widget.setEnabled(kind in ('linear','feed') and ready)
         picture=self.current_picture() is not None
@@ -123,13 +141,20 @@ class WorkflowActions:
                            ('scan_action',self.scan_button)]:
             if hasattr(self,name):
                 action=getattr(self,name);action.setEnabled(button.isEnabled())
-                action.setVisible(kind in ('linear','feed','mimo','waveform') if name=='history_save_action' else kind in ('feed','planar') if name=='scan_action' else True)
+                action.setVisible(kind in ('linear','feed','mimo','waveform',*simulation) if name=='history_save_action' else kind in ('feed','planar') if name=='scan_action' else True)
         if hasattr(self,'run_action'):self.run_action.setText(run_text)
         if hasattr(self,'save_action'):self.save_action.setText(self.save_button.text()+'…')
         if hasattr(self,'to_feed_action'):
             self.to_feed_action.setVisible(kind=='linear')
             self.to_feed_action.setEnabled(self.to_feed_button.isEnabled())
         self.sync_task_navigation()
+        self.refresh_simulation_handoffs()
+        reading=getattr(self,'_record_reader',None) is not None
+        self.inspector_stack.setEnabled(not reading)
+        if reading:
+            for name in ('compute_button','load_scheme_button','save_scheme_button','history_open_button','history_save_button',
+                         'save_button','resume_button','run_action','load_parameters_action','save_parameters_action','history_open_action','history_save_action','save_action'):
+                if hasattr(self,name):getattr(self,name).setEnabled(False)
 
     def import_selected_linear_to_feed(self):
         if self.active_task() != 'linear':
@@ -144,7 +169,13 @@ class WorkflowActions:
         self.focus_parameters()
 
     def compute(self):
+        if getattr(self,'_record_reader',None) is not None:return
         kind=self.active_task()
+        simulation=getattr(self,'simulation_panels',{})
+        if kind in simulation:
+            simulation[kind].start();return
+        if any(p._busy or p.thread is not None for p in simulation.values()):
+            self.statusBar().showMessage('请先完成或取消正在运行的雷达任务。');return
         if kind=='linear':self.compute_linear()
         elif kind=='feed':self.feed_panel.generate()
         elif kind=='planar':self.planar_panel.generate()
@@ -155,7 +186,7 @@ class WorkflowActions:
         self.refresh_actions()
 
     def cancel_current(self):
-        panel={'sparse':self.sparse_panel,'subarray':self.subarray_panel,'mimo':self.mimo_panel,'waveform':self.waveform_panel}.get(self.active_task())
+        panel={**{'sparse':self.sparse_panel,'subarray':self.subarray_panel,'mimo':self.mimo_panel,'waveform':self.waveform_panel},**getattr(self,'simulation_panels',{})}.get(self.active_task())
         if panel is not None:panel.cancel()
 
     def run_scan(self):
@@ -164,7 +195,8 @@ class WorkflowActions:
 
     def open_configuration_dialog(self):
         kind=self.active_task()
-        if kind=='feed':self.feed_panel.open_dialog()
+        if kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].open_dialog()
+        elif kind=='feed':self.feed_panel.open_dialog()
         elif kind=='planar':self.planar_panel.open_dialog()
         elif kind=='sparse':self.sparse_panel.open_settings_dialog()
         elif kind=='subarray':self.subarray_panel.open_dialog()
@@ -175,7 +207,8 @@ class WorkflowActions:
 
     def save_configuration_dialog(self):
         kind=self.active_task()
-        if kind=='feed':self.feed_panel.save_dialog()
+        if kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].save_dialog()
+        elif kind=='feed':self.feed_panel.save_dialog()
         elif kind=='planar':self.planar_panel.save_dialog()
         elif kind=='sparse':self.sparse_panel.save_settings_dialog()
         elif kind=='subarray':self.subarray_panel.save_dialog()
@@ -185,7 +218,8 @@ class WorkflowActions:
 
     def save_dialog(self):
         kind=self.active_task()
-        if kind=='feed':self.feed_panel.export_dialog()
+        if kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].export_dialog()
+        elif kind=='feed':self.feed_panel.export_dialog()
         elif kind=='planar':self.planar_panel.export_dialog()
         elif kind=='subarray':self.subarray_panel.export_dialog()
         elif kind=='mimo':self.mimo_panel.export_dialog()
@@ -200,6 +234,8 @@ class WorkflowActions:
     def focus_parameters(self):
         if self.active_task()=='home':return
         self.inspector_dock.show();self.inspector_dock.raise_()
+        if self.active_task() in getattr(self,'simulation_panels',{}):
+            self.simulation_panels[self.active_task()].parameter_widget.focus_first();return
         field={'planar':self.planar_panel.geometry_fields['nx'],'sparse':self.sparse_panel.inputs['nx'],
                'subarray':self.subarray_panel.inputs['count'],'mimo':self.mimo_panel.inputs['frequency_ghz'],'waveform':self.waveform_panel.inputs['startGHz']}.get(self.active_task(),self.inputs['frequency_ghz'])
         field.setFocus()
@@ -212,6 +248,9 @@ class WorkflowActions:
 
     def current_picture(self):
         kind=self.active_task()
+        if kind in getattr(self,'simulation_panels',{}):
+            panel=self.simulation_panels[kind]
+            return panel.canvas if panel.report is not None and panel.canvas.isVisible() else None
         ready={'home':False,'linear':bool(self.selected_dataset()),'feed':bool(self.feed_panel.report),
                'planar':bool(self.planar_panel.report),'sparse':bool(self.sparse_panel.bundle),'subarray':bool(self.subarray_panel.report),'mimo':bool(self.mimo_panel.report),'waveform':bool(self.waveform_panel.report)}[kind]
         if not ready:return None
@@ -237,7 +276,8 @@ class WorkflowActions:
 
     def reset_plot_view(self):
         kind=self.active_task()
-        if kind=='linear':
+        if kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].redraw()
+        elif kind=='linear':
             if self.tabs.currentIndex()==3:self.geometry.reset_view()
             else:self.redraw()
         elif kind=='feed':
@@ -252,6 +292,8 @@ class WorkflowActions:
     def show_help(self):
         kind=self.active_task()
         if kind=='home':return
+        if kind in getattr(self,'simulation_panels',{}):
+            QMessageBox.information(self,TASKS[kind][0],TASKS[kind][1]+'\n\n先载入示例或填写右侧参数，选择操作后按F5；切换页面不计算。\n保存参数保留当前输入；保存记录保留上次成功的结果与完整数组；导出包含领域表格和报告。\n\n三种模型有各自坐标、噪声和体制边界，导入只迁移明确支持的参数，不把数字波束当真实增益。');return
         if kind=='sparse':self.sparse_panel.tabs.setCurrentIndex(self.sparse_panel.manual_tab);return
         if kind=='waveform':
             self.waveform_panel.view.setCurrentIndex(self.waveform_panel.view.findData('theory'));return

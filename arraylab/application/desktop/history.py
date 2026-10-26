@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 import numpy as np
-from PySide6.QtCore import QSignalBlocker
+from PySide6.QtCore import QSignalBlocker,QTimer
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from arraylab.application.records import array_result_from_snapshot, load_history, save_history
@@ -28,6 +28,9 @@ class HistoryActions:
     """MainWindow actions; the window owns all widgets and task routing."""
 
     def _require_history_idle(self):
+        if getattr(self,'_record_reader',None) is not None:raise ValueError('正在读取完整记录，请稍候。')
+        if any(panel._busy or panel.thread is not None for panel in getattr(self,'simulation_panels',{}).values()):
+            raise ValueError('雷达任务仍在运行或保存，请结束后再打开记录。')
         waveform = getattr(self, 'waveform_panel', None)
         if waveform is not None and (waveform._busy or waveform.thread is not None):
             raise ValueError('波形任务仍在计算或保存，请完成后再恢复记录。')
@@ -43,6 +46,8 @@ class HistoryActions:
 
     def save_history_path(self, path):
         kind = self.active_task()
+        if kind in getattr(self,'simulation_panels',{}):
+            self.simulation_panels[kind].save_record_path(path);return
         if kind == 'waveform':
             self.waveform_panel.save_record_path(path); return
         if kind == 'mimo':
@@ -66,6 +71,17 @@ class HistoryActions:
 
     def load_history_path(self, path):
         self._require_history_idle()
+        if Path(path).suffix.lower()=='.npz':
+            from arraylab.application.simulation import load_record
+            report,arrays=load_record(path)
+            kind=report['feature'];self.simulation_panels[kind].accept_result(report,arrays,restore_inputs=True)
+            self.activate_task(kind);return
+        from arraylab.shared.simulation_io import read_json
+        marker=read_json(path)
+        if isinstance(marker,dict) and marker.get('format')=='arraylab.simulation.export':
+            from arraylab.application.simulation import load_record
+            report,arrays=load_record(path);kind=report['feature']
+            self.simulation_panels[kind].accept_result(report,arrays,restore_inputs=True);self.activate_task(kind);return
         from arraylab.features.waveform import is_waveform_record
         if is_waveform_record(path):
             self.waveform_panel.load_record_path(path)
@@ -132,6 +148,8 @@ class HistoryActions:
 
     def save_history_dialog(self):
         kind = self.active_task()
+        if kind in getattr(self,'simulation_panels',{}):
+            self.simulation_panels[kind].save_record_dialog();return
         if kind == 'waveform':
             self.waveform_panel.save_record_dialog(); return
         if kind == 'mimo':
@@ -158,11 +176,36 @@ class HistoryActions:
             self.statusBar().showMessage(str(exc))
             self.record_message(str(exc))
             return
-        path, _ = QFileDialog.getOpenFileName(self, "打开记录或馈电结果（不重新计算）", self.last_directory,
-                                            "ArrayLab历史、MIMO记录、馈电结果或旧对比 (*.json)",
+        path, _ = QFileDialog.getOpenFileName(self, "打开完整计算记录（不重新计算）", self.last_directory,
+                                            "ArrayLab计算记录 (*.json *.npz)",
                                             options=QFileDialog.Option.DontUseNativeDialog)
         if path:
             try:
-                self.load_history_path(path)
+                new_record=Path(path).suffix.lower()=='.npz'
+                if not new_record:
+                    from arraylab.shared.simulation_io import read_json
+                    marker=read_json(path)
+                    new_record=isinstance(marker,dict) and marker.get('format')=='arraylab.simulation.export'
+                if new_record:self.load_simulation_record_async(path)
+                else:self.load_history_path(path)
             except (OSError, ValueError, OverflowError) as exc:
                 QMessageBox.warning(self, "历史恢复失败", str(exc))
+
+    def load_simulation_record_async(self,path):
+        self._require_history_idle()
+        from arraylab.application.simulation import load_record
+        from .simulation_panel import SimulationWorker
+        reader=SimulationWorker(lambda progress,cancel:load_record(path),self,cancellable=False)
+        self._record_reader=reader;reader.finished.connect(self.complete_simulation_record_load)
+        self.statusBar().showMessage('正在读取完整数值记录，保留原结果…');self.refresh_actions();reader.start()
+
+    def complete_simulation_record_load(self):
+        reader=self._record_reader
+        try:
+            if reader.error:raise ValueError(reader.error)
+            report,arrays=reader.result;kind=report['feature']
+            self.simulation_panels[kind].accept_result(report,arrays,restore_inputs=True);self.activate_task(kind)
+        except Exception as exc:QMessageBox.warning(self,'记录未恢复，原结果保留',str(exc))
+        finally:
+            self._record_reader=None;reader.deleteLater();self.refresh_actions()
+            if getattr(self,'_record_close_pending',False):self._record_close_pending=False;QTimer.singleShot(0,self.close)

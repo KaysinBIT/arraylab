@@ -15,7 +15,7 @@ def application_icon():
     return icon
 
 
-MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan', 'mimo', 'waveform'))
+MODULE_ICON_KINDS = frozenset(('home', 'linear', 'feed', 'planar', 'sparse', 'subarray', 'scan', 'mimo', 'waveform', 'phased', 'equation', 'pulse'))
 
 
 def _draw_module(p, kind):
@@ -110,6 +110,21 @@ def _draw_module(p, kind):
         p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(blue))
         p.drawPolygon(QPolygonF([QPointF(13, 14), QPointF(19, 14), QPointF(16, 18)]))
         for x in (4, 8, 12, 16, 20, 24, 28): dot(x, 20, 1.4, gold)
+    elif kind == 'phased':
+        for y in (20,26):
+            for x in (3,10,17,24):tile(x,y,4)
+        pen(teal,1.8);p.setBrush(QColor('#c7edf0'))
+        beam=QPainterPath(QPointF(16,20));beam.cubicTo(15,11,21,2,27,3);beam.cubicTo(30,7,24,15,16,20);p.drawPath(beam)
+        pen(blue,1.4)
+        for x in (5,12,19,26):line(x,19,x+3,13)
+    elif kind == 'equation':
+        pen(blue,1.8);p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRect(QRectF(2,3,28,26));line(7,9,14,9);line(7,22,14,22);line(7,9,12,15);line(12,15,7,22)
+        pen(teal,1.8);line(18,13,26,13);line(18,18,26,18);dot(23,24,1.8,gold)
+    elif kind == 'pulse':
+        pen(teal,2.2);p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(2,24),QPointF(6,24),QPointF(6,8),QPointF(12,8),QPointF(12,24),QPointF(18,24),QPointF(18,8),QPointF(24,8),QPointF(24,24),QPointF(30,24)]))
+        pen(gold,1.6);line(7,5,23,5);line(7,3,7,6);line(23,3,23,6)
     elif kind == 'scan':
         # A tilted main beam and a curved sweep arrow share the source point.
         pen('#a9bfce', 1.5); p.setBrush(Qt.BrushStyle.NoBrush)

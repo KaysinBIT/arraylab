@@ -1,0 +1,48 @@
+{
+  "format": "array-studio",
+  "schemaVersion": 3,
+  "version": "1.2.0",
+  "config": {
+    "name": "连续二维坐标与幅度联合优化 · 15 工况",
+    "geometry": "rectangular",
+    "nx": 11,
+    "ny": 11,
+    "dx": 0.5,
+    "dy": 0.5,
+    "referenceGHz": 10,
+    "frequencyGHz": 10,
+    "steerX": 0,
+    "steerY": 0,
+    "window": "uniform",
+    "sidelobeDb": -30,
+    "phaseBits": 0,
+    "phaseMode": "phase",
+    "elementPower": 0,
+    "custom": []
+  },
+  "synthesis": {
+    "type": "planar2d",
+    "options": {
+      "mode": "continuous",
+      "count": 32,
+      "width": 5,
+      "height": 5,
+      "minSpacing": 0.5,
+      "amplitudeMin": 0.2,
+      "optimizePositions": true,
+      "optimizeAmplitudes": true,
+      "initialization": "generated",
+      "initialPositions": [],
+      "scans": [{"x":0,"y":0},{"x":20,"y":0},{"x":-20,"y":0},{"x":0,"y":20},{"x":0,"y":-20}],
+      "frequencies": [9,10,11],
+      "targetSll": -10,
+      "maxHpbwX": 18,
+      "maxHpbwY": 18,
+      "mainlobeRadiusU": 0.24,
+      "mainlobeRadiusV": 0.24,
+      "iterations": 2000,
+      "seed": 42
+    }
+  },
+  "notes": "此文件包含可复现的连续坐标与幅度联合优化设置，未预载计算报告。导入后运行二维综合；最终结果以本次逐工况细采样复核为准。所有频率和扫描方向共用同一副物理阵列及一组正电压激励幅度。"
+}

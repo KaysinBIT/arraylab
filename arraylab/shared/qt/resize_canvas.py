@@ -15,6 +15,7 @@ class ResizeAwareFigureCanvas(FigureCanvasQTAgg):
 
     def __init__(self, figure=None):
         self._resize_ready = False
+        self._completed_renderer = None
         super().__init__(figure)
         self._resize_pending = False
         self._resize_applying = False
@@ -34,7 +35,7 @@ class ResizeAwareFigureCanvas(FigureCanvasQTAgg):
         if not getattr(self, '_resize_ready', False) or self._resize_applying:
             return super().resizeEvent(event)
         if not self._resize_pending:
-            renderer = getattr(self, 'renderer', None)
+            renderer = self._completed_renderer
             if renderer is not None:
                 buffer = renderer.buffer_rgba()
                 # Own the memory: subsequent footer/layout work may replace the
@@ -91,7 +92,9 @@ class ResizeAwareFigureCanvas(FigureCanvasQTAgg):
 
     def draw(self):
         self.finish_resize(redraw=False)
-        return super().draw()
+        result = super().draw()
+        self._completed_renderer = getattr(self, 'renderer', None)
+        return result
 
     def print_figure(self, *args, **kwargs):
         self.finish_resize(redraw=False)
@@ -118,6 +121,7 @@ class ResizeAwareFigureCanvas(FigureCanvasQTAgg):
             self._resize_pending = False
             self._resize_image = None
             self._draw_pending = False
+            self._completed_renderer = None
         return super().closeEvent(event)
 
     def showEvent(self, event):

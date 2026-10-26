@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arraylab-desktop"
-version = "0.25.0"
+version = "0.26.0.dev0"
 description = "Desktop and headless electrical feed design for isotropic linear and planar arrays"
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=2.2,<3",
   "scipy>=1.15,<2",
   "threadpoolctl>=3.6,<4",
+  "psutil==7.2.2",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ desktop = [
   "matplotlib>=3.10,<4",
 ]
 plotting = ["matplotlib>=3.10,<4"]
+radar = ["rasterio==1.5.2", "pyproj==3.8.0"]
 
 [project.scripts]
 arraylab = "arraylab.__main__:main"
@@ -31,6 +33,7 @@ exclude = ["arraylab.*.tests", "arraylab.*.tests.*"]
 [tool.setuptools.package-data]
 "arraylab" = ["resources/icons/*.png", "resources/icons/*.ico"]
 "arraylab.sparse2d" = ["resources/*.md", "resources/examples/*.csv"]
+"arraylab.features.equation" = ["data/*.json", "data/*.md", "data/presets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

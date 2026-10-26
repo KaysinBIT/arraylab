@@ -18,6 +18,9 @@ def build_start_page(window):
         ('subarray','子阵中心优化','固定子阵内部模板，优化中心位置，并核对多工况方向图。','优化子阵位置'),
         ('mimo','稀疏MIMO分析','独立设置一维或二维Tx/Rx，核对虚拟阵列、通道与数字波束。','分析雷达MIMO'),
         ('waveform','雷达波形设计','分析FMCW与A/B；设计稀疏Tx/Rx、验证高分辨判据并反算天线增益。','设计雷达波形'),
+        ('phased','相控阵综合','从布局与激励分析到频率斜视、多工况扫描及连续位置/幅度联合优化。','综合相控阵'),
+        ('equation','雷达方程验证','从能量预算到真实信号链核对；独立校准、检测统计和传播影响。','验证雷达方程'),
+        ('pulse','脉冲雷达设计','常规/LFM/步进频/编码脉冲；场景、地形、MIMO处理及反向设计。','设计脉冲雷达'),
     ]):
         card=QGroupBox(title);body=QVBoxLayout(card);body.setContentsMargins(16,18,16,14)
         card.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Minimum)

@@ -1,0 +1,23 @@
+{
+  "format": "array-studio",
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "config": {
+    "name": "32 阵元 Taylor 直线阵",
+    "geometry": "linear",
+    "nx": 32,
+    "ny": 1,
+    "dx": 0.5,
+    "dy": 0.5,
+    "referenceGHz": 10,
+    "frequencyGHz": 10,
+    "steerX": 0,
+    "steerY": 0,
+    "window": "taylor",
+    "sidelobeDb": -30,
+    "phaseBits": 0,
+    "phaseMode": "phase",
+    "elementPower": 0,
+    "custom": []
+  }
+}

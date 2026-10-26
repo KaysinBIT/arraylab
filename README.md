@@ -1,5 +1,7 @@
 # ArrayLab 阵列分析
 
+**当前源码 0.26.0.dev0**：新增原生“相控阵雷达设计”“雷达方程验证”“脉冲雷达设计”，分别同步 ArrayStudio 1.2.1、EquationLab 1.0、PulseLab 1.0.1。支持已有阵列/波形导入、受管后台计算、完整记录和无头运行。[组件选择与操作说明](docs/radar-components.md)。现有正式发行版仍为下述 0.25.0。
+
 用于直线阵、平面阵、理想馈电网络和雷达设计分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版为 **0.25.0**，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.25.0) · [发行说明](docs/releases/0.25.0.md)。
 
 **0.25.0 正式版**：纳入一维/二维稀疏雷达MIMO、WaveLab 1.4波形与天线设计、增益预算、全模块任务树、框架结构重构及分隔线拖动优化。下面的0.24/0.25开发阶段能力现均包含于正式包；运行无需另装Python、Node.js或原雷达工程。
@@ -48,7 +50,7 @@
 
 ## 启动
 
-Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0)下载`ArrayLab-0.23.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。
+Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.25.0)下载`ArrayLab-0.25.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。新增三个雷达组件当前位于0.26.0.dev0源码与本地开发运行包，尚未作为正式Release发布。
 
 源码用户可在Windows PowerShell中创建环境并启动桌面版：
 
@@ -56,13 +58,13 @@ Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releas
 git clone https://github.com/KaysinBIT/arraylab.git
 cd arraylab
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install ".[desktop]" pytest
+.\.venv\Scripts\python.exe -m pip install ".[desktop,radar]" pytest
 .\.venv\Scripts\python.exe -m arraylab
 ```
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.25.0.dev1/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.26.0.dev0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -75,7 +77,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.25.0.dev1\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.26.0.dev0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。

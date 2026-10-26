@@ -353,7 +353,7 @@ def build_workbench(w):
     w.worker_choice.addItem("自动（最多4路）",0)
     for count in range(1,9): w.worker_choice.addItem("单核" if count==1 else f"{count}路并行",count)
     w.worker_choice.setCurrentIndex(w.worker_choice.findData(requested_workers()))
-    w.worker_choice.setToolTip("用于之后启动的扫描、平面阵方向图、稀疏复核和MIMO场采样；自动模式小任务串行。运行设置不写入阵列方案。")
+    w.worker_choice.setToolTip("用于扫描、方向图、稀疏/MIMO及相控阵工况；新雷达任务限制数值库线程，统计保持原随机流顺序。自动模式小任务串行；运行设置不写入工程。")
     w.worker_choice.currentIndexChanged.connect(lambda:set_workers(w.worker_choice.currentData()))
     w.statusBar().addPermanentWidget(w.worker_choice)
     w.statusBar().showMessage("就绪。可设置参数，或载入说明书例题。")

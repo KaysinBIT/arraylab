@@ -14,8 +14,8 @@ from arraylab.framework.registry import TaskRegistry, TaskSpec
 
 ROOT = next(path for path in Path(__file__).resolve().parents if (path/'pyproject.toml').is_file())
 
-# These values are the existing public workflow contract, not inferred from
-# the new registry: labels, hint text and navigation indices must not change.
+# The first eight entries retain the established workflow contract; the three
+# integrated radar tasks extend its page and inspector ranges.
 EXPECTED_TASKS = {
     'home': ('开始', '选择一项任务，或打开以前保存的计算记录。', 7),
     'linear': ('直线阵分析', '设置参数 → F5计算并自动留存 → 选择历史结果 → 将该阵列导入馈电设计', 0),
@@ -25,6 +25,9 @@ EXPECTED_TASKS = {
     'subarray': ('子阵中心优化', '右侧设置内部模板、孔径与扫描 → 优化中心位置 → 核对实际阵元及方向图 → 导出结果', 8),
     'mimo': ('稀疏MIMO分析', '分别设置Tx/Rx → F5计算 → 核对虚拟位置与通道 → 查看数字波束 → 保存记录', 9),
     'waveform': ('雷达波形设计', 'F5分析波形与增益 → 天线设计页独立综合/验证 → 应用坐标 → F5核对 → 保存记录', 10),
+    'phased': ('相控阵综合', '选择阵列/扫描/优化操作 → 设置约束 → F5 → 核对各工况 → 应用候选或送入雷达', 11),
+    'equation': ('雷达方程验证', '先看预算 → 回波仿真 → 固定CUT核对 → 独立校准与检测统计 → 保存完整记录', 12),
+    'pulse': ('脉冲雷达设计', '需求与预算 → 波形/时序/阵列/场景 → F5仿真或反向设计 → 核对并保存', 13),
 }
 
 
@@ -45,6 +48,9 @@ def test_inspector_shortcut_and_run_text_contract():
         'subarray': (3, 'F9', '优化子阵中心'),
         'mimo': (4, 'F10', '计算MIMO阵列'),
         'waveform': (5, 'F11', '计算雷达波形'),
+        'phased': (6, None, '运行相控阵操作'),
+        'equation': (7, None, '运行方程验证'),
+        'pulse': (8, None, '运行脉冲雷达操作'),
     }
     for key, values in expected.items():
         task = task_spec(key)
@@ -54,9 +60,9 @@ def test_inspector_shortcut_and_run_text_contract():
 
 
 def test_all_linear_subviews_and_old_unknown_page_fallback():
-    assert [task_key_for_page(page) for page in range(11)] == [
+    assert [task_key_for_page(page) for page in range(14)] == [
         'linear', 'linear', 'linear', 'linear', 'feed', 'planar', 'sparse',
-        'home', 'subarray', 'mimo', 'waveform',
+        'home', 'subarray', 'mimo', 'waveform', 'phased', 'equation', 'pulse',
     ]
     assert task_spec('linear').page_indices == (0, 1, 2, 3)
     assert task_key_for_page(-1) == task_key_for_page(99) == 'linear'
@@ -86,7 +92,7 @@ def test_task_metadata_import_does_not_load_qt_or_features():
     code = '''
 import sys
 from arraylab.application.desktop.task_registry import TASK_REGISTRY, task_page
-assert task_page('mimo') == 9 and len(TASK_REGISTRY) == 8
+assert task_page('mimo') == 9 and task_page('pulse') == 13 and len(TASK_REGISTRY) == 11
 assert not any(name.startswith(('PySide6', 'arraylab.features.')) for name in sys.modules)
 '''
     result = subprocess.run([sys.executable, '-c', code], cwd=ROOT,
@@ -106,7 +112,7 @@ def test_workflow_public_page_interface_and_legacy_export():
     for key in EXPECTED_TASKS:
         WorkflowActions.activate_task(host, key)
     assert seen == [row[2] for row in EXPECTED_TASKS.values()]
-    for page in range(11):
+    for page in range(14):
         probe = SimpleNamespace(tabs=SimpleNamespace(currentIndex=lambda value=page: value))
         assert WorkflowActions.active_task(probe) == task_key_for_page(page)
 

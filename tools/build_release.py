@@ -10,7 +10,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "arraylab/__init__.py").read_text()).group(1)
-RUNTIME = ["PySide6-Essentials", "shiboken6", "numpy", "scipy", "threadpoolctl", "matplotlib", "contourpy", "cycler", "fonttools", "kiwisolver", "packaging", "pillow", "pyparsing", "python-dateutil", "six", "tzdata", "pyinstaller"]
+RUNTIME = ["PySide6-Essentials", "shiboken6", "numpy", "scipy", "threadpoolctl", "matplotlib", "contourpy", "cycler", "fonttools", "kiwisolver", "packaging", "pillow", "pyparsing", "python-dateutil", "six", "tzdata", "pyinstaller", "psutil", "rasterio", "pyproj", "affine", "attrs", "certifi", "click"]
 
 
 def main():

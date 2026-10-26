@@ -19,6 +19,12 @@ TASK_REGISTRY = TaskRegistry((
              9, 4, 'mimo_tree_item', 'F10', '计算MIMO阵列'),
     TaskSpec('waveform', '雷达波形设计', 'F5分析波形与增益 → 天线设计页独立综合/验证 → 应用坐标 → F5核对 → 保存记录',
              10, 5, 'waveform_tree_item', 'F11', '计算雷达波形'),
+    TaskSpec('phased','相控阵综合','选择阵列/扫描/优化操作 → 设置约束 → F5 → 核对各工况 → 应用候选或送入雷达',
+             11,6,'phased_tree_item',None,'运行相控阵操作'),
+    TaskSpec('equation','雷达方程验证','先看预算 → 回波仿真 → 固定CUT核对 → 独立校准与检测统计 → 保存完整记录',
+             12,7,'equation_tree_item',None,'运行方程验证'),
+    TaskSpec('pulse','脉冲雷达设计','需求与预算 → 波形/时序/阵列/场景 → F5仿真或反向设计 → 核对并保存',
+             13,8,'pulse_tree_item',None,'运行脉冲雷达操作'),
 ))
 
 # Keep the established public tuple dictionary available through workflow.py.

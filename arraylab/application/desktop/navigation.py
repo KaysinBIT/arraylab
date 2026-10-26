@@ -25,6 +25,8 @@ class TaskNavigationActions:
             'sparse': self.sparse_panel.settings_tabs, 'subarray': self.subarray_panel.parameter_widget,
             'mimo': self.mimo_panel.parameter_widget, 'waveform': self.waveform_panel.parameter_widget}
         self._task_nav_views = {kind: getattr(self, kind+'_panel').view for kind in ('planar','subarray','mimo','waveform')}
+        self._task_nav_parameters.update({key:panel.parameter_widget for key,panel in self.simulation_panels.items()})
+        self._task_nav_views.update({key:panel.view for key,panel in self.simulation_panels.items()})
         for index in range(4):
             self._task_nav_nodes[('linear','result',index)] = self.linear_tree_item.child(index)
         self._nav_node(self.linear_tree_item, '参数设置', 'parameters', ('linear','parameter',0))

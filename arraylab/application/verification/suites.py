@@ -10,8 +10,9 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration')
 SCOPES = {
+    'radar-integration': 'Only three new radar components: native workbenches, owned CLI workers, complete records, exports, geospatial import and cancellation.',
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
     'sparse-view': 'Focused sparse overview, navigation and automatic-history acceptance; excludes other workbenches and large-array performance.',
     'mimo': 'Focused radar MIMO calculation, array handoff, records and view acceptance; excludes other complete workbench workflows.',
@@ -98,7 +99,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'resize':
+            if suite == 'radar-integration':
+                from .radar_integration import exercise_radar_integration
+                run_group(report,'radar-integration',lambda:exercise_radar_integration(app,window,output,report,check))
+            elif suite == 'resize':
                 from .resize import exercise_resize
                 run_group(report,'resize',lambda:exercise_resize(app,window,output,report,check))
             elif suite == 'navigation':
