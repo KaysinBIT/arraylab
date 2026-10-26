@@ -1,0 +1,13 @@
+General Purpose FFT (Fast Fourier/Cosine/Sine Transform) Package
+Source: https://doc-snapshots.qt.io/qtwebengine/qtwebengine-3rdparty-general-purpose-fft-fast-fourier-cosine-sine-transform-package.html
+Qt documentation identifies this as Qt WebEngine 6.140.0 (6.140 branch).
+The following license/notice text is extracted without rewriting its wording.
+
+/*
+ * http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html
+ * Copyright Takuya OOURA, 1996-2001
+ *
+ * You may use, copy, modify and distribute this code for any purpose (include
+ * commercial use) and without fee. Please refer to this package when you modify
+ * this code.
+ * /

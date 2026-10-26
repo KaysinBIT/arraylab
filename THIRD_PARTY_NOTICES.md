@@ -21,6 +21,8 @@ Qt/PySide采用开放源码许可选项，发行包中的Qt动态库未作修改
 
 构建工具会从已安装发行包收集许可元数据。本仓库发布原创源码；二进制分发前仍应按实际发行内容核对全部通知和对应源码提供方式。
 
+0.26.0正式包另附`licenses/qt/`：Qt/PySide官方开源许可文本、Qt GPL例外、Qt WebEngine 6.140.0官方文档中的125份第三方通知，以及可核对的来源和摘要清单。保留原wheel内的商业许可文件；不把一份Qt许可证视作全部Chromium依赖的许可证。运行库credits页面未能导出，官方WebEngine正式源码标签未公开，故这份归档不声称是与各DLL精确对应的内嵌credits或SBOM；具体版本、固定分支提交及证据边界见[许可补充说明](licenses/qt/README.md)。
+
 脉冲雷达三维场景保留原PulseLab的Three.js渲染形式，仅把离线场景视口嵌入ArrayLab；原项目服务器与整站界面不随包运行。Qt 6.12将WebEngine改为独立发行包，本项目使用`PySide6-WebEngine 6.12.0.140`及其要求的`PySide6-Addons 6.12.0`；参见[Qt官方发行说明](https://www.qt.io/blog/qt-for-python-release-6.12-is-here)及[该wheel的依赖元数据](https://pypi.org/project/PySide6-WebEngine/6.12.0.140/)。其辅助进程、渲染资源及本地化文件按PyInstaller的Qt规则打包，CLI启动代码仍不导入Qt。场景可修改源码、构建入口与来源说明一并随源码包保留，运行时不需要Node.js或联网加载脚本。
 
 PCAAD7Manual.pdf仅用作用户提供的需求参考，不打包到运行包或源代码压缩包中。程序界面、图标、几何示意和帮助文字为本项目独立实现。

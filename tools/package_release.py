@@ -25,6 +25,8 @@ def source_files():
     sources.extend(p for p in (ROOT / "arraylab/shared/resources/radar_scene").rglob("*")
                    if p.is_file() and (p.suffix in {".html", ".js", ".mjs", ".css", ".ts", ".txt", ".md"} or p.name == "LICENSE"))
     sources.append(ROOT / "tools/build_pulse_scene.mjs")
+    sources.extend(p for p in (ROOT / "licenses/qt").rglob("*")
+                   if p.is_file() and (p.suffix in {".txt", ".md", ".json", ".html"} or p.name == "LICENSE.Chromium"))
     sources.extend(ROOT / "arraylab/resources/icons" / name for name in ("arraylab.png", "arraylab.ico"))
     sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
     # Synthetic sample terrain only; do not collect arbitrary local GeoTIFFs.

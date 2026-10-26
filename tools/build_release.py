@@ -62,6 +62,10 @@ def finish_release():
     (release / "versions.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (licenses / "three").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "arraylab/shared/resources/radar_scene/THREE-LICENSE.txt", licenses / "three/LICENSE.txt")
+    # Current Qt wheels only include their commercial-license reference in
+    # dist-info. Ship the separately verified open-source texts and official
+    # WebEngine notices too, preserving all original wheel notices above.
+    shutil.copytree(ROOT / "licenses/qt", licenses / "qt", dirs_exist_ok=True)
     for name in ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]:
         shutil.copy2(ROOT / name, release / name)
     shutil.copytree(ROOT / "examples", release / "examples", dirs_exist_ok=True)

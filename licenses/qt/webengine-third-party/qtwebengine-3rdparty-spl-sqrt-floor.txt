@@ -1,0 +1,32 @@
+spl sqrt floor
+Source: https://doc-snapshots.qt.io/qtwebengine/qtwebengine-3rdparty-spl-sqrt-floor.html
+Qt documentation identifies this as Qt WebEngine 6.140.0 (6.140 branch).
+The following license/notice text is extracted without rewriting its wording.
+
+/*
+ * Written by Wilco Dijkstra, 1996. The following email exchange establishes the
+ * license.
+ *
+ * From: Wilco Dijkstra &lt;Wilco.Dijkstra@ntlworld.com&gt;
+ * Date: Fri, Jun 24, 2011 at 3:20 AM
+ * Subject: Re: sqrt routine
+ * To: Kevin Ma &lt;kma@google.com&gt;
+ * Hi Kevin,
+ * Thanks for asking. Those routines are public domain (originally posted to
+ * comp.sys.arm a long time ago), so you can use them freely for any purpose.
+ * Cheers,
+ * Wilco
+ *
+ * ----- Original Message -----
+ * From: &quot;Kevin Ma&quot; &lt;kma@google.com&gt;
+ * To: &lt;Wilco.Dijkstra@ntlworld.com&gt;
+ * Sent: Thursday, June 23, 2011 11:44 PM
+ * Subject: Fwd: sqrt routine
+ * Hi Wilco,
+ * I saw your sqrt routine from several web sites, including
+ * http://www.finesse.demon.co.uk/steven/sqrt.html.
+ * Just wonder if there&#x27;s any copyright information with your Successive
+ * approximation routines, or if I can freely use it for any purpose.
+ * Thanks.
+ * Kevin
+ * /

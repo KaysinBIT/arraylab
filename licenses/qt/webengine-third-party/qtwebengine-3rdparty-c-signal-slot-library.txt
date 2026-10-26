@@ -1,0 +1,12 @@
+C++ Signal/Slot Library
+Source: https://doc-snapshots.qt.io/qtwebengine/qtwebengine-3rdparty-c-signal-slot-library.html
+Qt documentation identifies this as Qt WebEngine 6.140.0 (6.140 branch).
+The following license/notice text is extracted without rewriting its wording.
+
+// sigslot.h: Signal/Slot classes
+//
+// Written by Sarah Thompson (sarah@telergy.com) 2002.
+//
+// License: Public domain. You are free to use this code however you like, with
+// the proviso that the author takes on no responsibility or liability for any
+// use.
