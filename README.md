@@ -1,6 +1,8 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵及理想馈电网络电气分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前源码为0.25.0.dev4，正式Release保留0.23.0，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.23.0) · [发行说明](docs/releases/0.23.0.md)。
+用于直线阵、平面阵、理想馈电网络和雷达设计分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版为 **0.25.0**，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.25.0) · [发行说明](docs/releases/0.25.0.md)。
+
+**0.25.0 正式版**：纳入一维/二维稀疏雷达MIMO、WaveLab 1.4波形与天线设计、增益预算、全模块任务树、框架结构重构及分隔线拖动优化。下面的0.24/0.25开发阶段能力现均包含于正式包；运行无需另装Python、Node.js或原雷达工程。
 
 **0.25.0.dev4 拖动响应**：调整左右栏宽度时使用临时图形预览，停止后统一精确排版，避免每一步重复完整绘制。原计算数据、缩放/相机及图片导出保持；见[拖动响应与验证口径](docs/resize-responsiveness.md)。
 
