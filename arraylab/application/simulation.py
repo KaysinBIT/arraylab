@@ -101,6 +101,14 @@ def validate_record(record,arrays,*,expected_feature=None,expected_action=None):
             raise ValueError('记录显示状态无效。')
         selection=state.get('selection')
         if selection is not None and (type(selection) is not int or selection<0):raise ValueError('记录工况选择无效。')
+        camera=state.get('scene_camera')
+        if camera is not None:
+            if feature!='pulse' or type(camera) is not dict:raise ValueError('场景视角记录无效。')
+            for key in ('position','target'):
+                value=camera.get(key)
+                if type(value) is not list or len(value)!=3 or any(type(x) not in (int,float) or not math.isfinite(x) for x in value):raise ValueError('场景视角坐标无效。')
+            zoom=camera.get('zoom')
+            if type(zoom) not in (int,float) or not math.isfinite(zoom) or zoom<=0:raise ValueError('场景视角缩放无效。')
     return record
 
 
@@ -192,9 +200,11 @@ def export_result(path,record,arrays,*,plot=False):
     return target
 
 
-def export_process(path,record,arrays,*,progress=None,cancel=None):
+def export_process(path,record,arrays,*,progress=None,cancel=None,scene_png=None):
     """Keep Agg/font rendering out of the live Qt process and publish atomically."""
     validate_record(record,arrays)
+    if scene_png is not None and (record['feature']!='pulse' or not isinstance(scene_png,bytes) or not scene_png.startswith(b'\x89PNG\r\n\x1a\n')):
+        raise ValueError('三维场景图像无效。')
     target=Path(path).expanduser().absolute()
     if target.exists() or target.is_symlink():raise FileExistsError('输出目录已存在，未覆盖。')
     target.parent.mkdir(parents=True,exist_ok=True)
@@ -216,6 +226,9 @@ def export_process(path,record,arrays,*,progress=None,cancel=None):
             run_owned(command+['--record',str(request),'--output',str(staging/'result'),'--caller-version',__version__],cwd=cwd,environment=env,folder=folder,
                       memory_limit_bytes=memory_budget(record['configuration']),progress=progress,cancelled=cancel)
             check_cancelled(cancel)
+            if scene_png is not None:
+                (staging/'result'/'scene.png').write_bytes(scene_png)
+                write_json(staging/'result'/'scene-view.json',{'renderer':'PulseLab Three.js','view_state':record.get('view_state',{})})
             if target.exists() or target.is_symlink():raise FileExistsError('输出目录已被创建，未覆盖。')
             (staging/'result').rename(target)
         return target

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>ArrayLab 脉冲雷达三维场景</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0c1c2c;color:#b5cbd4;font:12px "Segoe UI","Microsoft YaHei",sans-serif}
+#scene{position:absolute;inset:0}canvas{display:block;width:100%;height:100%;outline:none}
+.legend{position:absolute;left:16px;top:14px;display:flex;flex-wrap:wrap;gap:17px;pointer-events:none;text-shadow:0 1px 3px #000}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+#scene-status{position:absolute;bottom:12px;left:16px;right:16px;pointer-events:none;font-size:11px;color:#b1c2cd;text-shadow:0 1px 3px #000;line-height:1.5}
+</style></head><body><div id="scene"></div>
+<div class="legend"><span><i style="background:#63d5cf"></i>雷达平台</span><span><i style="background:#f5bf68"></i>点目标</span><span><i style="background:#668c73"></i>计算地形</span></div>
+<div id="scene-status">正在初始化三维场景…</div><script src="scene.bundle.js"></script></body></html>

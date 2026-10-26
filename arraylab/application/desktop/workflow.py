@@ -8,6 +8,7 @@ from .task_registry import TASKS, TASK_REGISTRY, task_spec, task_page, task_key_
 
 def picture_pixmap(widget):
     """Capture the full 3D surface, even if a gesture has not settled yet."""
+    if hasattr(widget,'capture_pixmap'):return widget.capture_pixmap()
     finish = getattr(widget, 'finish_interaction', None)
     if finish is not None:
         finish(redraw=False)
@@ -250,6 +251,7 @@ class WorkflowActions:
         kind=self.active_task()
         if kind in getattr(self,'simulation_panels',{}):
             panel=self.simulation_panels[kind]
+            if panel.scene_widget is not None and panel.scene_widget.isVisible():return panel.scene_widget
             return panel.canvas if panel.report is not None and panel.canvas.isVisible() else None
         ready={'home':False,'linear':bool(self.selected_dataset()),'feed':bool(self.feed_panel.report),
                'planar':bool(self.planar_panel.report),'sparse':bool(self.sparse_panel.bundle),'subarray':bool(self.subarray_panel.report),'mimo':bool(self.mimo_panel.report),'waveform':bool(self.waveform_panel.report)}[kind]
@@ -276,7 +278,8 @@ class WorkflowActions:
 
     def reset_plot_view(self):
         kind=self.active_task()
-        if kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].redraw()
+        if kind=='pulse' and self.pulse_panel.scene_widget is not None and self.pulse_panel.scene_widget.isVisible():self.pulse_panel.scene_widget.reset_camera()
+        elif kind in getattr(self,'simulation_panels',{}):self.simulation_panels[kind].redraw()
         elif kind=='linear':
             if self.tabs.currentIndex()==3:self.geometry.reset_view()
             else:self.redraw()

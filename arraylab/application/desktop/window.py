@@ -143,6 +143,7 @@ class MainWindow(LinearAnalysisActions, WorkflowActions, HistoryActions, TaskNav
                 QMessageBox.StandardButton.No)
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore(); return
+        for panel in getattr(self,'simulation_panels',{}).values():panel.shutdown_scene()
         super().closeEvent(event)
 
 

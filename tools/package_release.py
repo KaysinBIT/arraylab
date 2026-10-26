@@ -22,6 +22,9 @@ def source_files():
         sources.extend((ROOT / directory).rglob("*.py"))
     sources.extend(p for p in (ROOT / "arraylab/sparse2d/resources").rglob("*") if p.is_file() and p.suffix in {".md", ".csv"})
     sources.extend(p for p in (ROOT / "arraylab/features/equation/data").rglob("*") if p.is_file() and p.suffix in {".json", ".md"})
+    sources.extend(p for p in (ROOT / "arraylab/features/pulse/resources/scene").rglob("*")
+                   if p.is_file() and (p.suffix in {".html", ".js", ".mjs", ".css", ".ts", ".txt", ".md"} or p.name == "LICENSE"))
+    sources.append(ROOT / "tools/build_pulse_scene.mjs")
     sources.extend(ROOT / "arraylab/resources/icons" / name for name in ("arraylab.png", "arraylab.ico"))
     sources.extend(p for p in (ROOT / "examples").iterdir() if p.is_file() and p.suffix in {".json", ".csv"})
     # Synthetic sample terrain only; do not collect arbitrary local GeoTIFFs.

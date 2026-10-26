@@ -10,8 +10,9 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration', 'pulse-scene')
 SCOPES = {
+    'pulse-scene': 'Only the restored original PulseLab 3D scene: offline rendering, native controls, camera/time records, PNG export and resource lifecycle.',
     'radar-integration': 'Only three new radar components: native workbenches, owned CLI workers, complete records, exports, geospatial import and cancellation.',
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
     'sparse-view': 'Focused sparse overview, navigation and automatic-history acceptance; excludes other workbenches and large-array performance.',
@@ -99,7 +100,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'radar-integration':
+            if suite == 'pulse-scene':
+                from .pulse_scene import exercise_pulse_scene
+                run_group(report,'pulse-scene',lambda:exercise_pulse_scene(app,window,output,report,check))
+            elif suite == 'radar-integration':
                 from .radar_integration import exercise_radar_integration
                 run_group(report,'radar-integration',lambda:exercise_radar_integration(app,window,output,report,check))
             elif suite == 'resize':

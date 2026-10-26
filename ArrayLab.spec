@@ -10,6 +10,9 @@ common = ["tkinter", "PyQt5", "PyQt6", "PySide2", "pytest"]
 sparse_resources = [(str(ROOT / "arraylab/sparse2d/resources"), "arraylab/sparse2d/resources")]
 application_icons = ROOT / "arraylab/resources/icons"
 equation_resources = [(str(ROOT / "arraylab/features/equation/data"), "arraylab/features/equation/data")]
+pulse_scene = ROOT / "arraylab/features/pulse/resources/scene"
+scene_resources = [(str(pulse_scene / name), "arraylab/features/pulse/resources/scene")
+                   for name in ("index.html", "scene.bundle.js", "THREE-LICENSE.txt", "SOURCE.md")]
 # GeoTIFF/CRS support must work in both native UI and headless programs. Keep
 # extension modules and their GDAL/PROJ data; Python source files stay in PYZ.
 radar_datas, radar_binaries, radar_hiddenimports = [], [], ["psutil"]
@@ -28,8 +31,9 @@ legacy_modules = next(ast.literal_eval(node.value) for node in legacy_tree.body
 
 desktop = Analysis(
     [str(ROOT / "launch.py")], pathex=[str(ROOT)],
-    datas=shared_datas, binaries=radar_binaries,
-    hiddenimports=[*legacy_modules, *radar_hiddenimports, "PySide6.QtTest"],
+    datas=shared_datas + scene_resources, binaries=radar_binaries,
+    hiddenimports=[*legacy_modules, *radar_hiddenimports, "PySide6.QtTest",
+                   "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
     excludes=common, hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
 )
 headless = Analysis(
@@ -39,7 +43,7 @@ headless = Analysis(
                    if not any(token in target for token in ('.verification.', '.desktop', '.presenter', '.shared.qt.', '.integration', '.application.bridges.', '.linear.layout', '.linear.widgets', '.feed.controls', '.feed.branch_widgets'))
                    and old not in ('arraylab.smoke_suites',)] + radar_hiddenimports,
     excludes=common + ["PySide6", "arraylab.window", "arraylab.widgets", "arraylab.feed_widgets", "arraylab.electrical_widgets", "arraylab.planar_widgets", "arraylab.study_widgets", "arraylab.study_smoke", "arraylab.sparse_widgets", "arraylab.sparse_smoke", "arraylab.sparse2d.gui", "arraylab.sparse2d.detail_view", "arraylab.smoke", "arraylab.pointing_smoke", "arraylab.multicore_smoke", "arraylab.history_smoke", "arraylab.workflow_smoke",
-        "arraylab.application.desktop", "arraylab.application.verification", "arraylab.application.bridges",
+        "arraylab.application.desktop", "arraylab.application.verification", "arraylab.application.bridges", "arraylab.features.pulse.desktop_scene",
         "arraylab.shared.qt", "arraylab.features.linear.widgets", "arraylab.features.linear.presenter", "arraylab.features.linear.layout",
         "arraylab.features.feed.desktop", "arraylab.features.feed.controls", "arraylab.features.feed.branch_widgets",
         "arraylab.features.planar.desktop", "arraylab.features.sparse.desktop", "arraylab.features.sparse.navigation",

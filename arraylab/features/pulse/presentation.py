@@ -73,6 +73,15 @@ def _scene_context(result,selection):
     return project,time_s,f'{label} · t={time_s:g} s'
 
 
+def scene_payload(result,time_s=0.):
+    """Prepare display-only geometry for the original offline Three.js scene."""
+    project,time_s,caption=_scene_context(result,time_s)
+    preview=scene_preview(project,time_s)
+    scene=project['scene'];items=[scene['platform'],*scene['targets']]
+    maximum=max([5.,*[float(key['time_s']) for item in items for key in item.get('trajectory',[])]])
+    return {'project':project,'grid':preview['terrain'],'time_s':time_s,'max_time_s':maximum,'caption':caption}
+
+
 def table(result,arrays,view='metrics',selection=0):
     if view in ('rd','profiles','detections','angles'):
         headers=['检测点','距离 / m','速度 / m/s','方位 / °','俯仰 / °','单元/训练噪声 / dB']

@@ -22,6 +22,8 @@ pyinstaller-hooks-contrib==2026.9
 pyparsing==3.3.3
 pyproj==3.8.0
 PySide6_Essentials==6.12.0
+PySide6_Addons==6.12.0
+PySide6_WebEngine==6.12.0.140
 pytest==9.1.1
 python-dateutil==3.0.0
 pywin32-ctypes==0.2.3

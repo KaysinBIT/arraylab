@@ -10,7 +10,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "arraylab/__init__.py").read_text()).group(1)
-RUNTIME = ["PySide6-Essentials", "shiboken6", "numpy", "scipy", "threadpoolctl", "matplotlib", "contourpy", "cycler", "fonttools", "kiwisolver", "packaging", "pillow", "pyparsing", "python-dateutil", "six", "tzdata", "pyinstaller", "psutil", "rasterio", "pyproj", "affine", "attrs", "certifi", "click"]
+RUNTIME = ["PySide6-Essentials", "PySide6-Addons", "PySide6-WebEngine", "shiboken6", "numpy", "scipy", "threadpoolctl", "matplotlib", "contourpy", "cycler", "fonttools", "kiwisolver", "packaging", "pillow", "pyparsing", "python-dateutil", "six", "tzdata", "pyinstaller", "psutil", "rasterio", "pyproj", "affine", "attrs", "certifi", "click"]
 
 
 def main():
@@ -42,7 +42,8 @@ def finish_release():
     if python_license.exists():
         (licenses / "Python").mkdir(exist_ok=True)
         shutil.copy2(python_license, licenses / "Python" / "LICENSE.txt")
-    manifest = {"app_version": VERSION, "python": sys.version, "packages": {}}
+    manifest = {"app_version": VERSION, "python": sys.version, "packages": {},
+                "bundled_components": {"three": "0.180.0"}}
     for name in RUNTIME:
         try:
             dist = metadata.distribution(name)
@@ -59,6 +60,8 @@ def finish_release():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, destination)
     (release / "versions.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (licenses / "three").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "arraylab/features/pulse/resources/scene/THREE-LICENSE.txt", licenses / "three/LICENSE.txt")
     for name in ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]:
         shutil.copy2(ROOT / name, release / name)
     shutil.copytree(ROOT / "examples", release / "examples", dirs_exist_ok=True)

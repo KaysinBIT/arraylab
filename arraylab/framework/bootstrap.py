@@ -51,6 +51,7 @@ def run(argv=None, *, headless_main, window_factory, icon_factory, version,
     from PySide6.QtCore import Qt
 
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
     app = QApplication(sys.argv[:1])
     app.setApplicationName(application_name)
     app.setWindowIcon(icon_factory())

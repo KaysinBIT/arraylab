@@ -50,6 +50,7 @@ class SimulationPanel(QWidget):
     def __init__(self,host,feature):
         super().__init__();self.host=host;self.feature=feature;self.backend=provider(feature)
         self.report=None;self.arrays={};self.thread=None;self._busy=False;self._operation='';self._changing=False;self._dirty=False
+        self.scene_widget=None;self._scene_report_key=None
         self.parameter_widget=ConfigurationForm(self.backend.default_configuration(),form_metadata(self.backend))
         self.parameter_widget.changed.connect(self.mark_dirty)
         body=QVBoxLayout(self);body.setContentsMargins(8,6,8,6)
@@ -294,7 +295,11 @@ class SimulationPanel(QWidget):
         view=self.view.currentData();scene=self.feature=='pulse' and view=='scene'
         self.scene_time.setVisible(scene);self.selection.setVisible(self.selection.count()>0 and not scene)
         is_table=self.table_toggle.isChecked() or view in ('detections','metrics','elements','candidates','cases','ambiguity')
-        self.canvas.setVisible(not is_table);self.toolbar.setVisible(not is_table);self.table_widget.setVisible(is_table)
+        scene_graph=scene and not is_table
+        self.canvas.setVisible(not is_table and not scene_graph);self.toolbar.setVisible(not is_table and not scene_graph);self.table_widget.setVisible(is_table)
+        if self.scene_widget is not None:self.scene_widget.setVisible(scene_graph)
+        if scene_graph:
+            self.show_scene();self.refresh_host();return
         if self.report is None:
             self.figure.clear();ax=self.figure.add_subplot(111);ax.set_axis_off();ax.text(.5,.5,'设置参数，选择操作后按F5运行',ha='center',va='center',transform=ax.transAxes)
             self.canvas.draw_idle();self.table_widget.setRowCount(0);self.note.setText('尚无计算结果。打开配置与切换页面不会自动求解。');return
@@ -318,11 +323,36 @@ class SimulationPanel(QWidget):
             self.plot_layout.replaceWidget(previous,self.toolbar);previous.hide();previous.deleteLater();self.reflow()
         self.refresh_host()
 
+    def show_scene(self):
+        if self.scene_widget is None:
+            self.scene_widget=self.backend.SceneWidget(self)
+            self.plot_layout.insertWidget(self.plot_layout.indexOf(self.canvas),self.scene_widget,1)
+            self.scene_widget.timeChanged.connect(self.update_scene_time)
+        self.scene_widget.show()
+        if self.report is None:
+            config=self.configuration();result={'configuration':config}
+            key=('input',configuration_digest(config))
+        else:result=self.report['result'];key=('result',id(self.report))
+        if key!=self._scene_report_key:
+            payload=self.backend.scene_payload(result,self.scene_time.value())
+            self.scene_time.setMaximum(payload['max_time_s'])
+            camera=self.report.get('view_state',{}).get('scene_camera') if self.report else None
+            self.scene_widget.set_scene(payload,key=key,camera=camera);self._scene_report_key=key
+        else:self.scene_widget.set_time(self.scene_time.value())
+        self.note.setText('原PulseLab三维场景：雷达、地形、目标和波束方向示意。透明锥体不是实际增益等值面；播放、旋转与缩放不重新运行回波计算。')
+
+    def update_scene_time(self,value):
+        with QSignalBlocker(self.scene_time):self.scene_time.setValue(value)
+
+    def shutdown_scene(self):
+        if self.scene_widget is not None:self.scene_widget.shutdown()
+
     def resizeEvent(self,event):
         super().resizeEvent(event)
         if hasattr(self,'resize_timer'):self.resize_timer.start(60)
 
     def reflow(self):
+        if not self.canvas.isVisible():return
         if self.canvas.resize_pending:return
         ratio=self.canvas.device_pixel_ratio
         self.figure.set_size_inches(max(1,self.canvas.width())*ratio/self.figure.dpi,max(1,self.canvas.height())*ratio/self.figure.dpi,forward=False)
@@ -364,8 +394,13 @@ class SimulationPanel(QWidget):
         write_npz(path,self.record_snapshot(),self.arrays)
 
     def record_snapshot(self):
-        return {**self.report,'view_state':{'view':self.view.currentData(),'selection':self.selection.currentData(),
-                'table':self.table_toggle.isChecked(),'scene_time':self.scene_time.value()}}
+        camera=None
+        if self.scene_widget is not None and self.scene_widget.ready:
+            camera=self.scene_widget.get_state(sync=True).get('camera')
+        state={'view':self.view.currentData(),'selection':self.selection.currentData(),
+               'table':self.table_toggle.isChecked(),'scene_time':self.scene_time.value()}
+        if camera:state['scene_camera']=camera
+        return {**self.report,'view_state':state}
 
     def save_record_dialog(self):
         if self.report is None:return
@@ -387,10 +422,15 @@ class SimulationPanel(QWidget):
         parent=QFileDialog.getExistingDirectory(self,'选择导出父目录',self.host.last_directory)
         if parent:
             target=Path(parent)/(self.feature+'-'+datetime.now().strftime('%Y%m%d-%H%M%S'))
+            scene_png=None
+            if self.scene_widget is not None and self.scene_widget.isVisible():
+                try:
+                    self.scene_widget.pause();scene_png=self.scene_widget.png_bytes()
+                except ValueError as exc:QMessageBox.warning(self,'场景未导出',str(exc));return
             result,arrays=self.record_snapshot(),self.arrays
             def export(progress,cancel):
                 from arraylab.application.simulation import export_process
-                return export_process(target,result,arrays,progress=progress,cancel=cancel)
+                return export_process(target,result,arrays,progress=progress,cancel=cancel,scene_png=scene_png)
             self._launch(export,'导出结果',cancellable=True)
 
     def apply_calibration(self):

@@ -5,7 +5,9 @@ ArrayLab原创代码采用MIT许可，第三方组件继续适用各自的许可
 | 组件 | 上游与源码入口 |
 | --- | --- |
 | Python | [Python源代码](https://www.python.org/downloads/source/) |
-| PySide6 Essentials 与 Shiboken6 | [Qt for Python许可说明](https://doc.qt.io/qtforpython-6/)、[pyside-setup源代码](https://code.qt.io/cgit/pyside/pyside-setup.git/)、[Qt发布源码](https://download.qt.io/official_releases/qt/) |
+| PySide6 Essentials、Addons 与 Shiboken6 | [Qt for Python许可说明](https://doc.qt.io/qtforpython-6/)、[pyside-setup源代码](https://code.qt.io/cgit/pyside/pyside-setup.git/)、[Qt发布源码](https://download.qt.io/official_releases/qt/) |
+| Qt WebEngine / Chromium | [Qt WebEngine源码](https://code.qt.io/cgit/qt/qtwebengine.git/)；用于桌面内嵌离线三维视口，随Qt动态库及许可元信息分发 |
+| Three.js 0.180.0 | [源码与MIT许可](https://github.com/mrdoob/three.js/tree/r180)；场景资源保留`THREE-LICENSE.txt`，运行包另附`licenses/three/LICENSE.txt` |
 | NumPy | [源代码与许可](https://github.com/numpy/numpy) |
 | SciPy | [源代码与许可](https://github.com/scipy/scipy) |
 | threadpoolctl | [线程数控制与BSD-3-Clause许可](https://github.com/joblib/threadpoolctl) |
@@ -18,6 +20,8 @@ ArrayLab原创代码采用MIT许可，第三方组件继续适用各自的许可
 Qt/PySide采用开放源码许可选项，发行包中的Qt动态库未作修改。其他随附依赖及NumPy/SciPy所含底层数学库的声明见其许可文件。字体由Matplotlib附带或使用操作系统已有字体，未复制Windows系统字体。
 
 构建工具会从已安装发行包收集许可元数据。本仓库发布原创源码；二进制分发前仍应按实际发行内容核对全部通知和对应源码提供方式。
+
+脉冲雷达三维场景保留原PulseLab的Three.js渲染形式，仅把离线场景视口嵌入ArrayLab；原项目服务器与整站界面不随包运行。Qt 6.12将WebEngine改为独立发行包，本项目使用`PySide6-WebEngine 6.12.0.140`及其要求的`PySide6-Addons 6.12.0`；参见[Qt官方发行说明](https://www.qt.io/blog/qt-for-python-release-6.12-is-here)及[该wheel的依赖元数据](https://pypi.org/project/PySide6-WebEngine/6.12.0.140/)。其辅助进程、渲染资源及本地化文件按PyInstaller的Qt规则打包，CLI启动代码仍不导入Qt。场景可修改源码、构建入口与来源说明一并随源码包保留，运行时不需要Node.js或联网加载脚本。
 
 PCAAD7Manual.pdf仅用作用户提供的需求参考，不打包到运行包或源代码压缩包中。程序界面、图标、几何示意和帮助文字为本项目独立实现。
 
