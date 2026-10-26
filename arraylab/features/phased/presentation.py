@@ -55,7 +55,7 @@ def table(result,arrays,view,selection=0):
         s=result.get('synthesis') or {};after=s.get('after',{})
         if after.get('cases'):
             return ['序号','GHz','X/°','Y/°','区域SLL/dB','HPBW-X/°','HPBW-Y/°','通过','原因'],[[r['index']+1,r['frequencyGHz'],r['scanX'],r['scanY'],r['sll2D'],r['hpbwX'],r['hpbwY'],r['feasible'],'；'.join(r['issues'])] for r in after['cases']],'区域旁瓣：全可见圆盘排除椭圆之外；HPBW：穿实际峰值的两条切面。'
-        return ['扫描角/°','SLL/dB','HPBW/°','局部峰/°'],[[r['angle'],r['sll'],r['hpbw'],r['peakAngle']] for r in s.get('scanResults',[])],'一维最终细网格核验。'
+        return ['扫描角/°','SLL/dB','HPBW/°','局部峰/°','状态','原因'],[[r['angle'],r['sll'],r['hpbw'],r['peakAngle'],r.get('status','旧记录未提供'),r.get('reason','旧记录未提供')] for r in s.get('scanResults',[])],'一维最终细验证；不可见期望主阶保留空值与原因，不由其他瓣替代。'
     if view=='optimization':
         s=result.get('synthesis') or {};before=s.get('before',{});after=s.get('after',{})
         keys=[k for k in ('worstSll','hpbw','maxHpbwX','maxHpbwY','minSpacing','width','height','taperEfficiency','amplitudeDynamicRangeDb','passCount','caseCount') if k in after]

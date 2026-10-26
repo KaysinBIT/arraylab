@@ -3,6 +3,13 @@ import math
 import numpy as np
 from arraylab.shared.plotting.surface import clear_figure
 from arraylab.shared.plotting.metrics import draw_metric_footer
+from .provenance import SOURCE_VERSION
+
+
+def _current(result):return result.get('algorithm_version')==SOURCE_VERSION
+
+
+LEGACY_NOTE='旧版或未知算法快照：统计口径可能不同，须重新计算，不能作为当前模型验收结论。'
 
 
 def _number(value, digits=6):
@@ -43,6 +50,8 @@ def draw(figure,result,arrays,view='budget',selection=0):
         axis.set(xlabel='距离 / m',ylabel='处理后参考 SNR / dB',title='自由空间能量参考与设计裕量')
         axis.legend(fontsize=8);axis.grid(alpha=.25)
         note=f"预算距离 {_number(budget['range_m'])} m · SNR {_number(budget['output_snr_db'])} dB · 裕量 {_number(budget['snr_margin_db'])} dB"
+        obs=budget.get('observability',{})
+        if obs.get('observable') is False:note+='；采集/模型条件不满足：'+'；'.join(obs.get('reasons',[]))
     elif view=='rd':
         if 'rd_power' not in arrays:
             _empty(axis,'先运行回波仿真、SNR校核或统计，获取真实处理数组。');return figure
@@ -63,7 +72,8 @@ def draw(figure,result,arrays,view='budget',selection=0):
     elif view=='snr':
         if kind!='snr':
             _empty(axis,'先运行“固定CUT的SNR验证”；普通仿真不自动构成方程闭合验证。');return figure
-        fields=[('energy_reference_snr_db','独立能量方程'),('theoretical_snr_db','实际处理系数理论值'),('measured_snr_db','独立噪声试验')]
+        reference='power_ratio_reference_snr_db' if 'power_ratio_reference_snr_db' in result else 'energy_reference_snr_db'
+        fields=[(reference,'同口径能量参考' if reference=='power_ratio_reference_snr_db' else '旧版能量参考'),('theoretical_snr_db','实际处理系数理论值'),('measured_snr_db','独立噪声试验')]
         values=[(name,result.get(key)) for key,name in fields if result.get(key) is not None]
         bars=axis.bar([p[0] for p in values],[p[1] for p in values],color=['#168b9c','#6b60b6','#bd8432'][:len(values)])
         axis.bar_label(bars,fmt='%.3f');axis.set(ylabel='SNR / dB',title='预先指定CUT的独立方程 / 实际处理对照')
@@ -78,17 +88,17 @@ def draw(figure,result,arrays,view='budget',selection=0):
             y=np.array([p['pd']['estimate'] for p in points])
             lower=np.array([p['pd']['lower'] for p in points]);upper=np.array([p['pd']['upper'] for p in points])
             axis.errorbar(x,y,yerr=[np.maximum(0,y-lower),np.maximum(0,upper-y)],fmt='o-',capsize=3,color='#168b9c')
-            axis.set(xlabel='采样距离 / m' if kind=='distance' else '实测单CUT Pfa',ylabel='实测单CUT Pd',ylim=(-.03,1.03),
-                     title='离散距离条件的统计结果' if kind=='distance' else '经验ROC（逐点置信区间）');axis.grid(alpha=.25)
+            axis.set(xlabel='采样距离 / m' if kind=='distance' else '实测单CUT Pfa' if _current(result) else '旧版Pfa（保存口径）',ylabel='实测单CUT Pd' if _current(result) else '旧版Pd（保存口径）',ylim=(-.03,1.03),
+                     title=('离散距离条件的统计结果' if kind=='distance' else '经验ROC（逐点置信区间）') if _current(result) else '旧版统计曲线（需重算）');axis.grid(alpha=.25)
             note='误差线是逐点二项置信区间；只覆盖已采样条件，零虚警仍有非零上界。'
         elif kind=='statistics':
-            fields=[('pd','固定CUT Pd'),('pfa','固定CUT Pfa'),('association','目标关联率'),('ghost','可分辨鬼影率')]
+            fields=[('pd','固定CUT Pd' if _current(result) else '旧版Pd'),('pfa','全部目标移除Pfa' if _current(result) else '旧版Pfa'),('background_pfa','仅首目标移除Pfa'),('association','目标关联率'),('ghost','可分辨鬼影率')]
             values=[(name,result[key]) for key,name in fields if key in result]
             x=np.arange(len(values));y=np.array([v['estimate'] for _,v in values])
             lower=np.array([v['lower'] for _,v in values]);upper=np.array([v['upper'] for _,v in values])
             axis.errorbar(x,y,yerr=[y-lower,upper-y],fmt='o',capsize=6,color='#168b9c')
             axis.set_xticks(x,[name for name,_ in values]);axis.set(ylim=(-.03,1.03),ylabel='频率 / 概率',title='独立H0/H1统计与置信区间')
-            axis.grid(axis='y',alpha=.25);note='固定CUT检出率、关联率和鬼影率具有不同定义，不能互相替代。'
+            axis.grid(axis='y',alpha=.25);note=('各指标为逐项置信区间；固定CUT检出、背景触发和目标关联不能互相替代。严格验收：'+('通过' if result.get('validated') else '未证明/未通过')) if _current(result) else LEGACY_NOTE
         elif kind=='calibration':
             scores=np.asarray(arrays.get('calibration_scores',[]))
             if not scores.size:_empty(axis,'没有校准统计数组。');return figure
@@ -102,16 +112,17 @@ def draw(figure,result,arrays,view='budget',selection=0):
         detections=result.get('detections',[])
         if detections:
             axis.scatter([p['range_m'] for p in detections],[p['velocity_mps'] for p in detections],
-                         c=[p.get('cell_snr_db',0) for p in detections],cmap='viridis')
+                         c=[p.get('cell_power_to_noise_db',p.get('cell_snr_db',0)) for p in detections],cmap='viridis')
             axis.set(xlabel='估计距离 / m',ylabel='速度 / m/s',title='数据驱动检测点（可能包含虚警与旁瓣）');axis.grid(alpha=.25)
         else:_empty(axis,'当前结果没有通过门限的检测点；这不等于场景中没有目标。')
         note='FMCW表中距离按估计速度修正耦合；图中点不是场景真值列表。'
     else:raise ValueError('未知雷达方程视图：'+str(view))
+    if not _current(result) and LEGACY_NOTE not in note:note+=' '+LEGACY_NOTE
     draw_metric_footer(figure,[note,'单站远场合成模型；不代表硬件或连续条件性能保证。'])
     return figure
 
 
-def table(result, arrays, view='budget', selection=0):
+def _table(result, arrays, view='budget', selection=0):
     result=result or {};kind=result.get('kind')
     if view=='budget':
         b=_budget(result)
@@ -121,6 +132,9 @@ def table(result, arrays, view='budget', selection=0):
                 ('snr_margin_db','SNR裕量','dB'),('max_range_m','自由空间能量参考距离','m'),
                 ('effective_time_s','全部事件有效观测时间','s'),('average_power_w','平均总发射功率','W')]
         rows += [[name,_number(b.get(key)),unit] for key,name,unit in fields]
+        if 'summed_power_snr_db' in b:rows.append(['功率和/噪声和参考SNR',_number(b['summed_power_snr_db']),'dB'])
+        obs=b.get('observability',{})
+        if 'observable' in obs:rows.append(['采集与模型可观测条件','满足' if obs['observable'] else '不满足：'+'；'.join(obs.get('reasons',[])),''])
         inverse=b.get('inverse') or {}
         for key,name,unit in [('required_power_w','所需传导功率','W'),('required_tx_gain_dbi','所需Tx增益','dBi'),
                               ('required_rx_gain_dbi','所需Rx增益','dBi'),('required_equal_gain_dbi','两侧相同增益','dBi'),
@@ -128,30 +142,37 @@ def table(result, arrays, view='budget', selection=0):
             rows.append([name,_number(inverse.get(key)),unit])
         return ['分项 / 指标','数值','单位'],rows,'能量参考与可观测性分别判断；增大功率不能恢复窗口外回波。'
     if view in ('detections','rd'):
-        return ['表观距离/m','估计距离/m','速度/m/s','功率/dBW','单元SNR/dB'],[
+        return ['表观距离/m','估计距离/m','速度/m/s','功率/dBW','单元总功率/热噪声(dB)'],[
             [_number(p.get('apparent_range_m',p.get('range_m'))),_number(p.get('range_m')),
-             _number(p.get('velocity_mps')),_number(p.get('power_dbw')),_number(p.get('cell_snr_db'))]
-            for p in result.get('detections',[])],'检测来自接收数据；可能包含虚警、旁瓣或错误解码。'
+             _number(p.get('velocity_mps')),_number(p.get('power_dbw')),_number(p.get('cell_power_to_noise_db',p.get('cell_snr_db')))]
+            for p in result.get('detections',[])],'单元总功率含信号、杂波及噪声，不是分离出的信号SNR；检测可能包含虚警、旁瓣或错误解码。'
     if view=='snr':
-        keys=[('energy_reference_snr_db','独立能量方程SNR'),('theoretical_snr_db','实际系数理论SNR'),
+        keys=[('energy_reference_snr_db','总能量参考SNR'),('power_ratio_reference_snr_db','同口径功率比参考SNR'),('theoretical_snr_db','实际系数理论SNR'),
               ('measured_snr_db','实测SNR'),('error_db','实测相对处理系数差'),('discrete_loss_db','能量参考与离散处理差'),
               ('sinr_db','含其余目标/杂波的SINR')]
         rows=[[name,_number(result.get(key)),'dB'] for key,name in keys] if kind=='snr' else []
-        return ['指标','数值','单位'],rows,'固定预先指定CUT；没有用最大峰或真值位置筛选验收输出。'
+        return ['指标','数值','单位'],rows,'固定预先指定CUT；每块功率比与总能量的差别不算离散损失，也不等于非相干检测增益。'
     if kind in ('distance','roc'):
-        return ['距离/m' if kind=='distance' else '门限/dB','Pd','Pd下界','Pd上界','Pfa','Pfa下界','Pfa上界','状态/原因'],[
+        prefix='' if _current(result) else '旧版'
+        return ['距离/m' if kind=='distance' else '门限/dB',prefix+'Pd',prefix+'Pd下界',prefix+'Pd上界',prefix+'Pfa',prefix+'Pfa下界',prefix+'Pfa上界','状态/原因' if _current(result) else '旧版保存状态（需重算）'],[
             [_number(p.get('range_m',p.get('threshold_db'))),*[_number((p.get('pd') or {}).get(k)) for k in ('estimate','lower','upper')],
              *[_number((p.get('pfa') or {}).get(k)) for k in ('estimate','lower','upper')],
              p.get('status','')+'；'+'；'.join(p.get('reasons',[]))] for p in result.get('points',[])], '只保证所列离散点；空值保留为未定义。'
     if kind=='statistics':
         return ['口径','次数','计数','估计','下界','上界'],[[label,result[key]['trials'],result[key]['count'],
             *[_number(result[key][field]) for field in ('estimate','lower','upper')]] for key,label in
-            [('pd','固定CUT Pd'),('pfa','固定CUT Pfa'),('association','关联率'),('ghost','鬼影率'),('scene_false_alarm','整图虚警事件')]],'零事件不等于零概率；置信区间和名义Pfa分别报告。'
+            [('pd','固定CUT Pd' if _current(result) else '旧版Pd（原口径）'),('pfa','全部目标移除Pfa' if _current(result) else '旧版Pfa（原口径）'),('background_pfa','仅首目标移除背景Pfa'),('association','关联率'),('ghost','鬼影率'),('scene_false_alarm','整图虚警事件')] if key in result],('严格验收：'+('通过' if result.get('validated') else '未证明/未通过')+'。零事件不等于零概率；置信区间为逐项边际区间。') if _current(result) else LEGACY_NOTE
     if kind=='calibration':
         return ['指标','值'],[['独立试验数',result['trials']],['期望尾部事件',_number(result['expected_tail_events'])],
             ['校准因子',_number(result['factor'])],['允许应用',result['ready']],['已独立验收',result['verified']],
             ['推荐至少次数',result['recommended_trials']]],'仅ready且配置/CUT指纹一致时可应用；不是独立验收通过。'
     return ['说明'],[],'先运行对应的显式验证操作。'
+
+
+def table(result, arrays, view='budget', selection=0):
+    columns,rows,note=_table(result,arrays,view,selection)
+    if result and not _current(result) and LEGACY_NOTE not in note:note+=' '+LEGACY_NOTE
+    return columns,rows,note
 
 
 render_figure = draw

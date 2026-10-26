@@ -1,15 +1,16 @@
 {
   "name": "EquationLab",
-  "version": "1.0.0",
-  "archive": "EquationLab-v1.0-local.zip",
-  "archive_sha256": "f68bdf5be3e5bd2612f1c8a720037591886d079190f1c5e6e36d676b0dbcd2b0",
+  "version": "1.0.1",
+  "archive": "EquationLab-v1.0.1-local.zip",
+  "archive_sha256": "1743985dae7a5ad60caaad72175251ece653cb844a3b2098e15870579cc463be",
   "kernel_normalized_sha256": {
-    "config.py": "bac9d9c2f9af689ca422637d4ae75e3232c69028d520da02016bbaabc2302a21",
-    "budget.py": "fc53228a9d079081f450809d1e6cd18c80ac319c3eb32f23a0bd27001a080b94",
-    "engine.py": "6d7a18cf586cf37212cd57b589f02fa88adf3bddd2b870b4c5d801cb96351472",
-    "propagation.py": "ccad1209bfaf2bc8c1255c47d5a220ec94c81a0670e5400731f23765dd67cd74",
-    "detection.py": "443cbe512ecbfe9941734ffb65134c0fa1035ba976054a8194e7efc0b9bd62cd",
-    "statistics.py": "dd9f98cfd2d2e8b065bcbe3488896fa4a5d31651e34f5733c35a5ff29808d9ed"
+    "config.py": "69bd952dd55ce1db6d54eb47c84f8047ed6397d137c6286dc830aed5844119ae",
+    "budget.py": "51f953209329ebbd59a9fa9fb54a59bd1ebb30b1925dd57c16a84f72a5a997f7",
+    "engine.py": "7ed322dc4878ed39ff6b5758feb54182196573ca192bb0a7d1faee91959cc601",
+    "detection.py": "67b6242ee77df5da08df3980424e09b0d157afa64d20bab14dc1a7bb3668665a",
+    "statistics.py": "a875ef0c10174a08dfd5b6c8fa2150de0d20f0f2b375588a2463a19c37f810ff",
+    "receiver_spec.py": "9bf0da5edf661964e3e227fd0628e68720012d60b800296477ca6a6cec83b399",
+    "propagation.py": "ccad1209bfaf2bc8c1255c47d5a220ec94c81a0670e5400731f23765dd67cd74"
   },
-  "preservation": "Six numerical modules are unchanged apart from line-ending normalization; imports remain local and relative."
+  "preservation": "Seven pure numerical modules match the frozen source after line-ending normalization. The receiver specification is shared timing/axis metadata, not a shared signal/budget formula."
 }

@@ -81,7 +81,7 @@ def validate_record(record,arrays,*,expected_feature=None,expected_action=None):
     actions={key for key,title in module.ACTIONS}
     if type(record.get('action')) is not str or record['action'] not in actions or expected_action is not None and record['action']!=expected_action:
         raise ValueError('记录操作类型不匹配。')
-    config=module.normalize_configuration(record.get('configuration'))
+    config=record_configuration(feature,record.get('configuration'))
     if configuration_digest(config)!=record.get('configuration_sha256'):raise ValueError('记录输入摘要不匹配。')
     inner=record['result'].get('configuration',record['result'].get('config'))
     if inner is None or configuration_digest(inner)!=record['configuration_sha256']:
@@ -110,6 +110,20 @@ def validate_record(record,arrays,*,expected_feature=None,expected_action=None):
             zoom=camera.get('zoom')
             if type(zoom) not in (int,float) or not math.isfinite(zoom) or zoom<=0:raise ValueError('场景视角缩放无效。')
     return record
+
+
+def record_configuration(feature,configuration):
+    """Check a saved snapshot's structure without rerunning newer model limits."""
+    module=provider(feature)
+    normalize=getattr(module,'normalize_record_configuration',module.normalize_configuration)
+    return normalize(configuration)
+
+
+def record_compatibility(record):
+    """Expose provenance warnings without rewriting saved scientific results."""
+    if record is None:return {'current':True,'message':''}
+    module=provider(record['feature']);inspect=getattr(module,'record_compatibility',None)
+    return inspect(record['result']) if inspect else {'current':True,'message':''}
 
 
 def load_configuration(feature,path):
@@ -166,6 +180,9 @@ def export_result(path,record,arrays,*,plot=False):
         with filename.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
         write_json(payload/'arraylab-record.json',{'format':'arraylab.simulation.export','schema_version':1,
                    'arrays_file':'arrays.npz','arrays_sha256':digest,'record':record})
+        compatibility=record_compatibility(record)
+        if not compatibility.get('current',False):
+            write_json(payload/'model-version-notice.json',compatibility)
         state=record.get('view_state',{});selection=state.get('selection') or 0
         if record['feature']=='phased' and record['result'].get('caseAnalyses'):
             (payload/'elements.csv').unlink(missing_ok=True)

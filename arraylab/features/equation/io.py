@@ -7,7 +7,7 @@ import numpy as np
 
 from arraylab.shared.io import write_text_atomic
 from arraylab.shared.simulation_io import clean_json, read_json, write_json, write_npz, read_npz
-from .service import normalize_configuration, ACTIONS
+from .service import normalize_configuration, normalize_record_configuration, ACTIONS
 from .config import config_hash
 from .reporting import render_report, result_csv
 
@@ -54,14 +54,14 @@ def export_result(path, result, arrays, *, plot=False):
     """Write all source result formats to a new directory, without overwrites."""
     target=Path(path).expanduser().absolute()
     if target.exists() or target.is_symlink():raise FileExistsError('输出目录已存在，未覆盖。')
-    config=normalize_configuration(result.get('config'))
+    config=normalize_record_configuration(result.get('config'))
     if result.get('config_hash')!=config_hash(config):raise ValueError('结果配置摘要不一致。')
     target.parent.mkdir(parents=True,exist_ok=True)
     staging=Path(tempfile.mkdtemp(prefix='.arraylab-equation-',dir=target.parent))
     try:
         write_json(staging/'result.json',result,complex_style='pair')
         write_npz(staging/'arrays.npz',result,arrays,complex_style='pair')
-        save_configuration(staging/'parameters.json',config)
+        write_json(staging/'parameters.json',{'format':'arraylab.equation','schema_version':1,'configuration':config},complex_style='pair')
         write_text_atomic(staging/'results.csv',result_csv(result))
         write_text_atomic(staging/'report.html',render_report(result,arrays))
         if plot:

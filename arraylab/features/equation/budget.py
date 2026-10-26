@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import numpy as np
 from .config import C,K,normalize_config,validate_config,noise_density,event_plan,complex_weights,resource_estimate,config_hash
+from .receiver_spec import receiver_layout, observable_path, far_field_spec
 
 
 def db(x):return 10*math.log10(max(float(x),1e-300))
@@ -19,7 +20,7 @@ def window_efficiency(n,kind):
 
 def required_event_count(base_snr_per_event,threshold,cycle,looks,window):
     unit=cycle*looks
-    minimum=3 if window=="hann" else 1
+    minimum=max(math.ceil(2/unit),3 if window=="hann" else 1)
     def achieved(groups):return base_snr_per_event*(groups*unit)*window_efficiency(groups,window)
     lo=minimum;hi=max(minimum,math.ceil(threshold/(base_snr_per_event*unit)))
     while achieved(hi)<threshold:hi*=2
@@ -35,33 +36,45 @@ def observability(p,range_m,velocity_mps=0.):
     cycle=p["array"]["tx_count"] if p["array"]["mode"] in ("tdm","cdm") else 1
     vmax=lam/(4*w["pri_s"]*cycle)
     full_vmax=lam/(4*w["pri_s"])
-    reasons=[]
+    reasons=[]; layout=receiver_layout(p)
+    actual=observable_path(p,tau,2*velocity_mps/lam)
+    actual["far_field"]=far_field_spec(p,range_m,range_m)
+    if not actual["far_field"]["valid"]:
+        actual["physical_observable"]=False
+        actual["observable"]=False
+        reasons.append("需求距离不满足已知通道坐标的远场条件；该预算仍仅为远场能量参考")
+    tail=layout["filter_history_samples"]/w["fs_hz"]
     if w["kind"]=="fmcw":
         slope=w["bandwidth_hz"]/w["ramp_s"];fbeat=slope*tau+2*velocity_mps/lam
         limit=min(w["fs_hz"]/2,w["rx_bandwidth_hz"])
-        if not 0<=fbeat<limit:reasons.append("拍频超出正频率 IF/采样通带")
-        if tau>w["adc_start_s"]:reasons.append("ADC 起始早于同一 chirp 回波到达")
-        if w["adc_start_s"]+w["samples"]/w["fs_hz"]>w["ramp_s"]:reasons.append("ADC 窗口超出 ramp")
+        if not actual["within_if"]:reasons.append("拍频超出正频率 IF/采样通带")
+        if not actual["complete_echo"]:reasons.append("ADC 窗口未完整落在同一 chirp 回波内")
         range_limit=C*limit/(2*slope)
         full_limit=C*w["adc_start_s"]/2
+        filter_limit=max(0.,C*(w["adc_start_s"]-tail)/2)
+        filter_blind=max(0.,C*(layout["input_last_s"]-w["ramp_s"])/2)
         blind=0.
     else:
         fbeat=None;range_limit=C*w["samples"]/w["fs_hz"]/2
         blind=C*(w["pulse_width_s"]+w["recovery_s"])/2
         full_limit=C*(min(w["pri_s"],w["samples"]/w["fs_hz"])-w["pulse_width_s"])/2
+        filter_limit=max(0.,full_limit-C*tail/2)
+        filter_blind=blind+C*tail/2
         if range_m<blind:reasons.append("回波与发射/恢复盲区重叠")
         if range_m>full_limit:reasons.append("完整回波超出接收窗或下一 PRI")
-    if abs(velocity_mps)>=vmax:reasons.append("速度超过该体制原始慢时间无模糊范围")
-    if range_m>w["range_max_m"]:reasons.append("目标超出配置的显示/处理距离")
-    return {"observable":not reasons,"reasons":reasons,"beat_frequency_hz":fbeat,
+    if not actual["filter_settled"]:reasons.append("FIR 滤波历史或回波尾部未完整落在有效接收窗内")
+    if not actual["unambiguous_doppler"]:reasons.append("速度超过该体制原始慢时间无模糊范围 [-vmax, vmax)")
+    if not actual["within_processed_grid"]:reasons.append("当前输出/校核网格不覆盖该距离或速度坐标；此项不是物理 IF 或无模糊上限")
+    return {**actual,"reasons":reasons,"beat_frequency_hz":fbeat,
         "if_sampling_limit_m":range_limit,"full_echo_limit_m":full_limit,"blind_range_m":blind,
+        "filter_complete_echo_limit_m":filter_limit,"filter_blind_range_m":filter_blind,
         "unambiguous_range_m":C*w["pri_s"]/2,"max_velocity_mps":vmax,"physical_max_velocity_mps":full_vmax,
         "ddm_conservative_velocity_mps":full_vmax/p["array"]["ddm_slots"] if p["array"]["mode"]=="ddm" else None}
 
 
 def calculate(config):
     try:p=normalize_config(config)
-    except (ValueError,TypeError,KeyError,ZeroDivisionError) as exc:return {"valid":False,"errors":[str(exc)],"warnings":[]}
+    except (ValueError,TypeError,KeyError,ZeroDivisionError,OverflowError) as exc:return {"valid":False,"errors":[str(exc)],"warnings":[]}
     errors=validate_config(p)
     if errors:return {"valid":False,"errors":errors,"warnings":[]}
     w=p["waveform"];a=p["array"];r=p["radar"];q=p["processing"];req=p["requirements"]
@@ -90,7 +103,7 @@ def calculate(config):
     obs=observability(p,distance)
     warnings=["预算为指向中心、稳定点目标和理想已分离通道的能量基准；场景检测性能由数值实验给出。",
               "NF 为接收天线参考面上的总接收链噪声系数，已计入其中的前端被动损耗不再计入额外损耗。"]
-    if looks>1:warnings.append("非相干功率积累的能量和不是等价检测 SNR；四次根距离仅保留为相干能量参考。")
+    if looks>1:warnings.append("非相干积累的总能量 SNR 为各 look 能量参数之和；输出功率比 SNR 为信号功率和/噪声功率和，当前等强 look 下低 10log10(looks) dB。该口径差不是处理损耗，也不是等价检测 SNR；四次根距离仅为总能量参考。")
     if p["propagation"]["model"]!="free" or p["propagation"]["atmosphere"]["enabled"]:warnings.append("此处自由空间预算不包含场景多径和大气；请运行场景实验/距离统计。")
     if p["clutter"]["kind"]!="none":warnings.append("杂波不进入自由空间热噪声预算；SINR 由实际联合背景输出测量。")
     if any(t["swerling"] for t in p["scene"]["targets"]):warnings.append("目标起伏可能破坏相干积累与编码正交性，理想处理增益不作为达标结论。")
@@ -108,7 +121,8 @@ def calculate(config):
     return {"valid":True,"errors":[],"warnings":warnings,"config_hash":config_hash(p),"kind":"budget",
         "received_power_w":pr,"received_power_dbm":received_dbm,"noise_density_w_hz":n0,"noise_density_dbm_hz":db(n0)+30,
         "system_temperature_k":n0/K,"input_noise_w":n0*w["fs_hz"],"input_snr_db":db(pr/(n0*w["fs_hz"])),
-        "output_snr_db":db(energy_snr),"per_look_snr_db":db(perlook_snr),"snr_margin_db":db(energy_snr)-req["snr_db"]-req["margin_db"],
+        "output_snr_db":db(energy_snr),"energy_snr_db":db(energy_snr),
+        "summed_power_snr_db":db(perlook_snr),"per_look_snr_db":db(perlook_snr),"snr_margin_db":db(energy_snr)-req["snr_db"]-req["margin_db"],
         "max_range_m":rmax,"range_m":distance,"threshold_snr_db":req["snr_db"]+req["margin_db"],"rcs_m2":rcs,
         "per_tx_power_w":plan["per_tx_power_w"],"total_active_power_w":plan["per_tx_power_w"]*plan["active_tx"],"average_power_w":average_power,
         "per_tx_peak_power_w":(plan["per_tx_power_w"]*np.max(abs(plan["weights"])**2,axis=0)).tolist(),

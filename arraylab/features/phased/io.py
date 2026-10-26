@@ -20,6 +20,16 @@ def export_result(path,result,arrays,plot='none'):
         result=clean_json(result)
         write_json(staging/'result.json',result);save_configuration(staging/'parameters.json',result['configuration'])
         write_npz(staging/'arrays.npz',result,arrays)
+        # Keep analysis levels below the plotting floor in the readable export.
+        cases=len(result.get('caseAnalyses',[]))
+        for index in range(cases or 1):
+            prefix=f'case_{index}_' if cases else ''
+            filename=f'case-{index+1}-' if cases else ''
+            for axis in ('x','y'):
+                data=arrays.get(prefix+'cut_'+axis)
+                if data is not None:
+                    with (staging/(filename+'cut-'+axis+'.csv')).open('w',encoding='utf-8-sig',newline='') as stream:
+                        writer=csv.writer(stream);writer.writerow(['direction_angle_deg','relative_power_db']);writer.writerows(data)
         from .presentation import table
         for view in ('elements','scan','cases'):
             headers,rows,note=table(result,arrays,view)

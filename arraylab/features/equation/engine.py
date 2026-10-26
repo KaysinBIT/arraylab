@@ -21,6 +21,7 @@ from .config import (C, checked_config, complex_weights, direction, event_plan,
                      noise_density, resource_estimate)
 from .propagation import (paths_for_target, attenuation_for_path,
                           coefficient_for_path)
+from .receiver_spec import receiver_filter_spec, observable_path, far_field_spec
 
 
 _FAST_CACHE: OrderedDict = OrderedDict()
@@ -66,18 +67,16 @@ def slow_window(config):
 
 
 def receiver_taps(config):
-    w = config["waveform"]
-    fs = float(w["fs_hz"])
     # FMCW UI bandwidth is the usable positive beat-frequency edge.  Pulse
     # bandwidth is the full two-sided complex-baseband receiver bandwidth.
-    ratio = float(w["rx_bandwidth_hz"]) / fs * (2 if w["kind"] == "fmcw" else 1)
-    if ratio >= 1 - 1e-12:
+    spec = receiver_filter_spec(config)
+    if spec["filter_taps"] == 1:
         return np.ones(1)
-    return scipy_signal.firwin(33, max(1e-9, ratio), window=("kaiser", 7.0))
+    return scipy_signal.firwin(spec["filter_taps"], max(1e-9, spec["normalized_cutoff"]), window=("kaiser", 7.0))
 
 
 def pulse_envelope(config, relative_times):
-    """Actual finite-support unit-amplitude pulse, evaluated off the grid."""
+    """Finite-support pulse in the negative-time analytic I/Q convention."""
     w = config["waveform"]
     tau = float(w["pulse_width_s"])
     t = np.asarray(relative_times, dtype=float)
@@ -86,7 +85,7 @@ def pulse_envelope(config, relative_times):
     t = np.where(abs(t-tau) < eps, tau, t)
     values = np.ones(t.shape, complex)
     if w["kind"] == "lfm":
-        values = np.exp(1j*np.pi*float(w["bandwidth_hz"])/tau*(t-tau/2)**2)
+        values = np.exp(-1j*np.pi*float(w["bandwidth_hz"])/tau*(t-tau/2)**2)
     return np.where((t >= 0) & (t < tau), values, 0j)
 
 
@@ -137,18 +136,27 @@ def _build_fast_operator(config):
         n_pulse = int(math.ceil(float(w["pulse_width_s"])*fs-1e-10))
         reference = np.convolve(pulse_envelope(config, np.arange(n_pulse)/fs), taps)
         reference_times = (np.arange(len(reference))-half)/fs
-        taper = window_values(config["processing"]["fast_window"], len(reference))
         energy = float(np.vdot(reference, reference).real)
         if energy <= 0:
             raise ValueError("接收参考波形能量为零")
-        # Delay-compensated, identical filtered waveform is matched. The
-        # complete reference normalization retains truncation/eclipsing loss.
-        kernel = np.conj(reference)*taper/energy
-        locations = (adc_times[None, :]-2*ranges[:, None]/C)*fs+half
-        nearest = np.rint(locations)
-        locations = np.where(abs(locations-nearest)<1e-8,nearest,locations)
-        F = np.interp(locations, np.arange(len(kernel)), kernel.real, left=0., right=0.)
-        F = F+1j*np.interp(locations, np.arange(len(kernel)), kernel.imag, left=0., right=0.)
+        # Evaluate each delayed continuous pulse at the acquisition samples.
+        # Interpolating an integer-delay complex reference does not reproduce
+        # a fractional-delay LFM pulse, even when that delay is on our grid.
+        # The window belongs to the transmitted pulse support, before the
+        # receiver FIR: its shape must not change with the FIR tap count.
+        F = np.empty((len(ranges), n), complex)
+        for ri, distance in enumerate(ranges):
+            relative = input_times-2*distance/C
+            prototype = pulse_envelope(config, relative)
+            if config["processing"]["fast_window"] == "hann":
+                position = relative*fs
+                near = np.rint(position)
+                position = np.where(abs(position-near)<1e-8, near, position)
+                taper = np.where((position >= 0) & (position <= n_pulse-1),
+                                 .5-.5*np.cos(2*np.pi*position/(n_pulse-1)), 0.)
+                prototype *= taper
+            matched = sum(b*prototype[j:j+n] for j,b in enumerate(taps))
+            F[ri] = np.conj(matched)/energy
     F *= output_gate[None, :]
     H = np.zeros((len(ranges), len(input_times)), complex)
     for j, b in enumerate(taps):
@@ -207,7 +215,7 @@ def spatial_transmit_weights(config, plan=None):
     plan = event_plan(config) if plan is None else plan
     a = config["array"]
     k = 2*np.pi*float(config["waveform"]["fc_hz"])/C
-    steer = np.exp(-1j*k*(np.asarray(a["tx_positions_m"])@direction(a["pointing_deg"])))
+    steer = np.exp(1j*k*(np.asarray(a["tx_positions_m"])@direction(a["pointing_deg"])))
     return np.asarray(plan["weights"])*steer[None, :]
 
 
@@ -240,19 +248,30 @@ def _path_template(config, plan, op, path, rcs=1., cancel=None):
             if w["kind"] == "fmcw":
                 slope = float(w["bandwidth_hz"])/float(w["ramp_s"])
                 active = (u >= -1e-15) & (u < float(w["ramp_s"])-1e-15)
-                envelope = np.exp(1j*(2*np.pi*slope*delay*sample_times-np.pi*slope*delay**2)) * active
+                # rx_minus * conj(tx_minus), for an up-chirp centered at fc.
+                envelope = np.exp(1j*(2*np.pi*slope*delay*sample_times-np.pi*slope*delay**2
+                                     -np.pi*float(w["bandwidth_hz"])*delay)) * active
                 rf = fc+slope*(u-float(w["ramp_s"])/2)
             else:
                 envelope = pulse_envelope(config, u)
+                active = abs(envelope) > 0
                 rf = fc + (float(w["bandwidth_hz"])/float(w["pulse_width_s"])*(u-float(w["pulse_width_s"])/2) if w["kind"] == "lfm" else np.zeros_like(u))
             # The wavelength in the radar amplitude uses the specified carrier
             # (narrowband antenna/RCS model); atmospheric/Fresnel coefficients
             # may vary over the actual chirp's instantaneous RF frequency.
-            rf = np.maximum(1., rf)
-            coeff = coefficient_for_path(rf, path, config["propagation"])
-            atten = attenuation_for_path(rf, path, config["propagation"]["atmosphere"])
-            fast = math.sqrt(power)*envelope*coeff*atten
-            fast *= np.exp(-2j*np.pi*fc*delay+2j*np.pi*fd*sample_times)
+            # The pulse is identically zero outside its support. Evaluating
+            # an extrapolated RF there can spuriously fail a valid ITU band.
+            # Frequencies in the actual pulse are never clipped or replaced.
+            fast = np.zeros(len(sample_times), complex)
+            if np.any(active):
+                coeff = coefficient_for_path(rf[active], path, config["propagation"])
+                # Fresnel is supplied for exp(+j omega t); our I/Q is its
+                # conjugate. User custom phase is already receiver-I/Q phase.
+                if path.get("ground_bounces", 0):
+                    coeff = np.conj(coeff)
+                atten = attenuation_for_path(rf[active], path, config["propagation"]["atmosphere"])
+                fast[active] = math.sqrt(power)*envelope[active]*coeff*atten
+            fast *= np.exp(2j*np.pi*fc*delay+2j*np.pi*fd*sample_times)
             slow = weights[:, it]*np.exp(2j*np.pi*fd*times)
             out[:, ir, :] += slow[:, None]*fast[None, :]
     out *= op["input_gate"][None, None, :]
@@ -260,32 +279,15 @@ def _path_template(config, plan, op, path, rcs=1., cancel=None):
 
 
 def _path_observability(config, op, path):
-    w = config["waveform"]
-    delay = float(path["delay_s"])
-    fd = float(path["doppler_hz"])
-    stride = int(config["array"]["tx_count"]) if config["array"]["mode"] in ("tdm","cdm") else 1
-    velocity_limit = 1/(2*float(w["pri_s"])*stride)
-    unambiguous = -velocity_limit <= fd < velocity_limit
-    if w["kind"] == "fmcw":
-        fb = float(w["bandwidth_hz"])/float(w["ramp_s"])*delay+fd
-        limit = min(float(w["rx_bandwidth_hz"]), float(w["fs_hz"])/2)
-        full = float(w["adc_start_s"]) >= delay and op["adc_times_s"][-1]-delay < float(w["ramp_s"])
-        settled = op["input_times_s"][0] >= delay and op["input_times_s"][-1]-delay < float(w["ramp_s"])
-        apparent = C*fb/(2*float(w["bandwidth_hz"])/float(w["ramp_s"]))
-        in_range = 0 <= apparent <= float(w["range_max_m"])
-        okay = full and settled and 0 <= fb < limit and unambiguous and in_range
-        return {"path":path["name"],"observable":bool(okay),"complete_echo":bool(full),
-                "filter_settled":bool(settled),"beat_hz":fb,"if_limit_hz":limit,"delay_s":delay,
-                "apparent_range_m":apparent,"within_processed_range":bool(in_range),"unambiguous_doppler":bool(unambiguous)}
-    opening = float(w["pulse_width_s"])+float(w["recovery_s"])
-    end = float(w["samples"])/float(w["fs_hz"])
-    full = delay >= opening and delay+float(w["pulse_width_s"]) <= min(end,float(w["pri_s"]))
-    tail = op["filter_history_samples"]/float(w["fs_hz"])
-    settled = delay-tail >= opening and delay+float(w["pulse_width_s"])+tail <= min(end,float(w["pri_s"]))
-    in_range = delay*C/2 <= float(w["range_max_m"])
-    return {"path":path["name"],"observable":bool(full and settled and unambiguous and in_range),"complete_echo":bool(full),"filter_settled":bool(settled),
-            "delay_s":delay,"receive_open_s":opening,"receive_end_s":end,
-            "within_processed_range":bool(in_range),"unambiguous_doppler":bool(unambiguous)}
+    observation = {"path":path["name"],
+                   **observable_path(config, path["delay_s"], path["doppler_hz"])}
+    # Share the same geometric contract with the independent budget. This
+    # checks only supplied channel coordinates, never an unknown element size.
+    observation["far_field"] = far_field_spec(config, path["tx_distance_m"], path["rx_distance_m"])
+    covered = observation["far_field"]["valid"]
+    observation["physical_observable"] = bool(observation["physical_observable"] and covered)
+    observation["observable"] = bool(observation["observable"] and covered)
+    return observation
 
 
 def synthesize_raw(config, seed=None, signal=True, noise=True, clutter=True, cancel=None, progress=None):
@@ -378,7 +380,7 @@ def slow_beam_operator(config, block_index=0):
     # average of decoded virtual channels.
     reference = np.asarray(plan["weights"])[take].sum(axis=1)
     rx_user = complex_weights(a["rx_weights"],1.)
-    rx_phase = np.exp(2j*np.pi*float(w["fc_hz"])/C*(np.asarray(a["rx_positions_m"])@direction(a["pointing_deg"])))
+    rx_phase = np.exp(-2j*np.pi*float(w["fc_hz"])/C*(np.asarray(a["rx_positions_m"])@direction(a["pointing_deg"])))
     rx_match = np.conj(rx_user*rx_phase)
     time_match = np.exp(-2j*np.pi*frequencies[:,None]*times[None,:])*np.conj(reference)[None,:]*taper[None,:]
     functional = time_match[:,:,None]*rx_match[None,None,:]
@@ -591,7 +593,9 @@ def simulate(config, seed=None, signal=True, noise=True, clutter=True, cancel=No
     arrays,candidates=process_raw(raw,p,cancel,progress,op)
     warnings=list(meta["warnings"])
     if any(not x["observable"] for x in meta["observability"]):
-        warnings.append("至少一条目标路径超出完整回波/IF采集条件；采样窗内截断和频率混叠保留，未重建更早 PRI 的历史目标回波，不能视为完整参考通过。")
+        warnings.append("至少一条目标路径超出完整回波/IF采集/处理网格或已知阵列坐标的远场条件；采样窗内截断和频率混叠保留，未重建更早 PRI 的历史目标回波，不能视为完整参考通过。")
+    if any(not x["far_field"]["valid"] for x in meta["observability"]):
+        warnings.append("已知 Tx/Rx 通道坐标不满足对应路径的 2D²/λ 远场距离；当前仍为线性化远场演示，结果不可作为已验证物理覆盖。该检查不验证未提供的真实天线单元口径。")
     if p["waveform"]["kind"]!="fmcw":
         count=float(p["waveform"]["pulse_width_s"])*float(p["waveform"]["fs_hz"])
         if abs(count-round(count))>1e-8:
@@ -618,9 +622,12 @@ def simulate(config, seed=None, signal=True, noise=True, clutter=True, cancel=No
                       "reported_power":"exact thermal expectation of ungated linear beam, summed over independent looks",
                       "enabled_in_realization":bool(noise and p["radar"]["noise_enabled"])},
              "model":{"velocity_sign":"positive receding -> positive Doppler; FMCW positive delay -> positive beat",
+                      "complex_convention":"negative-time analytic I/Q exp(-j omega t); FMCW rx * conj(tx); fc is chirp center; custom phase is receiver-I/Q phase",
                       "propagation":"coherent path sum before physical-Rx processing; carrier phase applied once",
                       "motion":"fixed envelope delay over CPI plus path Doppler; no range migration",
                       "amplitude":"carrier-wavelength narrowband antenna/RCS amplitude; frequency-dependent atmosphere/reflection",
+                      "pulse_match":"continuous fractional-delay pulse sampled directly; Hann on pulse support before receiver FIR; exact linear noise coefficients",
+                      "array_geometry":"linearized far-field element delays; known channel-coordinate extents checked against 2D^2/lambda on each path leg; antenna-element aperture unspecified",
                       "ddm_reconstruction":"pivoted QR of sqrt(slow_window) times known Tx event weights and candidate Doppler; residual/data energy summed over physical Rx and looks",
                       "noncoherent":"sum of squared magnitudes of disjoint complete-code coherent blocks"}}
     _progress(progress,1.,"真实采样链计算完成")

@@ -78,7 +78,7 @@ def test_budget_input_and_inverse_remain_source_contract(kind):
     assert p==before and arrays=={} and r['kind']=='budget' and r['valid']
     assert r['config_hash']==config.config_hash(p)
     assert r['inverse']['required_power_w']>0
-    assert r['source']['version']=='1.0.0' and r['algorithm_version']=='1.0.0'
+    assert r['source']['version']=='1.0.1' and r['algorithm_version']=='1.0.1'
 
 
 def test_unreachable_budget_retains_kind_and_can_be_exported(tmp_path):
@@ -104,7 +104,7 @@ def test_all_source_experiments_work_through_native_service(action):
 
 
 def test_resource_guard_rejects_large_trial_output_before_engine(monkeypatch):
-    p=small();p['experiment'].update(trials=1000000,memory_mib=64)
+    p=small();p['experiment'].update(trials=1000000,memory_mib=128)
     monkeypatch.setattr(statistics,'execute',lambda *args,**kw:pytest.fail('Oversized trial records must not run'))
     with pytest.raises(ValueError,match='逐次统计记录'):service.execute('statistics',p)
     assert service.execute('budget',p)[0]['valid']
@@ -135,7 +135,7 @@ def test_malformed_or_unknown_native_schema_is_rejected(version):
 def test_apply_calibration_requires_sufficient_count_and_matching_cut():
     from arraylab.features.equation.detection import calibration_fingerprint
     p=small();p['detection']['pfa']=.25
-    r={'kind':'calibration','ready':True,'verified':False,'trials':80,'pfa':.25,'factor':3.,'calibration_hash':calibration_fingerprint(p)}
+    r={'kind':'calibration','ready':True,'verified':False,'trials':80,'pfa':.25,'factor':3.,'calibration_hash':calibration_fingerprint(p),'algorithm_version':'1.0.1'}
     original=deepcopy(p);updated=service.apply_calibration(p,r)
     assert p==original and updated['detection']['threshold_mode']=='calibrated'
     assert updated['detection']['calibration_factor']==3 and r['verified'] is False

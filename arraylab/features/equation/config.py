@@ -6,6 +6,7 @@ import json
 import math
 import numpy as np
 from scipy.linalg import hadamard
+from .receiver_spec import receiver_layout
 
 C = 299792458.0
 K = 1.380649e-23
@@ -102,7 +103,13 @@ def target_position(p,target):
 
 
 def complex_weights(values, norm=1.):
-    a=np.asarray(values,float); w=a[:,0]+1j*a[:,1]
+    a=np.asarray(values,float)
+    # Weight scale carries no physical meaning. Scale before squaring so that
+    # finite, nonzero weights remain equivalent even near float64 extremes.
+    scale=float(np.max(abs(a)))
+    if not math.isfinite(scale) or scale == 0:
+        raise ValueError("复权重须为有限非零数组")
+    a=a/scale; w=a[:,0]+1j*a[:,1]
     return w*math.sqrt(norm/float(np.vdot(w,w).real))
 
 
@@ -126,11 +133,32 @@ def event_plan(p):
 def resource_estimate(p):
     w=p["waveform"];a=p["array"];e=int(w["pulses"]);ns=int(w["samples"]);rx=int(a["rx_count"])
     nr=int(w["range_fft"]);nv=int(w["doppler_fft"]);nt=int(a["tx_count"])
-    # Include input/filtered/FFT intermediates, receiver matrices, range-dependent path buffers and exports.
+    looks=int(p["processing"]["looks"]);block=e//looks
+    ni=receiver_layout(p)["input_samples"]
+    slots=int(a["ddm_slots"]) if a["mode"]=="ddm" else nt if a["mode"] in ("tdm","cdm") else 1
+    # Conservative sum of simultaneously retained arrays and expression
+    # workspaces. In particular the slow receiver is O(Nv*events*Rx), not
+    # O(Nv*range). No large arrays are allocated to perform this estimate.
     raw=e*rx*ns*16
-    estimate=8*raw+4*e*rx*nr*16+int(p["processing"]["looks"])*nv*nr*nt*rx*32+nr*ns*32+16*1024**2
+    parts={
+        "input_and_synthesis_bytes":8*e*rx*ni*16,
+        "event_schedule_bytes":6*e*nt*16+e*32,
+        "fast_operator_workspace_bytes":4*nr*(ns+ni)*16+16*(ns+ni),
+        "fast_outputs_bytes":4*e*rx*nr*16+raw,
+        "slow_operator_workspace_bytes":4*nv*block*16+3*nv*block*rx*16,
+        "decoded_and_beam_bytes":3*looks*nv*slots*rx*nr*16+3*looks*nv*nr*16,
+        "power_maps_bytes":4*nv*slots*nr*8+8*nv*nr*8,
+        # Existing unrelated fast operators may remain in the bounded cache.
+        "bounded_cache_bytes":48*1024**2,
+        "overhead_bytes":16*1024**2,
+    }
+    if a["mode"]=="ddm":
+        parts["ddm_qr_workspace_bytes"]=(4*block*nt*16+3*nt*nt*16+
+            4*block*rx*nr*16+2*nt*rx*nr*16+6*nv*nr*8)
+    estimate=sum(parts.values())
     return {"raw_bytes":raw,"estimated_bytes":estimate,"estimated_mib":estimate/1024**2,
-            "limit_mib":p["experiment"]["memory_mib"]}
+            "limit_mib":p["experiment"]["memory_mib"],"components":parts,
+            "method":"conservative retained arrays plus expression workspaces and bounded cache"}
 
 
 def validate_config(p):
@@ -169,7 +197,7 @@ def validate_config(p):
             pos=np.asarray(a[prefix+"_positions_m"],float);weights=np.asarray(a[prefix+"_weights"],float)
             if pos.shape!=(count,3) or not np.isfinite(pos).all():errors.append(prefix+" 坐标须为 [通道数,3] 有限米制数组")
             if weights.shape!=(count,2) or not np.isfinite(weights).all() or not np.any(weights):errors.append(prefix+" 复权重须为非零的 [通道数,2] 数组")
-            if prefix=="tx" and a["mode"]=="tdm" and r["power_basis"]=="total" and weights.shape==(count,2) and np.any(np.sum(weights**2,axis=1)==0):errors.append("TDM 总功率模式每个发射时隙均须有非零 Tx 权重")
+            if prefix=="tx" and a["mode"]=="tdm" and r["power_basis"]=="total" and weights.shape==(count,2) and np.any(~np.any(weights!=0,axis=1)):errors.append("TDM 总功率模式每个发射时隙均须有非零 Tx 权重")
         if np.asarray(a["pointing_deg"]).shape!=(2,) or not np.isfinite(a["pointing_deg"]).all():errors.append("扫描方向须为有限的 [方位,俯仰] 度数组")
         if w["kind"]=="fmcw":
             if w["adc_start_s"]+w["samples"]/w["fs_hz"]>w["ramp_s"]*(1+1e-12):errors.append("ADC 窗口超出调频 ramp")
@@ -201,6 +229,10 @@ def validate_config(p):
             for key in ("departure_deg","arrival_deg"):
                 if np.asarray(path[key]).shape!=(2,) or not np.isfinite(path[key]).all():errors.append(key+" 须为 [方位,俯仰]")
         atm=pr["atmosphere"]
+        rf_half=w["bandwidth_hz"]/2 if w["kind"] in ("fmcw","lfm") else 0.
+        rf_low,rf_high=w["fc_hz"]-rf_half,w["fc_hz"]+rf_half
+        if rf_low<=0:errors.append("实际调频频带的下边缘 fc−B/2 必须大于 0 Hz")
+        if atm["enabled"] and (rf_low<1e9 or rf_high>1e12):errors.append("启用大气模型时，完整实际射频频带须在 ITU 支持的 1–1000 GHz 内")
         finite(atm["temperature_k"],"气温 K",150,350);finite(atm["pressure_hpa"],"干空气气压 hPa",1,1200)
         finite(atm["vapor_density_g_m3"],"水汽密度",0,100);finite(atm["rain_rate_mm_h"],"雨强",0,500);finite(atm["polarization_tilt_deg"],"极化倾角",-180,180)
         choice(cl["kind"],["none","gaussian","edge","k"],"杂波模型")
@@ -231,6 +263,8 @@ def validate_config(p):
         for key in ("seed",):finite(e[key],key,0,2**32-1,True)
         if e["distance_min_m"]<=0 or e["distance_max_m"]<=e["distance_min_m"]:errors.append("距离扫描须满足 0 < 下限 < 上限")
         if not errors:
+            if receiver_layout(p)["input_record_duration_s"]>w["pri_s"]*(1+1e-12):
+                errors.append("含 FIR 噪声历史的相邻采集记录重叠；请缩短采样窗、增加 PRI 或扩大接收带宽")
             mem=resource_estimate(p)
             if mem["estimated_mib"]>e["memory_mib"]:errors.append(f"预计内存 {mem['estimated_mib']:.1f} MiB 超过预算 {e['memory_mib']} MiB")
     except (ValueError,TypeError,KeyError,OverflowError,ZeroDivisionError) as exc:

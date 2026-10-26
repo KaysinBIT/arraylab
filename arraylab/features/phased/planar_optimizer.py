@@ -125,12 +125,12 @@ def build_grid(c,step,boundary_count):
         for u,v,kind in [(math.cos(t),math.sin(t),'disk'),(c['expectedU']+c['radiusU']*math.cos(t),c['expectedV']+c['radiusV']*math.sin(t),'ellipse')]:
             if u*u+v*v<=1+1e-10:us.append(u);vs.append(v);kinds.append(kind)
     u=np.asarray(us);v=np.asarray(vs);q=ellipse(c,u,v)
-    return dict(c=c,step=step,nx=nx,ny=ny,map=mapping,u=u,v=v,q=q,kinds=kinds,outside=np.flatnonzero(q>=1-1e-9),boundary=np.array([i for i,k in enumerate(kinds) if k=='disk'],int))
+    return dict(c=c,step=step,loU=lu,loV=lv,nx=nx,ny=ny,map=mapping,u=u,v=v,q=q,kinds=kinds,outside=np.flatnonzero(q>=1-1e-9),boundary=np.array([i for i,k in enumerate(kinds) if k=='disk'],int))
 
 
 def local_peaks(grid,values,within):
     mapping=grid['map'];center=mapping[1:-1,1:-1];valid=center>=0;safe=np.maximum(center,0);value=values[safe]
-    valid &= value>-79.999
+    valid &= value>-299.999
     if within:valid &= grid['q'][safe]<1-1e-8
     strict=np.zeros(center.shape,bool)
     for j in range(3):
@@ -166,21 +166,75 @@ def base_case(c):
             'resolved':False,'feasible':False,'issues':[]}
 
 
-def finish_case(r,c,o,peak,side=None,hx=None,hy=None,clipped=False):
+def finish_case(r,c,o,peak,side=None,hx=None,hy=None,clipped=False,connectivity_unresolved=False):
     if peak is None:r['issues'].append('未解析期望方向附近局部二维峰值。');return r
     uc=math.sin(c['scanX']*E.RAD);vc=math.sin(c['scanY']*E.RAD);wc=math.sqrt(max(0,1-uc*uc-vc*vc));wp=math.sqrt(max(0,1-peak['u']**2-peak['v']**2))
     error=math.acos(float(np.clip(uc*peak['u']+vc*peak['v']+wc*wp,-1,1)))/E.RAD
     r.update(peakU=peak['u'],peakV=peak['v'],peakDb=peak['value'],sll2D=side['value']-peak['value'] if side else None,hpbwX=hx,hpbwY=hy,
              sidelobeU=side['u'] if side else None,sidelobeV=side['v'] if side else None,pointingErrorDeg=error)
-    if clipped:r['issues'].append('排除椭圆内可见域边界达到半功率，主瓣可能被截断。')
+    if clipped:r['issues'].append('与预期主峰连通的半功率区域触及可见域边界，主瓣被边界截断；此检查独立于旁瓣排除椭圆。')
+    if connectivity_unresolved:r['issues'].append('细网格未解析与预期主峰连通的半功率区域。')
     if hx is None or hy is None:r['issues'].append('X/Y切面未解析完整半功率波束。')
     if side is None:r['issues'].append('未解析排除椭圆以外旁瓣区域。')
-    r['resolved']=bool(not clipped and hx is not None and hy is not None and side is not None)
+    r['resolved']=bool(not clipped and not connectivity_unresolved and hx is not None and hy is not None and side is not None)
     if r['sll2D'] is not None and r['sll2D']>o['targetSll']+1e-8:r['issues'].append('区域旁瓣超限。')
     if hx is not None and hx>o['maxHpbwX']+1e-8:r['issues'].append('X切面HPBW超限。')
     if hy is not None and hy>o['maxHpbwY']+1e-8:r['issues'].append('Y切面HPBW超限。')
     r['feasible']=bool(r['resolved'] and r['sll2D']<=o['targetSll']+1e-8 and hx<=o['maxHpbwX']+1e-8 and hy<=o['maxHpbwY']+1e-8)
     return r
+
+
+def connected_half_power_boundary(grid,values,peak,field=None):
+    """Trace only the intended peak's component, independently of the SLL mask."""
+    mapping=grid['map'];nx=grid['nx'];ny=grid['ny'];step=grid['step'];level=peak['value']-HALF
+    def above(value):return value is not None and math.isfinite(value) and value>=level-1e-8
+    def point(index):return (float(grid['u'][index]),float(grid['v'][index]))
+    def segment(a,b):
+        if field is None:return True
+        count=max(2,math.ceil(math.hypot(a[0]-b[0],a[1]-b[1])/(step/3)))
+        return all(above(field(a[0]+(b[0]-a[0])*i/count,a[1]+(b[1]-a[1])*i/count)) for i in range(1,count))
+    mask=(mapping>=0)&np.isfinite(values[np.maximum(mapping,0)])&(values[np.maximum(mapping,0)]>=level-1e-8)
+    candidates=np.flatnonzero(mask.ravel());flat=mapping.ravel();start=None;distance=math.inf
+    for gi in candidates:
+        idx=int(flat[gi]);p=point(idx);d=(p[0]-peak['u'])**2+(p[1]-peak['v'])**2
+        if d<distance and d<=4*step*step and segment((peak['u'],peak['v']),p):start=int(gi);distance=d
+    if start is None:return {'clipped':False,'resolved':False}
+    if field is None:
+        # Same 8-neighbor reachability as the reference queue, executed in C for
+        # the many search iterations. Fine links still use independent samples.
+        from scipy.ndimage import label
+        labels,_=label(mask,structure=np.ones((3,3),int));connected=labels==labels.ravel()[start]
+    else:
+        connected=np.zeros((ny,nx),bool);connected.ravel()[start]=True;queue=[start]
+        for gi in queue:
+            row,col=divmod(gi,nx);p=point(flat[gi])
+            for dy in (-1,0,1):
+                for dx in (-1,0,1):
+                    if dx==dy==0:continue
+                    x=col+dx;y=row+dy
+                    if not 0<=x<nx or not 0<=y<ny or connected[y,x] or not mask[y,x]:continue
+                    if segment(p,point(mapping[y,x])):connected[y,x]=True;queue.append(y*nx+x)
+    ids=mapping[connected]
+    maximum=float(np.max(grid['u'][ids]**2+grid['v'][ids]**2))
+    if math.sqrt(maximum)<1-2*step:return {'clipped':False,'resolved':True}
+    def touches(p,value):
+        if not above(value):return False
+        col=E.js_round((p[0]-grid['c']['expectedU'])/step-grid['loU']);row=E.js_round((p[1]-grid['c']['expectedV'])/step-grid['loV'])
+        for dy in range(-2,3):
+            for dx in range(-2,3):
+                x=col+dx;y=row+dy
+                if not 0<=x<nx or not 0<=y<ny or not connected[y,x]:continue
+                q=point(mapping[y,x])
+                if math.hypot(q[0]-p[0],q[1]-p[1])<=2*step and segment(q,p):return True
+        return False
+    if field is not None:
+        for i in range(720):
+            angle=2*math.pi*i/720;p=(math.cos(angle),math.sin(angle))
+            if touches(p,field(*p)):return {'clipped':True,'resolved':True}
+    else:
+        for idx in grid['boundary']:
+            if touches(point(idx),values[idx]):return {'clipped':True,'resolved':True}
+    return {'clipped':False,'resolved':True}
 
 
 def coarse_case(grid,values,o):
@@ -191,8 +245,8 @@ def coarse_case(grid,values,o):
     peak=peaks[0];outside=grid['outside'];side=None
     if len(outside):
         index=int(outside[np.argmax(values[outside])]);side=dict(u=float(grid['u'][index]),v=float(grid['v'][index]),value=float(values[index]))
-    boundary=grid['boundary'];clipped=bool(np.any((grid['q'][boundary]<1)&(values[boundary]>=peak['value']-HALF)))
-    return finish_case(r,c,o,peak,side,row_width(grid,values,peak,'x'),row_width(grid,values,peak,'y'),clipped)
+    connectivity=connected_half_power_boundary(grid,values,peak)
+    return finish_case(r,c,o,peak,side,row_width(grid,values,peak,'x'),row_width(grid,values,peak,'y'),connectivity['clipped'],not connectivity['resolved'])
 
 
 def summary(points,rows):
@@ -203,7 +257,7 @@ def summary(points,rows):
 
 
 def objective(s,o):
-    score=0 if all(c['feasible'] for c in s['cases']) else 1000;worst=-80
+    score=0 if all(c['feasible'] for c in s['cases']) else 1000;worst=-300
     for c in s['cases']:
         if not c['resolved'] or any(not E.finite(c[k]) for k in ('sll2D','hpbwX','hpbwY')):score+=10000;continue
         worst=max(worst,c['sll2D'])
@@ -213,15 +267,7 @@ def objective(s,o):
 
 
 def field_function(config,elements,cancelled=None):
-    x=np.array([p['x'] for p in elements]);y=np.array([p['y'] for p in elements]);a=np.array([p['amplitude'] for p in elements]);phase=np.array([p['phaseDeg'] for p in elements])*E.RAD
-    k=2*math.pi*config['frequencyGHz']/config['referenceGHz'];den=float(a.sum()**2);power=config['elementPower']
-    def field(u,v):
-        check_cancelled(cancelled)
-        p=k*(x*u+y*v)+phase;re=float(np.cos(p)@a);im=float(np.sin(p)@a)
-        result=(re*re+im*im)/den
-        if power:result*=max(0,1-u*u-v*v)**(power/2)
-        return max(-80.,10*math.log10(max(1e-8,result)))
-    return field
+    return E.scalar_field(config,elements,cancelled=cancelled)
 
 
 def hill(field,start,step,allowed):
@@ -296,8 +342,8 @@ def fine_case(base,o,points,c,step,*,cancelled=None):
     outside=[p for p in local_peaks(grid,values,False) if ellipse(c,p['u'],p['v'])>=1]
     for p in outside[:16]:keep(hill(field,p,step/2,lambda u,v:ellipse(c,u,v)>=1-1e-10))
     keep(boundary_peak(field,c,'disk',720,True));keep(boundary_peak(field,c,'ellipse',720,True))
-    main_boundary=boundary_peak(field,c,'disk',720,False);clipped=main_boundary is not None and main_boundary['value']>=peak['value']-HALF-1e-8
-    return finish_case(r,c,o,peak,side,fine_width(field,peak,'x'),fine_width(field,peak,'y'),clipped)
+    connectivity=connected_half_power_boundary(grid,values,peak,field)
+    return finish_case(r,c,o,peak,side,fine_width(field,peak,'x'),fine_width(field,peak,'y'),connectivity['clipped'],not connectivity['resolved'])
 
 
 def evaluate_layout(config,options,points,quality='fine',*,workers=None,cancelled=None,progress=None):
@@ -466,12 +512,12 @@ def optimize(config=None,options=None,*,workers=None,cancelled=None,progress=Non
         '反演对称二维布局；连续模式优化真实坐标与共享电压幅度，格点模式仅抽稀单位幅度位置。',
         '二维旁瓣为缩放排除椭圆外全可见圆盘峰值相对期望局部峰，不是第一零点旁瓣。',
         '一组坐标和共享幅度联合用于全部频率×扫描方向；HPBW仅约束穿过实际峰的X/Y切面。',
-        '先保留全部约束可行性，再比较旁瓣和宽度。细验证包含峰细化、可见域/椭圆边界及半功率截断。',
+        '先保留全部约束可行性，再比较旁瓣和宽度。细验证追踪独立于排除椭圆的半功率连通区域，不将分离栅瓣误作主瓣截断。',
         '有限采样和有界搜索不证明全域或全局最优。',
         '细验证确认改善。' if improved else '细验证未确认改善，回退完整初始布局。',
         '离散联合约束全部达标。' if after['feasible'] else '至少一个工况未达标，仅可作为候选。'],
         verification=dict(coarseUvStep=pre['step'],fineUvStep=min(.035,.25/electrical(base,o)),boundarySamples=720,cutStepDeg=.1,peakRefinementUv=.00001,
-            mask='ellipse centered at ideal intended direction; radii(reference)*f0/f',criterion='full visible disk outside explicit ellipse',fineBaselineScore=objective(before,o),fineCandidateScore=objective(candidate,o),baselineFallback=not improved,finiteSampling=True))
+            mask='ellipse centered at ideal intended direction; radii(reference)*f0/f',criterion='full visible disk outside explicit ellipse',mainlobeBoundaryCheck='sampled half-power connected component, independent of SLL mask; intermediate field checks on fine-grid links',numericalFloorDb=-300,fineBaselineScore=objective(before,o),fineCandidateScore=objective(candidate,o),baselineFallback=not improved,finiteSampling=True))
     if continuous:
         final_pairs=best if improved else initial_pairs;changes=[dict(pairIndex=i,before=a,after=b,coordinateMoved=math.hypot(a['x']-b['x'],a['y']-b['y'])>1e-9,amplitudeChanged=abs(a['amplitude']-b['amplitude'])>1e-9) for i,(a,b) in enumerate(zip(initial_pairs,final_pairs))]
         result['diagnostics']=dict(coordinateMovedCount=2*sum(p['coordinateMoved'] for p in changes),amplitudeChangedCount=2*sum(p['amplitudeChanged'] for p in changes),initialization=o['initialization'],sharedWeights=True,acceptedPositionMoves=accepted_position,acceptedAmplitudeMoves=accepted_amplitude,pairChanges=changes)

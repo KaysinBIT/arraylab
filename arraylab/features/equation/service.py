@@ -1,4 +1,4 @@
-"""Native services over the unchanged, independent budget and receiver cores."""
+"""Native services over the independent budget and receiver source cores."""
 from copy import deepcopy
 import json
 import math
@@ -49,6 +49,25 @@ def default_configuration(kind='fmcw', frequency_ghz=77):
 def normalize_configuration(configuration=None):
     """Normalize/validate source schema 1, never launch numerical experiments."""
     return checked_config(_configuration(configuration))
+
+
+def normalize_record_configuration(configuration):
+    """Read an old immutable snapshot without enforcing new execution limits.
+
+    The host still validates the original configuration digest and array list.
+    This function never clears an old calibration or claims it is reusable.
+    """
+    return normalize_config(_configuration(configuration))
+
+
+def record_compatibility(result):
+    result=result if isinstance(result,dict) else {}
+    version=result.get('source',{}).get('version') if isinstance(result.get('source'),dict) else None
+    algorithm=result.get('algorithm_version')
+    current=algorithm==SOURCE_VERSION and version in (None,SOURCE_VERSION)
+    return {'current':current,'source_version':version,'algorithm_version':algorithm,
+            'requires_recompute':not current,
+            'message':'' if current else '该记录使用旧版或未知雷达方程算法；仅保留原始快照，不能作为修复后模型的验收结论。请重新计算；旧H0校准不可复用。'}
 
 
 def validate_configuration(configuration=None):
@@ -124,6 +143,8 @@ def apply_calibration(configuration, calibration_result):
     report = calibration_result
     if type(report) is not dict or report.get('kind') != 'calibration' or report.get('ready') is not True:
         raise ValueError('该H0校准尚未满足尾部样本条件，不能应用。')
+    if not record_compatibility(report)['current']:
+        raise ValueError('该校准来自旧版或未知算法，请使用当前模型重新校准。')
     trials,pfa=report.get('trials'),report.get('pfa')
     if (type(trials) is not int or trials<1 or type(pfa) not in (int,float) or not math.isfinite(pfa) or
             pfa!=normalized['detection']['pfa'] or trials*pfa<20):

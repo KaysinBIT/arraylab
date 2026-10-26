@@ -7,6 +7,7 @@
 *.spec text eol=lf
 *.cmd text eol=crlf
 *.png binary
+*.npz binary
 # Generated Three.js contains upstream GLSL string literals; preserve their text.
 arraylab/shared/resources/radar_scene/scene.bundle.js -whitespace linguist-generated=true
 # Keep upstream license/attribution text verbatim, including intentional spacing.

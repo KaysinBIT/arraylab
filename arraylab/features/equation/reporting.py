@@ -5,6 +5,7 @@ import io
 import json
 import numpy as np
 from arraylab.shared.simulation_io import clean_json
+from .provenance import SOURCE_VERSION
 
 def _curve_svg(xs,ys,title,xlabel,ylabel):
     values=[(float(x),float(y)) for x,y in zip(xs,ys) if x is not None and y is not None and np.isfinite(x) and np.isfinite(y)]
@@ -61,16 +62,19 @@ def _report(result,plots=""):
 
 def _csv_result(result):
     output=io.StringIO(newline="");writer=csv.writer(output)
+    legacy=result.get('algorithm_version')!=SOURCE_VERSION
     if result["kind"] in ("distance","roc"):
-        writer.writerow(["range_m" if result["kind"]=="distance" else "threshold_db","pd","pd_lower","pd_upper","pfa","pfa_lower","pfa_upper","status"])
+        prefix='legacy_' if legacy else ''
+        writer.writerow(["range_m" if result["kind"]=="distance" else "threshold_db",*[prefix+x for x in ("pd","pd_lower","pd_upper","pfa","pfa_lower","pfa_upper","status")]])
         for p in result["points"]:
             pd=p.get("pd") or {};pf=p.get("pfa") or {}
             writer.writerow([p.get("range_m",p.get("threshold_db")),pd.get("estimate"),pd.get("lower"),pd.get("upper"),pf.get("estimate"),pf.get("lower"),pf.get("upper"),p.get("status","")])
     elif result.get("detections"):
-        fields=["range_m","velocity_mps","power_dbw","cell_snr_db"];writer.writerow(fields)
-        for d in result["detections"]:writer.writerow([d.get(k) for k in fields])
+        fields=["range_m","velocity_mps","power_dbw","cell_power_to_noise_db"];writer.writerow(fields)
+        for d in result["detections"]:writer.writerow([d.get(k,d.get('cell_snr_db') if k=='cell_power_to_noise_db' else None) for k in fields])
     else:
         writer.writerow(["metric","value"])
+        if legacy:writer.writerow(['snapshot_notice','旧版或未知算法保存口径，须重新计算；原始数值未修改。'])
         for k,v in result.items():
             if isinstance(v,(str,int,float,bool)):writer.writerow([k,v])
             elif isinstance(v,dict) and "estimate" in v:
@@ -82,9 +86,11 @@ def math_ceil(x):return int(np.ceil(x))
 
 def render_report(result, arrays=None):
     saved=clean_json(result,complex_style='pair')
+    if result.get('algorithm_version')!=SOURCE_VERSION:
+        saved['warnings']=[*saved.get('warnings',[]),'旧版或未知算法保存快照；其中统计和验收口径不是当前1.0.1模型的结论，请重新计算。']
     return _report(saved,_heatmap_svg(arrays or {})).replace(
         '<p class="tag">EquationLab · 合成场景 / 可复现计算</p>',
-        '<p class="tag">ArrayLab · 雷达方程验证 · EquationLab 1.0计算组件 · 合成场景</p>')
+        '<p class="tag">ArrayLab · 雷达方程验证 · EquationLab '+html.escape(str(result.get('algorithm_version','未说明')))+'计算快照 · 合成场景</p>')
 
 
 def result_csv(result):

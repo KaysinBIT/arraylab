@@ -10,8 +10,9 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration', 'pulse-scene', 'fmcw-scene')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration', 'pulse-scene', 'fmcw-scene', 'upstream-sync')
 SCOPES = {
+    'upstream-sync': 'Only the updated phased/equation engines: real worker provenance, legacy snapshots/calibration, persistent notices and selected record/export paths.',
     'fmcw-scene': 'Only FMCW task naming, shared offline 3D scene, A/B snapshots, scene records/export and Pulse shared-resource compatibility.',
     'pulse-scene': 'Only the restored original PulseLab 3D scene: offline rendering, native controls, camera/time records, PNG export and resource lifecycle.',
     'radar-integration': 'Only three new radar components: native workbenches, owned CLI workers, complete records, exports, geospatial import and cancellation.',
@@ -101,7 +102,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'fmcw-scene':
+            if suite == 'upstream-sync':
+                from .upstream_sync import exercise_upstream_sync
+                run_group(report,'upstream-sync',lambda:exercise_upstream_sync(app,window,output,report,check))
+            elif suite == 'fmcw-scene':
                 from .fmcw_scene import exercise_fmcw_scene
                 run_group(report,'fmcw-scene',lambda:exercise_fmcw_scene(app,window,output,report,check))
             elif suite == 'pulse-scene':

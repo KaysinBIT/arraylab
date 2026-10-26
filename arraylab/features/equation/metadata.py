@@ -80,11 +80,11 @@ HELP = {
  'array.tx_positions_m':'坐标为米，x前向、y左向、z向上；留空按当前载频生成默认阵列。',
  'array.tx_weights':'每行实部、虚部。发射归一化sum|w|²=Tx数；总功率/每Tx功率定义另选。',
  'array.rx_weights':'每行实部、虚部。接收权重归一化sum|w|²=1；相干合并收益单独计算。',
- 'propagation.custom_paths':'始终保留直达项；额外时延、损耗、相位及多普勒相对直达定义。',
+ 'propagation.custom_paths':'始终保留直达项；额外时延、损耗、相位及多普勒相对直达定义。相位按接收I/Q口径输入，1.0.1统一负时间指数约定。',
  'propagation.atmosphere.pressure_hpa':'这是干空气气压，不是总气压。气象温度与接收噪声温度分开。',
- 'processing.looks':'在每个完整相干块内解码，块间加功率；不把非相干功率和当单次指数分布。',
- 'detection.threshold_mode':'H0校准只覆盖相同接收器、背景和CUT；ready不等于已独立验证。',
- 'experiment.cut_range_m':'SNR/Pfa校核用预先指定CUT，不能用全图最强峰替代；超出网格明确拒绝。',
+ 'processing.looks':'在每个完整相干块内解码，块间加功率；功率和/噪声和按每块SNR比较，与总能量差10log10(looks)不算处理损耗。',
+ 'detection.threshold_mode':'H0校准只覆盖相同算法版本、接收器、背景和CUT；旧版校准需重做，ready不等于已独立验证。',
+ 'experiment.cut_range_m':'校准/H0/H1/ROC共用预先指定CUT；严格验收还要求CUT覆盖首目标，并核查仅移除首目标的背景触发。超出网格明确拒绝。',
  'experiment.trials':'默认256次为交互预览；H0约需20/Pfa尾部样本才允许应用，稳定核验建议约100/Pfa。',
  'experiment.memory_mib':'分配前检查预计内存，最大8192 MiB；不为满足预算静默降低采样精度。'}
 

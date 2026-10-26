@@ -1,4 +1,4 @@
-"""Qt-free ArrayLab service contract for ArrayStudio 1.2.1 capabilities."""
+"""Qt-free ArrayLab service contract for ArrayStudio 1.2.2 capabilities."""
 from copy import deepcopy
 import math
 import numpy as np
@@ -88,7 +88,8 @@ def execute(kind,configuration=None,*,progress=None,cancel=None,workers=None):
     result={'format':'arraylab.phased.result','schema_version':1,'app_version':__version__,'action':kind,'configuration':deepcopy(config),
             'source':{'name':'ArrayStudio','version':engine.SOURCE_VERSION,'archive_sha256':engine.SOURCE_ARCHIVE_SHA256},
             'scan':None,'synthesis':None,'notices':['坐标以参考波长λ0表示；X/Y为方向角，u=sin(X)、v=sin(Y)，不是传统方位/俯仰角。',
-                '理想标量远场分析，不含互耦、全波电磁、射频硬件或实际辐射增益。']}
+                '理想标量远场分析，不含互耦、全波电磁、射频硬件或实际辐射增益。',
+                '切面分析与原始CSV保留至−300 dB数值下限；绘图范围和u–v显示下限不参与旁瓣判定。数值下限不是物理噪声底。']}
     display=deepcopy(config)
     if kind=='scan':
         result['scan']=engine.scan_study(config['array'],config['scan'],workers=workers,cancelled=cancel,
@@ -167,3 +168,12 @@ def array_snapshot(result,index=0):
             'amplitudes':[p['amplitude'] for p in analysis['elements']],
             'phases_deg':[p['phaseDeg'] for p in analysis['elements']],
             'steer_u':math.sin(c['steerX']*engine.RAD),'steer_v':math.sin(c['steerY']*engine.RAD)}
+
+
+def record_compatibility(result):
+    source=result.get('source',{}) if isinstance(result,dict) else {}
+    if not isinstance(source,dict):source={}
+    version=source.get('version')
+    current=version==engine.SOURCE_VERSION and source.get('archive_sha256')==engine.SOURCE_ARCHIVE_SHA256
+    return {'current':current,'source_version':version,
+            'message':'' if current else '此相控阵记录来自旧版或未知版本算法；原结果与馈相快照保持不变。请使用当前版本重新计算并复核旁瓣、波束宽度及约束结论。'}

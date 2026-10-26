@@ -1,6 +1,8 @@
 # 相控阵、雷达方程与脉冲雷达组件
 
-ArrayLab 0.26.0正式版纳入开发阶段接入的三个独立组件，以及FMCW与脉冲共用的离线三维场景。WaveLab 1.4对应任务现名为“FMCW雷达波形设计”；三个新增任务使用独立参数和结果，不启动原项目网页或服务。[正式发行说明](releases/0.26.0.md)。
+ArrayLab 0.26.1在0.26.0基础上同步ArrayStudio 1.2.2与EquationLab 1.0.1修复，保留FMCW与脉冲共用的离线三维场景。WaveLab 1.4对应任务名为“FMCW雷达波形设计”；三个雷达任务使用独立参数和结果，不启动原项目网页或服务。[正式发行说明](releases/0.26.1.md)。
+
+旧相控阵和雷达方程记录仍可查看、保存和导出，原输入、结果、数组及源版本保持不变；界面和导出会注明旧算法，不能将其原有“达标”结论当作修复后模型的新结论。请重新计算并复核；旧H0校准必须重做。当前新校验不再接受的旧输入需先修正，读取旧快照不会自动改写它。[修复及兼容边界](upstream-sync-0261.md)。
 
 ## 选择哪个任务
 
@@ -81,8 +83,8 @@ ArrayLab 0.26.0正式版纳入开发阶段接入的三个独立组件，以及FM
 
 | 组件 | 版本 | 源包 SHA-256 |
 | --- | --- | --- |
-| ArrayStudio | 1.2.1 | `04708ed44ab2ea911318351061f4e5b4b88450caae78d265c3db317aa398329d` |
-| EquationLab | 1.0 | `f68bdf5be3e5bd2612f1c8a720037591886d079190f1c5e6e36d676b0dbcd2b0` |
+| ArrayStudio | 1.2.2 | `4e5b275b524ad2c48664c5962a2482233c35eca1b832352e1ff0d861d54be14a` |
+| EquationLab | 1.0.1 | `1743985dae7a5ad60caaad72175251ece653cb844a3b2098e15870579cc463be` |
 | PulseLab | 1.0.1 | `04580efed12ab110476583ec0cdcf88360f6e975abe3c92ae54ba555dcfd264f` |
 
 ArrayStudio 的 JavaScript 数值实现迁为 Python/NumPy，并与原实现做交叉对照。EquationLab 与 PulseLab 复用 Python 科学内核，调整包内导入及运行适配；不随包引入原 FastAPI/Web 服务。来源原生网页不等于 ArrayLab 集成验收，二者证据分别记录。

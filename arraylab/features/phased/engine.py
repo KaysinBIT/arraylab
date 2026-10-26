@@ -1,4 +1,4 @@
-"""Reference-frequency phased-array analysis, ported from ArrayStudio 1.2.1.
+"""Reference-frequency phased-array analysis, ported from ArrayStudio 1.2.2.
 
 Angles are direction angles: u=sin(X), v=sin(Y), not azimuth/elevation.
 Power includes the selected scalar cos(theta)**p element envelope.
@@ -11,8 +11,9 @@ from arraylab.framework.parallel import check_cancelled, ordered_map
 C=299792458.0
 RAD=math.pi/180
 HALF=3.01029995664
-SOURCE_VERSION='1.2.1'
-SOURCE_ARCHIVE_SHA256='04708ed44ab2ea911318351061f4e5b4b88450caae78d265c3db317aa398329d'
+SOURCE_VERSION='1.2.2'
+SOURCE_ARCHIVE_SHA256='4e5b275b524ad2c48664c5962a2482233c35eca1b832352e1ff0d861d54be14a'
+NUMERICAL_FLOOR_DB=-300.
 
 
 def defaults():
@@ -23,8 +24,25 @@ def defaults():
 
 def finite(x):return type(x) in (int,float) and math.isfinite(x)
 def js_round(x):return math.floor(x+.5)
-def wrap(x):return (x+180)%360-180
-def db(power):return np.maximum(-80.,10*np.log10(np.maximum(power,1e-8)))
+def wrap(x):
+    value=math.fmod(x,360)
+    return value-360 if value>=180 else value+360 if value< -180 else value
+def db(power):return np.maximum(NUMERICAL_FLOOR_DB,10*np.log10(np.maximum(power,1e-30)))
+
+
+def quantized_phase(ideal,step):
+    code=ideal/step;half=math.floor(code)+.5
+    if abs(code-half)<=1e-12:code=half
+    return wrap(js_round(code)*step)
+
+
+def prepared_arrays(elements):
+    """Scale voltage before squaring; mutable external inputs are never cached."""
+    amplitudes=np.array([e['amplitude'] for e in elements],float)
+    scale=float(amplitudes.max(initial=0))
+    if scale>0:amplitudes=amplitudes/scale
+    return (np.array([e['x'] for e in elements],float),np.array([e['y'] for e in elements],float),
+            amplitudes,np.array([wrap(e['phaseDeg']) for e in elements],float)*RAD)
 
 
 def validate(config):
@@ -92,10 +110,9 @@ def build_elements(config):
         ny=c['ny'] if c['geometry']=='rectangular' else 1
         wx=window_weights(c['nx'],c['window'],c['sidelobeDb']);wy=window_weights(ny,c['window'],c['sidelobeDb'])
         raw=[dict(x=(i-(c['nx']-1)/2)*c['dx'],y=(j-(ny-1)/2)*c['dy'],amplitude=wx[i]*wy[j],phaseDeg=0) for j in range(ny) for i in range(c['nx'])]
-    elements=[];error=0.;total=0.
+    elements=[]
     for e in raw:
-        ideal=wrap(e['phaseDeg']-360*factor*(e['x']*u0+e['y']*v0));actual=wrap(js_round(ideal/step)*step if step else ideal)
-        error+=e['amplitude']**2*wrap(actual-ideal)**2;total+=e['amplitude']**2
+        ideal=wrap(wrap(e['phaseDeg'])-360*factor*(e['x']*u0+e['y']*v0));actual=quantized_phase(ideal,step) if step else ideal
         elements.append(dict(x=e['x'],y=e['y'],amplitude=e['amplitude'],phaseDeg=actual))
     return elements
 
@@ -103,8 +120,10 @@ def build_elements(config):
 def phase_rms(config,elements):
     c=normalized_config(config);factor=c['frequencyGHz']/c['referenceGHz'] if c['phaseMode']=='ttd' else 1
     raw=c['custom'] if c['geometry']=='custom' else [dict(phaseDeg=0) for _ in elements]
-    errors=[e['amplitude']**2*wrap(e['phaseDeg']-wrap(r['phaseDeg']-360*factor*(e['x']*math.sin(c['steerX']*RAD)+e['y']*math.sin(c['steerY']*RAD))))**2 for e,r in zip(elements,raw)]
-    return math.sqrt(sum(errors)/sum(e['amplitude']**2 for e in elements))
+    scale=max(e['amplitude'] for e in elements)
+    weights=[(e['amplitude']/scale)**2 for e in elements]
+    errors=[w*wrap(e['phaseDeg']-wrap(wrap(r['phaseDeg'])-360*factor*(e['x']*math.sin(c['steerX']*RAD)+e['y']*math.sin(c['steerY']*RAD))))**2 for w,e,r in zip(weights,elements,raw)]
+    return math.sqrt(sum(errors)/sum(weights))
 
 
 def field_values(config,elements,u,v,*,cancelled=None):
@@ -113,8 +132,7 @@ def field_values(config,elements,u,v,*,cancelled=None):
     uf,vf=u.ravel(),v.ravel();out=np.full(uf.shape,np.nan)
     valid=np.isfinite(uf)&np.isfinite(vf)&(uf*uf+vf*vf<=1+1e-12)
     indices=np.flatnonzero(valid)
-    x=np.array([e['x'] for e in elements]);y=np.array([e['y'] for e in elements])
-    a=np.array([e['amplitude'] for e in elements]);phase=np.array([e['phaseDeg'] for e in elements])*RAD
+    x,y,a,phase=prepared_arrays(elements)
     k=2*math.pi*config['frequencyGHz']/config['referenceGHz'];den=float(a.sum())
     for start in range(0,len(indices),1024):
         check_cancelled(cancelled);at=indices[start:start+1024]
@@ -126,9 +144,34 @@ def field_values(config,elements,u,v,*,cancelled=None):
     return out.reshape(shape)
 
 
-def pattern_at(config,elements,u,v):
+def pattern_at_raw(config,elements,u,v):
     if not finite(u) or not finite(v) or u*u+v*v>1+1e-12:return None
     return float(field_values(config,elements,u,v))
+
+
+def pattern_at(config,elements,u,v):
+    value=pattern_at_raw(config,elements,u,v)
+    return None if value is None else max(-80.,value)
+
+
+def scalar_field(config,elements,*,cancelled=None):
+    x,y,a,phase=prepared_arrays(elements);den=float(a.sum())**2
+    k=2*math.pi*config['frequencyGHz']/config['referenceGHz'];power=config['elementPower']
+    def field(u,v):
+        check_cancelled(cancelled)
+        if not math.isfinite(u) or not math.isfinite(v) or u*u+v*v>1+1e-12:return None
+        if den<=0:return NUMERICAL_FLOOR_DB
+        p=k*(x*u+y*v)+phase;re=float(np.cos(p)@a);im=float(np.sin(p)@a)
+        result=(re*re+im*im)/den
+        if power:result*=max(0.,1-u*u-v*v)**(power/2)
+        return max(NUMERICAL_FLOOR_DB,10*math.log10(max(1e-30,result)))
+    return field
+
+
+def cut_field(config,elements,axis,*,cancelled=None):
+    fixed=math.sin(config['steerY' if axis=='x' else 'steerX']*RAD)
+    field=scalar_field(config,elements,cancelled=cancelled)
+    return (lambda angle:field(math.sin(angle*RAD),fixed)) if axis=='x' else (lambda angle:field(fixed,math.sin(angle*RAD)))
 
 
 def cut(config,elements,axis,step_deg=.25,*,cancelled=None):
@@ -140,36 +183,84 @@ def cut(config,elements,axis,step_deg=.25,*,cancelled=None):
     return [{'angle':float(a),'db':float(v)} for a,v in zip(angles,values) if math.isfinite(v)]
 
 
-def analyze_cut(samples,expected_angle=0,intended=False):
+def analyze_cut(samples,expected_angle=0,intended=False,field_fn=None):
     empty=dict(hpbw=None,sll=None,peakAngle=None,peakDb=None,mainLeft=None,mainRight=None)
     if not samples or len(samples)<3:return empty
     expected_angle=expected_angle if finite(expected_angle) else 0
     if intended and not samples[0]['angle']-1e-10<=expected_angle<=samples[-1]['angle']+1e-10:return empty
     values=np.array([s['db'] for s in samples]);maximum=float(values.max())
     if np.ptp(values)<1e-7:return empty
-    peaks=[i for i in range(len(samples)) if (i==0 or values[i]>=values[i-1]) and (i==len(values)-1 or values[i]>=values[i+1]) and ((i>0 and values[i]>values[i-1]+1e-12) or (i<len(values)-1 and values[i]>values[i+1]+1e-12))]
+    refine=callable(field_fn)
+    def value_at(angle):
+        value=field_fn(angle)
+        return value if finite(value) else NUMERICAL_FLOOR_DB
+    peaks=[]
+    for i in range(len(samples)):
+        if values[i]<=NUMERICAL_FLOOR_DB+1e-6:continue
+        if not ((i==0 or values[i]>=values[i-1]) and (i==len(values)-1 or values[i]>=values[i+1]) and ((i>0 and values[i]>values[i-1]+1e-12) or (i<len(values)-1 and values[i]>values[i+1]+1e-12))):continue
+        peak={'index':i,'angle':samples[i]['angle'],'db':float(values[i])}
+        if refine:
+            a=samples[max(0,i-1)]['angle'];b=samples[min(len(samples)-1,i+1)]['angle'];golden=(math.sqrt(5)-1)/2
+            x1=b-golden*(b-a);x2=a+golden*(b-a);f1=value_at(x1);f2=value_at(x2)
+            for _ in range(36):
+                if b-a<=1e-8:break
+                if f1<f2:a=x1;x1=x2;f1=f2;x2=a+golden*(b-a);f2=value_at(x2)
+                else:b=x2;x2=x1;f2=f1;x1=b-golden*(b-a);f1=value_at(x1)
+            for angle in (x1,x2,a,b,samples[i]['angle']):
+                value=value_at(angle)
+                if value>peak['db']:peak={'index':i,'angle':angle,'db':value}
+        if not any(abs(p['angle']-peak['angle'])<1e-6 for p in peaks):peaks.append(peak)
     if not peaks:return empty
-    eligible=peaks if intended else [i for i in peaks if values[i]>=maximum-.05]
+    maximum=max(p['db'] for p in peaks)
+    eligible=peaks if intended else [p for p in peaks if p['db']>=maximum-(1e-6 if refine else .05)]
     # The tolerance only resolves essentially equidistant sampled peaks.
     best=eligible[0]
-    for i in eligible[1:]:
-        d=abs(samples[i]['angle']-expected_angle)-abs(samples[best]['angle']-expected_angle)
-        if d<-1e-10 or abs(d)<=1e-10 and values[i]>values[best]:best=i
-    p=best;peak=float(values[p]);left3=right3=None;l=r=None
-    def crossing(a,b,level):return a['angle']+(b['angle']-a['angle'])*(level-a['db'])/(b['db']-a['db'])
-    for i in range(p-1,-1,-1):
-        if values[i]<=peak-HALF:left3=crossing(samples[i],samples[i+1],peak-HALF);break
-    for i in range(p+1,len(values)):
-        if values[i]<=peak-HALF:right3=crossing(samples[i-1],samples[i],peak-HALF);break
+    for candidate in eligible[1:]:
+        d=abs(candidate['angle']-expected_angle)-abs(best['angle']-expected_angle)
+        if d<-1e-10 or abs(d)<=1e-10 and candidate['db']>best['db']:best=candidate
+    p=best['index'];peak=best['db'];level=peak-HALF;left3=right3=None;l=r=None
+    def crossing(near,far):
+        if not refine:return near['angle']+(far['angle']-near['angle'])*(level-near['db'])/(far['db']-near['db'])
+        a=near['angle'];b=far['angle']
+        for _ in range(38):
+            if abs(b-a)<=1e-9:break
+            middle=(a+b)/2
+            if value_at(middle)>level:a=middle
+            else:b=middle
+        return (a+b)/2
+    near=best
+    for i in range(p,-1,-1):
+        if samples[i]['angle']<best['angle']-1e-10:
+            if values[i]<=level:left3=crossing(near,samples[i]);break
+            near=samples[i]
+    near=best
+    for i in range(p,len(values)):
+        if samples[i]['angle']>best['angle']+1e-10:
+            if values[i]<=level:right3=crossing(near,samples[i]);break
+            near=samples[i]
     for i in range(p-1,0,-1):
         if values[i]<=values[i-1] and values[i]<=values[i+1] and values[i]<peak-.01:l=i;break
     for i in range(p+1,len(values)-1):
         if values[i]<=values[i-1] and values[i]<=values[i+1] and values[i]<peak-.01:r=i;break
     side=[]
-    if l is not None:side.extend(values[:l])
-    if r is not None:side.extend(values[r+1:])
-    return dict(hpbw=None if left3 is None or right3 is None else right3-left3,sll=float(max(side)-peak) if side else None,
-                peakAngle=samples[p]['angle'],peakDb=peak,mainLeft=samples[l]['angle'] if l is not None else None,mainRight=samples[r]['angle'] if r is not None else None)
+    if refine:
+        side=[q['db'] for q in peaks if l is not None and q['angle']<samples[l]['angle'] or r is not None and q['angle']>samples[r]['angle']]
+    else:
+        if l is not None:side.extend(values[:l])
+        if r is not None:side.extend(values[r+1:])
+    maximum_side=max(side) if side else -math.inf
+    if maximum_side<=NUMERICAL_FLOOR_DB+1e-6:maximum_side=-math.inf
+    return dict(hpbw=None if left3 is None or right3 is None else right3-left3,sll=float(maximum_side-peak) if math.isfinite(maximum_side) else None,
+                peakAngle=best['angle'],peakDb=peak,mainLeft=samples[l]['angle'] if l is not None else None,mainRight=samples[r]['angle'] if r is not None else None)
+
+
+def aperture_info(elements):
+    active=[e for e in elements if e['amplitude']>0];origin=active[0];rank=0;axis=None
+    for e in active:
+        x=e['x']-origin['x'];y=e['y']-origin['y'];length=math.hypot(x,y)
+        if axis is None and length>1e-10:axis=(x/length,y/length);rank=1
+        elif axis is not None and abs(x*axis[1]-y*axis[0])>1e-9*max(1,length):rank=2;break
+    return dict(rank=rank,axis=axis,width=float(np.ptp([e['x'] for e in active])),height=float(np.ptp([e['y'] for e in active])))
 
 
 def grating_lobes(c):
@@ -190,29 +281,34 @@ def grating_lobes(c):
 
 def evaluate(config=None,*,cancelled=None):
     c=normalized_config(config);elements=build_elements(c);ratio=c['frequencyGHz']/c['referenceGHz']
+    aperture=aperture_info(elements)
     width=float(np.ptp([e['x'] for e in elements]));height=float(np.ptp([e['y'] for e in elements]))
     step=max(.01,min(.25,6/max(width*ratio,height*ratio,1)))
     cut_x=cut(c,elements,'x',step,cancelled=cancelled);cut_y=cut(c,elements,'y',step,cancelled=cancelled)
     expected=lambda angle:math.asin(float(np.clip(math.sin(angle*RAD)/(ratio if c['phaseMode']=='phase' else 1),-1,1)))/RAD
-    mx=analyze_cut(cut_x,expected(c['steerX']));my=analyze_cut(cut_y,expected(c['steerY']))
-    a=np.array([e['amplitude'] for e in elements]);eta=float(a.sum()**2/(len(a)*(a@a)))
+    mx=analyze_cut(cut_x,expected(c['steerX']),field_fn=cut_field(c,elements,'x',cancelled=cancelled));my=analyze_cut(cut_y,expected(c['steerY']),field_fn=cut_field(c,elements,'y',cancelled=cancelled))
+    a=prepared_arrays(elements)[2];eta=float(a.sum()**2/(len(a)*(a@a)))
     gl=grating_lobes(c);warnings=[]
     if gl:warnings.append(f'周期晶格有{len(gl)}个非零阶栅瓣方向进入可见域；量化和单元模型会改变实际峰值。')
     if c['geometry']=='custom':warnings.append('自定义阵列直接使用逐阵元激励；非周期阵列不使用周期晶格栅瓣判据。')
     if c['window']=='taylor' and c['geometry']!='custom':warnings.append('Taylor设计旁瓣是窗函数参数，实际有限阵列旁瓣以计算结果为准。')
     if c['phaseMode']=='phase' and abs(ratio-1)>1e-9:warnings.append('固定移相保持参考频率激励及物理位置，异频分析可能产生波束斜视。')
     if c['phaseMode']=='ttd' and c['phaseBits']>0:warnings.append('真时延按分析频率校相后施加相位量化，不是固定延时量化器硬件模型。')
-    if height<1e-10 and abs(c['steerY'])>1e-8:warnings.append('该阵列没有Y向孔径，无法独立控制Y方向波束。')
-    if gl and height<1e-10:warnings.append('直线阵栅瓣为锥面，列表取v=0代表方向。')
+    if aperture['width']<1e-10:warnings.append('有效激励位置没有 X 向孔径；X向阵列波束指标为空，单元方向图不能替代阵列成束能力。')
+    if aperture['height']<1e-10:warnings.append('有效激励位置没有 Y 向孔径；Y向阵列波束指标为空，单元方向图不能替代阵列成束能力。')
+    if aperture['rank']==1 and aperture['width']>1e-10 and aperture['height']>1e-10:warnings.append('有效阵元共线；X/Y切面可以有宽度，但不能独立控制两个方向，主瓣在三维空间形成锥面。')
+    if gl and aperture['height']<1e-10:warnings.append('直线阵栅瓣为锥面，列表取v=0代表方向。')
     if c['geometry']=='custom' and len({(e['x'],e['y']) for e in elements})<len(elements):warnings.append('坐标重合通道保留相干叠加，理想相干增益不等于实际辐射增益。')
     if c['elementPower']>0:warnings.append('含标量单元功率cos(theta)^p，theta从阵面法线起算。')
-    if mx['hpbw'] is None or height>0 and my['hpbw'] is None:warnings.append('部分切面未解析完整半功率主瓣，宽度保留为空。')
+    if aperture['width']>1e-10 and mx['hpbw'] is None or aperture['height']>1e-10 and my['hpbw'] is None:warnings.append('部分切面未解析完整半功率主瓣，宽度保留为空。')
     uc=math.sin(c['steerX']*RAD)/(ratio if c['phaseMode']=='phase' else 1);vc=math.sin(c['steerY']*RAD)/(ratio if c['phaseMode']=='phase' else 1)
-    if uc*uc+vc*vc>1+1e-10:warnings.append('理想主阶已移出当前可见域，当前峰值可能属于其他瓣。')
+    outside=uc*uc+vc*vc>1+1e-10 if aperture['rank']==2 else abs(uc*aperture['axis'][0]+vc*aperture['axis'][1])>1+1e-10 if aperture['rank']==1 else False
+    if outside:warnings.append('理想主阶已移出当前可见域，当前峰值可能属于其他瓣。')
+    if any(finite(m['peakDb']) and m['peakDb']< -250 for m in (mx,my)):warnings.append('切面场接近双精度数值底，深度抵消电平仅供数值诊断。')
     return dict(config=c,elements=elements,cutX=cut_x,cutY=cut_y,metrics=dict(count=len(elements),lambdaMm=C/(c['frequencyGHz']*1e6),
-        widthMm=width*C/(c['referenceGHz']*1e6),heightMm=height*C/(c['referenceGHz']*1e6),hpbwX=mx['hpbw'],hpbwY=None if height<1e-10 else my['hpbw'],
-        sllX=mx['sll'],sllY=None if height<1e-10 else my['sll'],peakAngleX=mx['peakAngle'],peakAngleY=None if height<1e-10 else my['peakAngle'],
-        taperEfficiency=eta,coherentGainDb=10*math.log10(len(elements)*eta),pointingPowerDb=pattern_at(c,elements,math.sin(c['steerX']*RAD),math.sin(c['steerY']*RAD)),
+        widthMm=width*C/(c['referenceGHz']*1e6),heightMm=height*C/(c['referenceGHz']*1e6),hpbwX=None if aperture['width']<1e-10 else mx['hpbw'],hpbwY=None if aperture['height']<1e-10 else my['hpbw'],
+        sllX=None if aperture['width']<1e-10 else mx['sll'],sllY=None if aperture['height']<1e-10 else my['sll'],peakAngleX=None if aperture['width']<1e-10 else mx['peakAngle'],peakAngleY=None if aperture['height']<1e-10 else my['peakAngle'],
+        taperEfficiency=eta,coherentGainDb=10*math.log10(len(elements)*eta),pointingPowerDb=pattern_at_raw(c,elements,math.sin(c['steerX']*RAD),math.sin(c['steerY']*RAD)),
         gratingLobes=gl,phaseRmsDeg=phase_rms(c,elements)),warnings=warnings)
 
 
@@ -222,11 +318,7 @@ def scan_study(config,options=None,*,workers=None,cancelled=None,progress=None):
     angles=[0];k=1
     while k*o['step']<o['maxAngle']-1e-10:angles.extend([-k*o['step'],k*o['step']]);k+=1
     if o['maxAngle']>0:angles.extend([-o['maxAngle'],o['maxAngle']])
-    active=[e for e in build_elements(c) if e['amplitude']>0];origin=active[0];rank=0;axis=None
-    for e in active:
-        x=e['x']-origin['x'];y=e['y']-origin['y'];length=math.hypot(x,y)
-        if axis is None and length>1e-10:axis=(x/length,y/length);rank=1
-        elif axis is not None and abs(x*axis[1]-y*axis[0])>1e-9*max(1,length):rank=2;break
+    active=[e for e in build_elements(c) if e['amplitude']>0];aperture=aperture_info(active);rank=aperture['rank'];axis=aperture['axis']
     visibility='planar' if rank==2 else 'linear_cone' if rank==1 else 'degenerate';no_x=rank==0 or rank==1 and abs(axis[0])<1e-10
     if rank==2:model_note='二维期望方向必须处于完整可见圆盘；切面固定在命令v。'
     elif rank==1 and no_x:model_note='共线阵没有X向孔径，不能用单元方向图宽度代替X向阵列波束宽度。'
@@ -234,15 +326,16 @@ def scan_study(config,options=None,*,workers=None,cancelled=None,progress=None):
     elif rank==1:model_note='倾斜共线阵仅约束阵轴方向余弦，本表跟踪锥面与固定命令v切面的交点。'
     else:model_note='有效位置无空间孔径，不能形成独立阵列扫描波束。'
     def one(angle):
-        r=evaluate({**c,'steerX':angle},cancelled=cancelled);m=r['metrics']
+        row_config={**c,'steerX':angle};r=evaluate(row_config,cancelled=cancelled);m=r['metrics']
         factor=c['frequencyGHz']/c['referenceGHz'] if c['phaseMode']=='phase' else 1
         eu=math.sin(angle*RAD)/factor;ev=math.sin(c['steerY']*RAD)/factor;fv=math.sin(c['steerY']*RAD)
         outside=(eu*eu+ev*ev>1+1e-12) if rank==2 else abs(eu*axis[0]+ev*axis[1])>1+1e-12 if rank else False
         cu=None if no_x else (eu*axis[0]+ev*axis[1]-axis[1]*fv)/axis[0] if rank==1 else eu
         expected=math.asin(cu)/RAD if cu is not None and abs(cu)<=1 else None
         outside_cut=not no_x and (expected is None or not r['cutX'] or not r['cutX'][0]['angle']-1e-10<=expected<=r['cutX'][-1]['angle']+1e-10)
-        intended=dict(hpbw=None,sll=None,peakAngle=None,peakDb=None) if outside or outside_cut or no_x else analyze_cut(r['cutX'],expected,True)
-        if intended['sll'] is not None and intended['peakDb']+intended['sll']<=-79.999:intended['sll']=None
+        evaluator=cut_field(row_config,r['elements'],'x',cancelled=cancelled)
+        intended=dict(hpbw=None,sll=None,peakAngle=None,peakDb=None) if outside or outside_cut or no_x else analyze_cut(r['cutX'],expected,True,evaluator)
+        dominant=m['peakAngleX'] if m['peakAngleX'] is not None else analyze_cut(r['cutX'],expected,field_fn=evaluator)['peakAngle']
         if outside:status,reason='outside_visible','理想期望主阶移出可见域；当前切面峰不能替代该主瓣。'
         elif no_x:status,reason='incomplete_beam','有效阵列没有X向孔径，单元方向图不能替代阵列扫描波束。'
         elif outside_cut:status,reason='outside_cut','期望方向不在当前固定命令v的可见切面内。'
@@ -252,7 +345,7 @@ def scan_study(config,options=None,*,workers=None,cancelled=None,progress=None):
         else:status,reason='resolved','当前切面期望局部主瓣和旁瓣已解析。'
         resolved=status in ('resolved','stronger_lobe')
         return dict(angle=angle,hpbw=intended['hpbw'],sll=intended['sll'],expectedAngle=expected,expectedU=eu,expectedV=ev,expectedCutU=cu,
-                    peakAngle=intended['peakAngle'],dominantPeakAngle=m['peakAngleX'],intendedPeakDb=intended['peakDb'],pointingOffset=None if intended['peakAngle'] is None else intended['peakAngle']-angle,
+                    peakAngle=intended['peakAngle'],dominantPeakAngle=dominant,intendedPeakDb=intended['peakDb'],pointingOffset=None if intended['peakAngle'] is None else intended['peakAngle']-angle,
                     pointingPowerDb=m['pointingPowerDb'],gratingCount=len(m['gratingLobes']),resolved=resolved,status=status,reason=reason,visibilityModel=visibility,modelNote=model_note,
                     warning=reason if not resolved or status=='stronger_lobe' else None)
     angles=[a for a in sorted(angles) if math.sin(a*RAD)**2+math.sin(c['steerY']*RAD)**2<=1+1e-12]
@@ -263,5 +356,5 @@ def scan_study(config,options=None,*,workers=None,cancelled=None,progress=None):
 def uv_map(config,elements=None,size=81,*,cancelled=None):
     if type(size) is not int or not 21<=size<=301:raise ValueError('u–v显示网格须为21～301。')
     c=normalized_config(config);elements=elements or build_elements(c);axis=np.linspace(-1,1,size)
-    u,v=np.meshgrid(axis,axis);values=field_values(c,elements,u,v,cancelled=cancelled)
+    u,v=np.meshgrid(axis,axis);values=np.maximum(-80.,field_values(c,elements,u,v,cancelled=cancelled))
     return dict(u=axis.tolist(),v=axis.tolist(),values=[[None if not math.isfinite(p) else float(p) for p in row] for row in values])

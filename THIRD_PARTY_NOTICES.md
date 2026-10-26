@@ -29,6 +29,8 @@ PCAAD7Manual.pdf仅用作用户提供的需求参考，不打包到运行包或�
 
 0.26.0.dev0 集成用户工作区交付的 ArrayStudio 1.2.1、EquationLab 1.0、PulseLab 1.0.1。来源、固定快照摘要及改动边界见 `docs/radar-components.md`。仅收录明确的代码、参数示例与人工合成 DEM；不包含原运行目录、用户工程或独立服务。传播模型数据的依据随 `arraylab/features/equation/data/PROPAGATION_SOURCES.md` 保留。附属地理库和其依赖遵循各自许可。
 
+0.26.1将相控阵与雷达方程来源更新为ArrayStudio 1.2.2、EquationLab 1.0.1的已完成修复交付包；PulseLab 1.0.1、WaveLab 1.4保持。固定摘要与迁移范围见`docs/upstream-sync-0261.md`。本轮未新增或升级第三方运行依赖，既有Qt、Three.js和地理库许可材料继续适用，不改写原项目或纳入其运行数据。
+
 ## 二维稀疏模块来源
 
 `arraylab/sparse2d`由用户工作区的MIT许可Sparse2D 1.3.0迁入；0.9.0迁移时原计算模块保留，仅调整包内导入。0.12.0增加有界并行复核和取消检查，优化算法与数学定义保持。迁移及适配代码沿用本仓库MIT许可。未包含原运行数据、商业说明书或第三方训练模型。0.12.0新增已列出的threadpoolctl，用于控制数值库线程数。迁移范围见`docs/sparse-migration.md`。

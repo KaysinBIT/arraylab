@@ -2,10 +2,10 @@
 from . import metadata
 ACTIONS=metadata.ACTIONS
 VIEWS=metadata.VIEWS
-__all__=['default_configuration','normalize_configuration','validate_configuration','presets','execute','array_snapshot','apply_selected_case','main','metadata','ACTIONS','VIEWS','draw','table','selections','export_result','load_configuration','save_configuration']
+__all__=['default_configuration','normalize_configuration','validate_configuration','presets','execute','array_snapshot','apply_selected_case','record_compatibility','main','metadata','ACTIONS','VIEWS','draw','table','selections','export_result','load_configuration','save_configuration']
 
 def __getattr__(name):
-    if name in ('default_configuration','normalize_configuration','validate_configuration','presets','execute','array_snapshot','apply_selected_case'):
+    if name in ('default_configuration','normalize_configuration','validate_configuration','presets','execute','array_snapshot','apply_selected_case','record_compatibility'):
         from . import service
         return getattr(service,name)
     if name=='main':

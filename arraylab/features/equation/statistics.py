@@ -13,8 +13,11 @@ def _check(cancel):
     if cancel and cancel():raise InterruptedError("计算已取消")
 
 
-def _seed(seed,purpose,index,branch=0):
-    return int(np.random.SeedSequence([int(seed),purpose,index,branch]).generate_state(1)[0])
+def _seed(seed,purpose,index,branch=0,stream=0):
+    # Keep all 128 derived bits: truncating to one uint32 repeats independent
+    # trials, and even leaks H0 calibration realizations into validation.
+    words=np.random.SeedSequence([int(seed),purpose,index,branch,stream]).generate_state(4)
+    return int.from_bytes(words.astype("<u4").tobytes(),"little")
 
 
 def _cell(arrays,distance,velocity):
@@ -46,7 +49,7 @@ def simulation(config,progress=None,cancel=None):
     if progress:progress(.05,"生成物理接收通道与处理算子")
     summary,arrays=_simulate(p,p["experiment"]["seed"],cancel=cancel)
     d=_attach_detector(p,arrays,cancel)
-    summary.update(kind="simulation",detections=d["detections"],threshold_factor=d["factor"],threshold_provenance=d["provenance"])
+    summary.update(kind="simulation",detections=d["detections"],threshold_factor=d["factor"],threshold_provenance=d["provenance"],cell_power_ratio_definition=d["cell_power_ratio_definition"])
     summary["warnings"]=summary.get("warnings",[])+d["warnings"]
     if progress:progress(1.,"仿真完成")
     return summary,arrays
@@ -78,29 +81,35 @@ def snr_experiment(config,progress=None,cancel=None):
     _,arrays=_simulate(p,_seed(seed,113,0),cancel=cancel);d=_attach_detector(p,arrays,cancel)
     arrays["noise_trial_power"]=np.array(samples);arrays["background_trial_power"]=np.array(background)
     simple=(len(p["scene"]["targets"])==1 and target["swerling"]==0 and p["propagation"]["model"]=="free"
-            and not p["propagation"]["atmosphere"]["enabled"] and p["clutter"]["kind"]=="none" and p["processing"]["looks"]==1)
+            and not p["propagation"]["atmosphere"]["enabled"] and p["clutter"]["kind"]=="none")
     complete=bool(sig_summary.get("observability")) and all(x["observable"] for x in sig_summary["observability"])
+    motion=abs(target["velocity_mps"])*p["waveform"]["pri_s"]*p["waveform"]["pulses"]<=.25*_physical_range_resolution(p)
     noise_pass=n>=2048 and abs(snr-theory)<=.4
-    energy_pass=bool(simple and complete and budget["valid"] and abs(budget["output_snr_db"]-theory)<=.4)
+    ratio_reference=budget.get("summed_power_snr_db",budget.get("per_look_snr_db"))
+    energy_pass=bool(simple and complete and motion and budget["valid"] and abs(ratio_reference-theory)<=.4)
     result={"kind":"snr","theoretical_snr_db":theory,"measured_snr_db":snr,"error_db":snr-theory,
-        "energy_reference_snr_db":budget.get("output_snr_db"),"discrete_loss_db":budget["output_snr_db"]-theory if budget["valid"] else None,
+        "energy_reference_snr_db":budget.get("output_snr_db"),
+        "total_energy_reference_snr_db":budget.get("output_snr_db"),"per_look_energy_reference_snr_db":ratio_reference,
+        "power_ratio_reference_snr_db":ratio_reference,"discrete_loss_db":ratio_reference-theory if budget["valid"] else None,
+        "snr_basis":"sum signal powers / sum thermal expectations; equal blocks have the per-look energy SNR",
         "signal_power_w":sp,"noise_power_w":measured,"expected_noise_power_w":expected,"noise_trials":n,
         "approximate_noise_uncertainty_db":uncertainty,"sinr_db":10*math.log10(max(sp/float(np.mean(background)),1e-300)) if background else snr,
         "cut":{"range_m":float(sig["ranges_m"][ir]),"velocity_mps":float(sig["velocities_mps"][iv])},"detections":d["detections"],
         "validated":noise_pass and energy_pass,"noise_calibration_passed":noise_pass,"energy_equation_passed":energy_pass,
-        "energy_reference_applicable":simple,"complete_path_observation":complete,"observability":sig_summary.get("observability",[]),
-        "warnings":["数值 SNR 在预先指定的单元比较无噪声输出与独立噪声输出，不使用全图最大峰。",
+        "energy_reference_applicable":simple,"complete_path_observation":complete,"motion_within_model":motion,"observability":sig_summary.get("observability",[]),
+        "warnings":sig_summary.get("warnings",[])+["数值 SNR 在预先指定的单元比较无噪声输出与独立噪声输出，不使用全图最大峰。",
             "离散理论值使用真实线性系数的噪声标定；另列独立能量方程及离散失配损失。",
+            "功率和与噪声和之比按每块能量 SNR 比较；总能量参考相差 10log10(looks)，不计为离散失配，也不等于非相干检测增益。",
             "信号分子只取首个目标及其相干多径的固定实现；SINR 分母联合处理其余目标、杂波和热噪声。该校核不等同于目标检测概率。"]+d["warnings"]}
     return result,arrays
 
 
-def calibrate(config,progress=None,cancel=None):
+def calibrate(config,progress=None,cancel=None,_stream=0):
     p=checked_config(config);e=p["experiment"];n=int(e["trials"]);scores=[];last=None
     if not p["radar"]["noise_enabled"]:raise ValueError("H0 校准要求启用热噪声")
     for i in range(n):
         _check(cancel)
-        _,a=_simulate(p,_seed(e["seed"],210,i),signal=False,cancel=cancel)
+        _,a=_simulate(p,_seed(e["seed"],210,i,stream=_stream),signal=False,cancel=cancel)
         iv,ir=_cell(a,e["cut_range_m"],e["cut_velocity_mps"])
         stat,_,valid,_=detector_statistic(a["rd_power"],a["noise_power"],p["detection"],cancel)
         if not valid[iv,ir] or not np.isfinite(stat[iv,ir]):raise ValueError("校准 CUT 位于 CFAR 边界或无效单元，请调整 CUT/训练窗")
@@ -114,15 +123,27 @@ def calibrate(config,progress=None,cancel=None):
     if not ready:warnings.append(f"尾部样本不足或 DDM 可辨识样本不足；建议至少 {math.ceil(20/pfa):,} 次校准，当前门限不能应用为有效校准。")
     result={"kind":"calibration","factor":factor,"calibration_hash":calibration_fingerprint(p) if ready else None,
         "trials":n,"pfa":pfa,"tail_events":int(np.count_nonzero(np.asarray(scores)>factor)),"ready":ready,"verified":False,
-        "expected_tail_events":n*pfa,"recommended_trials":math.ceil(20/pfa),"warnings":warnings}
+        "expected_tail_events":n*pfa,"recommended_trials":math.ceil(20/pfa),"warnings":warnings,
+        "random_stream":{"seed":e["seed"],"purpose":210,"stream":_stream,"derived_seed_bits":128},
+        "h0_definition":"all targets removed; clutter and thermal noise retained"}
     last["calibration_scores"]=np.asarray(scores)
     return result,last
 
 
-def _truth_gates(p):
+def _physical_range_resolution(p):
     w=p["waveform"]
-    resolution=C/(2*w["bandwidth_hz"]*w["samples"]/w["fs_hz"]*1/w["ramp_s"]) if w["kind"]=="fmcw" else C/(2*w["bandwidth_hz"]) if w["kind"]=="lfm" else C*w["pulse_width_s"]/2
-    dr=max(resolution,C/(2*w["fs_hz"]));dv=C/w["fc_hz"]/(2*(w["pulses"]//p["processing"]["looks"])*w["pri_s"])
+    return C/(2*w["bandwidth_hz"]*w["samples"]/w["fs_hz"]*1/w["ramp_s"]) if w["kind"]=="fmcw" else C/(2*w["bandwidth_hz"]) if w["kind"]=="lfm" else C*w["pulse_width_s"]/2
+
+
+def _truth_gates(p,arrays=None):
+    w=p["waveform"]
+    if arrays is None:
+        spacing=C*w["fs_hz"]/(2*(w["bandwidth_hz"]/w["ramp_s"])*w["range_fft"]) if w["kind"]=="fmcw" else min(w["range_max_m"],C*(w["samples"]-1)/(2*w["fs_hz"]))/max(1,w["range_fft"]-1)
+    else:
+        spacing=float(np.max(np.diff(arrays["ranges_m"]))) if len(arrays["ranges_m"])>1 else 0.
+    dr=max(_physical_range_resolution(p),spacing)
+    dv=C/w["fc_hz"]/(2*(w["pulses"]//p["processing"]["looks"])*w["pri_s"])
+    if arrays is not None and len(arrays["velocities_mps"])>1:dv=max(dv,float(np.max(np.diff(arrays["velocities_mps"]))))
     direct=[(t["range_m"],t["velocity_mps"]) for t in p["scene"]["targets"]]
     ghosts=[]
     if p["propagation"]["model"]!="free":
@@ -134,44 +155,78 @@ def _truth_gates(p):
     return dr,dv,direct,ghosts
 
 
-def statistics(config,progress=None,cancel=None):
+def statistics(config,progress=None,cancel=None,_stream=0):
     p=checked_config(config);e=p["experiment"];n=int(e["trials"]);seed=e["seed"]
     if not p["radar"]["noise_enabled"]:raise ValueError("检测统计要求启用热噪声")
     if not p["scene"]["targets"]:raise ValueError("检测统计至少需要一个目标")
     target=p["scene"]["targets"][0];dr,dv,direct,ghosts=_truth_gates(p)
-    hits=fas=associations=ghost_hits=scene_fas=0;records=[];last=None;warnings=[]
+    primary_background=copy.deepcopy(p);primary_background["scene"]["targets"]=copy.deepcopy(p["scene"]["targets"][1:])
+    has_other_targets=bool(primary_background["scene"]["targets"])
+    hits=fas=background_fas=associations=ghost_hits=scene_fas=0;records=[];background_records=[];last=None;warnings=[]
     for i in range(n):
         _check(cancel)
-        _,h0=_simulate(p,_seed(seed,310,i,0),signal=False,cancel=cancel);d0=_attach_detector(p,h0,cancel)
+        _,h0=_simulate(p,_seed(seed,310,i,0,_stream),signal=False,cancel=cancel);d0=_attach_detector(p,h0,cancel)
         iv,ir=_cell(h0,e["cut_range_m"],e["cut_velocity_mps"])
+        if i==0:dr,dv,direct,ghosts=_truth_gates(p,h0)
         if not d0["valid"][iv,ir]:raise ValueError("虚警 CUT 位于 CFAR 边界或无效单元，请调整 CUT/训练窗")
         fa=bool(d0["mask"][iv,ir]);fas+=fa;scene_fas+=bool(np.any(d0["mask"]))
-        h1_summary,h1=_simulate(p,_seed(seed,310,i,1),cancel=cancel);d1=_attach_detector(p,h1,cancel)
-        vt,rt=_cell(h1,apparent_range(p,target["range_m"],target["velocity_mps"]),target["velocity_mps"])
-        if not d1["valid"][vt,rt]:raise ValueError("目标 CUT 位于 CFAR 边界或无效单元，请调整处理区域")
+        if has_other_targets:
+            _,h0_primary=_simulate(primary_background,_seed(seed,320,i,0,_stream),cancel=cancel)
+            d_primary=_attach_detector(p,h0_primary,cancel)
+            vb,rb=_cell(h0_primary,e["cut_range_m"],e["cut_velocity_mps"])
+            if not d_primary["valid"][vb,rb]:raise ValueError("首目标背景 CUT 位于 CFAR 边界或无效单元")
+            background_fa=bool(d_primary["mask"][vb,rb])
+        else:background_fa=fa
+        background_fas+=background_fa;background_records.append(int(background_fa))
+        h1_summary,h1=_simulate(p,_seed(seed,310,i,1,_stream),cancel=cancel);d1=_attach_detector(p,h1,cancel)
+        # H0 and H1 must evaluate the SAME predeclared decision cell. Target
+        # association below is a separate metric and cannot silently move it.
+        vt,rt=_cell(h1,e["cut_range_m"],e["cut_velocity_mps"])
+        if not d1["valid"][vt,rt]:raise ValueError("检测 CUT 位于 CFAR 边界或无效单元，请调整处理区域")
         hit=bool(d1["mask"][vt,rt]);hits+=hit
         assoc=any(abs(x["range_m"]-target["range_m"])<=dr and abs(x["velocity_mps"]-target["velocity_mps"])<=dv for x in d1["detections"])
         ghost=any(abs(x["range_m"]-rg)<=dr and abs(x["velocity_mps"]-vv)<=dv for x in d1["detections"] for rg,vv in ghosts)
         associations+=assoc;ghost_hits+=ghost;records.append([i,int(hit),int(fa),int(assoc),int(ghost)])
-        last=h1;warnings=d1["warnings"]
+        last=h1;warnings=list(dict.fromkeys(warnings+h1_summary.get("warnings",[])+d1["warnings"]))
         if progress:progress((i+1)/n,f"独立 H0/H1 检测试验 {i+1}/{n}")
     pd=binomial_interval(hits,n,e["confidence"]);pfa=binomial_interval(fas,n,e["confidence"])
+    background_pfa=binomial_interval(background_fas,n,e["confidence"]) if has_other_targets else pfa
     assoc=binomial_interval(associations,n,e["confidence"])
     obs=observability(p,target["range_m"],target["velocity_mps"])
-    calibrated=p["detection"]["threshold_mode"]=="calibrated" or p["detection"]["method"]=="fixed" or not analytic_assumptions(p)
+    calibrated=p["detection"]["threshold_mode"]=="calibrated"
+    threshold_valid=calibrated or p["detection"]["method"]=="fixed" or not analytic_assumptions(p)
     complete=bool(h1_summary.get("observability")) and all(x["observable"] for x in h1_summary["observability"])
-    motion=max(abs(t["velocity_mps"])*p["waveform"]["pri_s"]*p["waveform"]["pulses"] for t in p["scene"]["targets"])<=.25*dr
-    valid=bool(calibrated and obs["observable"] and complete and motion and pd["lower"]>=p["requirements"]["pd"] and pfa["upper"]<=p["requirements"]["pfa"])
+    motion=max(abs(t["velocity_mps"])*p["waveform"]["pri_s"]*p["waveform"]["pulses"] for t in p["scene"]["targets"])<=.25*_physical_range_resolution(p)
+    try:target_cell=_cell(h1,apparent_range(p,target["range_m"],target["velocity_mps"]),target["velocity_mps"])
+    except ValueError:target_cell=None
+    cut_covers_target=target_cell==(vt,rt)
+    valid=bool(threshold_valid and cut_covers_target and obs["observable"] and complete and motion and pd["lower"]>=p["requirements"]["pd"] and assoc["lower"]>=p["requirements"]["pd"] and pfa["upper"]<=p["requirements"]["pfa"] and background_pfa["upper"]<=p["requirements"]["pfa"])
+    if not cut_covers_target:warnings.append("预定 CUT 未覆盖首目标的预期处理单元；固定 CUT 概率仍可展示，但不能据此宣称该目标达标。")
     warnings=warnings+["每次独立试验只使用一个预定 CUT 测 Pfa；整图虚警事件另列，相关像素不算独立试验。",
+        "置信区间为各指标的逐项区间，不是多个指标或多个距离点的同时置信保证。",
+        "经典 Pfa 移除全部目标；多目标时另独立移除首目标、保留其余目标测背景触发率，并纳入验收。这仍不证明重合目标的分辨或身份识别。",
         "鬼影率按预先固定的可分辨多径位置窗口评估；不包括未分辨多径与所有门外噪声峰。"]
     if n*p["requirements"]["pfa"]<100:warnings.append(f"当前虚警尾部采样有限；建议约 {math.ceil(100/p['requirements']['pfa']):,} 次独立试验。零虚警不等于 Pfa=0。")
-    result={"kind":"statistics","pd":pd,"pfa":pfa,"association":assoc,"ghost":binomial_interval(ghost_hits,n,e["confidence"]),
-        "scene_false_alarm":binomial_interval(scene_fas,n,e["confidence"]),"confidence":e["confidence"],"validated":valid,
+    result={"kind":"statistics","pd":pd,"fixed_cut_pd":pd,"pfa":pfa,"background_pfa":background_pfa,"association":assoc,"association_pd":assoc,"ghost":binomial_interval(ghost_hits,n,e["confidence"]),
+        "h0_definition":"all targets removed; clutter and thermal noise retained",
+        "background_h0_definition":"primary target removed; other targets, clutter and thermal noise retained",
+        "background_pfa_trials":n,"additional_background_trials":n if has_other_targets else 0,
+        "background_pfa_aliases_classic":not has_other_targets,
+        "scene_false_alarm":binomial_interval(scene_fas,n,e["confidence"]),"confidence":e["confidence"],
+        "confidence_scope":"pointwise marginal, not simultaneous","validated":valid,
         "observability":obs,"nominal_pfa":p["detection"]["pfa"],"recommended_trials":math.ceil(100/p["requirements"]["pfa"]),
-        "calibrated":calibrated,"complete_path_observation":complete,"motion_within_model":motion,"path_observability":h1_summary.get("observability",[]),"cut":{"range_m":e["cut_range_m"],"velocity_mps":e["cut_velocity_mps"]},
+        "calibrated":calibrated,"threshold_assumptions_satisfied":threshold_valid,"threshold_provenance":d1["provenance"],
+        "cell_power_ratio_definition":d1["cell_power_ratio_definition"],
+        "complete_path_observation":complete,"motion_within_model":motion,"path_observability":h1_summary.get("observability",[]),
+        "cut":{"range_m":e["cut_range_m"],"velocity_mps":e["cut_velocity_mps"]},
+        "actual_cut":{"range_m":float(h1["ranges_m"][rt]),"velocity_mps":float(h1["velocities_mps"][vt])},
+        "cut_covers_primary_target":cut_covers_target,"physical_range_resolution_m":_physical_range_resolution(p),
         "association_gate":{"range_m":dr,"velocity_mps":dv},"ghost_gates":ghosts,"warnings":warnings,
-        "detections":d1["detections"],"clutter_ensemble":"fixed_background" if p["clutter"]["fixed"] else "independent_background"}
+        "detections":d1["detections"],"clutter_ensemble":"fixed_background" if p["clutter"]["fixed"] else "independent_background",
+        "random_stream":{"seed":seed,"purpose":310,"stream":_stream,"h0_branch":0,"h1_branch":1,"derived_seed_bits":128},
+        "background_random_stream":{"seed":seed,"purpose":320,"stream":_stream,"branch":0,"derived_seed_bits":128} if has_other_targets else None}
     last["trial_results"]=np.asarray(records,dtype=np.int64)
+    last["background_trial_events"]=np.asarray(background_records,dtype=np.int64)
     return result,last
 
 
@@ -181,21 +236,22 @@ def distance_scan(config,progress=None,cancel=None):
     points=[];last={};grid=np.linspace(e["distance_min_m"],e["distance_max_m"],int(e["distance_count"]))
     for j,r in enumerate(grid):
         _check(cancel);cfg=copy.deepcopy(p);cfg["scene"]["targets"][0]["range_m"]=float(r);cfg["experiment"]["cut_range_m"]=apparent_range(cfg,float(r),cfg["scene"]["targets"][0]["velocity_mps"])
-        cfg["experiment"]["seed"]=_seed(e["seed"],410,j)
+        cfg["experiment"]["cut_velocity_mps"]=cfg["scene"]["targets"][0]["velocity_mps"]
         obs=observability(cfg,float(r),cfg["scene"]["targets"][0]["velocity_mps"])
         if not obs["observable"]:
             points.append({"range_m":float(r),"status":"unobservable","pd":None,"pfa":None,"reasons":obs["reasons"]})
             continue
         try:
             if cfg["detection"]["threshold_mode"]=="calibrated":
-                c,_=calibrate(cfg,cancel=cancel)
+                c,_=calibrate(cfg,cancel=cancel,_stream=j+1)
                 if not c["ready"]:
                     points.append({"range_m":float(r),"status":"insufficient","pd":None,"pfa":None,"reasons":c["warnings"]});continue
                 cfg["detection"].update(calibration_factor=c["factor"],calibration_hash=c["calibration_hash"])
-            result,last=statistics(cfg,progress=(lambda f,m:progress((j+f)/len(grid),f"距离 {r:.2f} m · {m}")) if progress else None,cancel=cancel)
-            failed=result["pd"]["upper"]<p["requirements"]["pd"] or result["pfa"]["lower"]>p["requirements"]["pfa"]
-            status="passed" if result["validated"] else "failed" if failed else "insufficient"
-            points.append({"range_m":float(r),"status":status,"pd":result["pd"],"pfa":result["pfa"],"association":result["association"]})
+            result,last=statistics(cfg,progress=(lambda f,m:progress((j+f)/len(grid),f"距离 {r:.2f} m · {m}")) if progress else None,cancel=cancel,_stream=j+1)
+            failed=result["pd"]["upper"]<p["requirements"]["pd"] or result["association"]["upper"]<p["requirements"]["pd"] or result["pfa"]["lower"]>p["requirements"]["pfa"] or result["background_pfa"]["lower"]>p["requirements"]["pfa"]
+            model_ready=result["complete_path_observation"] and result["motion_within_model"] and result["cut_covers_primary_target"]
+            status="passed" if result["validated"] else "unavailable" if not model_ready else "failed" if failed else "insufficient"
+            points.append({"range_m":float(r),"status":status,"pd":result["pd"],"pfa":result["pfa"],"background_pfa":result["background_pfa"],"additional_background_trials":result["additional_background_trials"],"association":result["association"],"actual_cut":result["actual_cut"],"cut_covers_primary_target":result["cut_covers_primary_target"],"warnings":result["warnings"],"random_stream":result["random_stream"],"background_random_stream":result["background_random_stream"]})
         except ValueError as exc:points.append({"range_m":float(r),"status":"unavailable","pd":None,"pfa":None,"reasons":[str(exc)]})
     intervals=[];start=None
     for i,point in enumerate(points):
@@ -204,6 +260,7 @@ def distance_scan(config,progress=None,cancel=None):
             end=i if point["status"]=="passed" else i-1
             intervals.append({"start_m":points[start]["range_m"],"end_m":points[end]["range_m"],"sample_count":end-start+1});start=None
     return {"kind":"distance","points":points,"intervals":intervals,"grid_step_m":float(grid[1]-grid[0]) if len(grid)>1 else None,
+        "confidence_scope":"pointwise marginal, not simultaneous",
         "warnings":["区间表示相邻采样点通过，不保证未采样距离连续达标。", "自定义路径保持额外时延和相对复增益；平地双径按每个距离重新计算几何。"]},last
 
 
@@ -211,13 +268,14 @@ def roc(config,progress=None,cancel=None):
     p=checked_config(config);e=p["experiment"];n=int(e["trials"]);count=int(e["roc_points"])
     if not p["radar"]["noise_enabled"]:raise ValueError("ROC 检测统计要求启用热噪声")
     if not p["scene"]["targets"]:raise ValueError("ROC 至少需要一个目标")
-    target=p["scene"]["targets"][0];h0scores=[];h1scores=[];last={};base=None
+    target=p["scene"]["targets"][0];h0scores=[];h1scores=[];last={};base=None;warnings=[]
     for i in range(n):
         _check(cancel)
         for branch,out in ((0,h0scores),(1,h1scores)):
-            _,a=_simulate(p,_seed(e["seed"],510,i,branch),signal=bool(branch),cancel=cancel)
+            summary,a=_simulate(p,_seed(e["seed"],510,i,branch),signal=bool(branch),cancel=cancel)
             d=run_detector(p,a,cancel);base=d["factor"]
-            cell=_cell(a,apparent_range(p,target["range_m"],target["velocity_mps"]),target["velocity_mps"]) if branch else _cell(a,e["cut_range_m"],e["cut_velocity_mps"])
+            warnings=list(dict.fromkeys(warnings+summary.get("warnings",[])+d["warnings"]))
+            cell=_cell(a,e["cut_range_m"],e["cut_velocity_mps"])
             if not d["valid"][cell]:raise ValueError("ROC 的 CUT 位于无效/边界单元")
             permitted=bool(np.asarray(a.get("ddm_valid_mask",np.ones_like(d["valid"])))[cell])
             out.append(float(d["statistic"][cell]) if permitted else 0.);last=a
@@ -226,7 +284,11 @@ def roc(config,progress=None,cancel=None):
     points=[{"threshold_db":10*math.log10(float(f)),"pd":binomial_interval(np.count_nonzero(np.asarray(h1scores)>f),n,e["confidence"]),
              "pfa":binomial_interval(np.count_nonzero(np.asarray(h0scores)>f),n,e["confidence"])} for f in factors]
     last["h0_scores"]=np.array(h0scores);last["h1_scores"]=np.array(h1scores)
-    return {"kind":"roc","points":points,"warnings":["同一组独立试验评估多个预设门限；曲线点之间相关，各置信区间为逐点区间。", "ROC 的数据用于评估，不自动选择并宣称门限已通过独立验收。"]},last
+    return {"kind":"roc","points":points,"cut":{"range_m":e["cut_range_m"],"velocity_mps":e["cut_velocity_mps"]},
+        "confidence_scope":"pointwise marginal, not simultaneous",
+        "h0_definition":"all targets removed; clutter and thermal noise retained",
+        "random_stream":{"seed":e["seed"],"purpose":510,"stream":0,"h0_branch":0,"h1_branch":1,"derived_seed_bits":128},
+        "warnings":warnings+["H0 与 H1 使用同一预定 CUT；目标关联概率另在检测统计中报告。", "同一组独立试验评估多个预设门限；曲线点之间相关，各置信区间为逐点区间。", "ROC 的数据用于评估，不自动选择并宣称门限已通过独立验收。"]},last
 
 
 RUNNERS={"simulation":simulation,"snr":snr_experiment,"calibration":calibrate,"statistics":statistics,"distance":distance_scan,"roc":roc}
@@ -236,6 +298,6 @@ def execute(kind,config,progress=None,cancel=None):
     p=checked_config(config);started=time.perf_counter()
     if kind not in RUNNERS:raise ValueError("未知任务类型")
     result,arrays=RUNNERS[kind](p,progress,cancel)
-    result.update(config_hash=config_hash(p),schema_version=1,algorithm_version="1.0.0",seed=p["experiment"]["seed"],
+    result.update(config_hash=config_hash(p),schema_version=1,algorithm_version="1.0.1",seed=p["experiment"]["seed"],
         elapsed_s=time.perf_counter()-started,standards={"gas":"ITU-R P.676-13","rain":"ITU-R P.838-3"},config=p)
     return result,arrays

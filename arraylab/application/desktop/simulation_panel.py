@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLabel,QComboBox,
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
 
-from arraylab.application.simulation import provider,run_process
+from arraylab.application.simulation import provider,run_process,record_configuration,record_compatibility
 from arraylab.framework.parallel import ComputationCancelled,requested_workers
 from arraylab.shared.qt.configuration_form import ConfigurationForm
 from arraylab.shared.qt.canvas import InteractiveFigureCanvas
@@ -55,6 +55,8 @@ class SimulationPanel(QWidget):
         self.parameter_widget.changed.connect(self.mark_dirty)
         body=QVBoxLayout(self);body.setContentsMargins(8,6,8,6)
         self.state=QLabel('选择示例或设置参数，再执行所选操作。');self.state.setWordWrap(True);self.state.setObjectName('state');body.addWidget(self.state)
+        self.snapshot_notice=QLabel();self.snapshot_notice.setWordWrap(True);self.snapshot_notice.setObjectName('warning');self.snapshot_notice.hide();body.addWidget(self.snapshot_notice)
+        self.snapshot_notice.setStyleSheet('color:#855015;background:#fff5dd;padding:6px;border:1px solid #e7cb8e;')
         row=QHBoxLayout();row.addWidget(QLabel('操作'))
         self.action=QComboBox()
         for key,title in self.backend.ACTIONS:self.action.addItem(title,key)
@@ -108,8 +110,8 @@ class SimulationPanel(QWidget):
     def configuration(self):return self.backend.normalize_configuration(self.parameter_widget.value())
     read_parameters=configuration
 
-    def apply_configuration(self,configuration):
-        configuration=self.backend.normalize_configuration(configuration)
+    def apply_configuration(self,configuration,*,from_record=False):
+        configuration=record_configuration(self.feature,configuration) if from_record else self.backend.normalize_configuration(configuration)
         self._changing=True
         try:self.parameter_widget.set_value(configuration)
         finally:self._changing=False
@@ -171,9 +173,12 @@ class SimulationPanel(QWidget):
             widget=self.integration_bar.itemAt(index).widget()
             if widget is not None:widget.setEnabled(not self._busy)
         result=self.report['result'] if self.report else {}
+        compatibility=record_compatibility(self.report)
+        self.snapshot_notice.setText(compatibility.get('message',''))
+        self.snapshot_notice.setVisible(not compatibility.get('current',False))
         available=bool(result.get('candidates')) if self.feature=='pulse' else bool(result.get('synthesis'))
         self.apply_button.setEnabled(not self._busy and available)
-        self.calibration_button.setEnabled(not self._busy and not self._dirty and result.get('kind')=='calibration' and result.get('ready') is True)
+        self.calibration_button.setEnabled(not self._busy and not self._dirty and compatibility.get('current',False) and result.get('kind')=='calibration' and result.get('ready') is True)
         if getattr(self.host,'_workflow_ready',False):
             getattr(self.host,'refresh_simulation_handoffs',lambda:None)()
 
@@ -234,7 +239,7 @@ class SimulationPanel(QWidget):
     def accept_result(self,report,arrays,*,restore_inputs=False):
         if report.get('format')!='arraylab.simulation.result' or report.get('schema_version')!=1 or report.get('feature')!=self.feature:
             raise ValueError('记录类型与当前模块不一致。')
-        configuration=self.backend.normalize_configuration(report['configuration'])
+        configuration=record_configuration(self.feature,report['configuration'])
         if configuration_digest(configuration)!=report.get('configuration_sha256'):raise ValueError('记录输入摘要不一致。')
         from arraylab.application.simulation import validate_record
         validate_record(report,arrays,expected_feature=self.feature)
@@ -243,7 +248,7 @@ class SimulationPanel(QWidget):
              self.selection.currentIndex(),self._dirty,self.action.currentIndex(),self.table_toggle.isChecked(),self.scene_time.value(),self.scene_time.maximum())
         try:
             self.report=report;self.arrays=arrays
-            if restore_inputs:self.apply_configuration(configuration)
+            if restore_inputs:self.apply_configuration(configuration,from_record=True)
             if restore_inputs:
                 with QSignalBlocker(self.action):self.action.setCurrentIndex(self.action.findData(report['action']))
             preferred={'analysis':'cuts','budget':'budget' if self.feature=='equation' else 'metrics','simulation':'rd','simulate':'rd','snr':'snr',

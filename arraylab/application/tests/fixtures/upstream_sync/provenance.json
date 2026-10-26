@@ -1,0 +1,66 @@
+{
+  "origin": "Actual unmodified ArrayLab 0.26.0 frozen CLI outputs, generated with explicit small synthetic configurations. Container-only repack from exported metadata and arrays into full record NPZ; numerical values, source identity and configuration were not edited.",
+  "producer": "ArrayLab-cli.exe 0.26.0",
+  "producer_sha256": "68c8f1147bd95ec3c688817cbc695047fe944d241faf57276b437e7cc787cd28",
+  "generated_date": "2026-10-27",
+  "fixtures": [
+    {
+      "file": "equation-simulation-v100.npz",
+      "feature": "equation",
+      "action": "simulation",
+      "sha256": "982f35f4b606cc7f55d636efe1a8355c97dac58cb67edacaa0dd60bde57b5406",
+      "config_sha256": "c83bcc22d8f413048090a2fd870a675eb3226a7f1edeb560e3203a8460936ff6",
+      "source": {
+        "name": "EquationLab",
+        "version": "1.0.0",
+        "archive_sha256": "f68bdf5be3e5bd2612f1c8a720037591886d079190f1c5e6e36d676b0dbcd2b0"
+      },
+      "array_count": 17,
+      "calibration_ready": null
+    },
+    {
+      "file": "equation-invalid-band-budget-v100.npz",
+      "feature": "equation",
+      "action": "budget",
+      "sha256": "6136377051f06784ffc1d6968edf7c2ebdbc8676f8a5c345fddec154ba4eed7e",
+      "config_sha256": "670b1de907de06cff121ab9fe0436e965e7716ee9dbf7051981bdf7c7c4b7901",
+      "source": {
+        "name": "EquationLab",
+        "version": "1.0.0",
+        "archive_sha256": "f68bdf5be3e5bd2612f1c8a720037591886d079190f1c5e6e36d676b0dbcd2b0"
+      },
+      "array_count": 0,
+      "calibration_ready": null
+    },
+    {
+      "file": "equation-calibration-v100.npz",
+      "feature": "equation",
+      "action": "calibration",
+      "sha256": "adf7ae95c1973b193ddb9fd9fe897ad4cca4cf6162b7e8b4cd92c6702517aa35",
+      "config_sha256": "502b8436351b508b03df3882ef58ce47308179432752ae60e6f7341011a7a9ed",
+      "source": {
+        "name": "EquationLab",
+        "version": "1.0.0",
+        "archive_sha256": "f68bdf5be3e5bd2612f1c8a720037591886d079190f1c5e6e36d676b0dbcd2b0"
+      },
+      "array_count": 16,
+      "calibration_ready": true
+    },
+    {
+      "file": "phased-analysis-v121.npz",
+      "feature": "phased",
+      "action": "analysis",
+      "sha256": "dd3c968ccdfa47e74a10d14bd8dc43d646b3d327f8588629120decf8b99c89b5",
+      "config_sha256": "06af78c98a4095921b664beaf96b0ff038434d58760f8f6e7d084323417b938d",
+      "source": {
+        "name": "ArrayStudio",
+        "version": "1.2.1",
+        "archive_sha256": "04708ed44ab2ea911318351061f4e5b4b88450caae78d265c3db317aa398329d"
+      },
+      "array_count": 6,
+      "calibration_ready": null
+    }
+  ],
+  "producer_archive_sha256": "e4a59365a507ce579bbcd7e7b6377061438a21bf8e8a011e24af9303bd558bd0",
+  "producer_archive": "ArrayLab-0.26.0-windows-x64.zip"
+}

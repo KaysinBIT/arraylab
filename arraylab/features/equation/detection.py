@@ -39,7 +39,7 @@ def calibration_fingerprint(p):
     x["radar"]["noise_enabled"]=True
     x["radar_height_m"]=p["scene"]["radar_height_m"]
     x["cut"]=[p["experiment"]["cut_range_m"],p["experiment"]["cut_velocity_mps"]]
-    x["calibration_model_version"]="1.0.0"
+    x["calibration_model_version"]="1.0.1"
     return config_hash(x)
 
 
@@ -110,10 +110,13 @@ def run_detector(p,arrays,cancel=None,allow_uncalibrated=True):
     detections=[{"range_m":float(arrays["ranges_m"][ir]),"velocity_mps":float(arrays["velocities_mps"][iv]),
         "power_dbw":10*math.log10(max(float(power[iv,ir]),1e-300)),"cell_snr_db":10*math.log10(max(float(power[iv,ir]/arrays["noise_power"][iv,ir]),1e-300)),
         "range_index":ir,"velocity_index":iv} for iv,ir in points]
+    for item in detections:
+        item["cell_power_to_noise_db"]=item["cell_snr_db"]
     if p["waveform"]["kind"]=="fmcw":
         slope=p["waveform"]["bandwidth_hz"]/p["waveform"]["ramp_s"]
         for item in detections:
             item["apparent_range_m"]=item["range_m"]
             item["range_m"]-=p["waveform"]["fc_hz"]*item["velocity_mps"]/slope
     return {"threshold":base*factor,"mask":mask,"raw_mask":rawmask,"statistic":stat,"valid":valid,"factor":float(factor),
-        "provenance":provenance,"warnings":warnings,"analytic_assumptions":why,"detections":detections}
+        "provenance":provenance,"warnings":warnings,"analytic_assumptions":why,"detections":detections,
+        "cell_power_ratio_definition":"cell_power_to_noise_db and legacy cell_snr_db are total measured cell power / expected thermal power, including any signal, noise and clutter"}
