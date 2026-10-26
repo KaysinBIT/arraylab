@@ -61,7 +61,7 @@ def finish_release():
                     shutil.copy2(source, destination)
     (release / "versions.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (licenses / "three").mkdir(exist_ok=True)
-    shutil.copy2(ROOT / "arraylab/features/pulse/resources/scene/THREE-LICENSE.txt", licenses / "three/LICENSE.txt")
+    shutil.copy2(ROOT / "arraylab/shared/resources/radar_scene/THREE-LICENSE.txt", licenses / "three/LICENSE.txt")
     for name in ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]:
         shutil.copy2(ROOT / name, release / name)
     shutil.copytree(ROOT / "examples", release / "examples", dirs_exist_ok=True)

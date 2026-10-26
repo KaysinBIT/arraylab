@@ -45,7 +45,7 @@ class TaskNavigationActions:
                 key = selector.itemData(index)
                 destination = parent
                 if kind == 'waveform':
-                    group = '天线设计结果' if key in ('antenna','sparse_design','gain_budget') else '波形与解模糊结果' if key not in ('comparisons','theory') else None
+                    group = '天线设计结果' if key in ('antenna','sparse_design','gain_budget') else '波形与解模糊结果' if key not in ('scene','comparisons','theory') else None
                     if group:
                         if group not in groups: groups[group] = self._nav_group(parent, group)
                         destination = groups[group]

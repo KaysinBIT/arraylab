@@ -10,8 +10,9 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration', 'pulse-scene')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize', 'radar-integration', 'pulse-scene', 'fmcw-scene')
 SCOPES = {
+    'fmcw-scene': 'Only FMCW task naming, shared offline 3D scene, A/B snapshots, scene records/export and Pulse shared-resource compatibility.',
     'pulse-scene': 'Only the restored original PulseLab 3D scene: offline rendering, native controls, camera/time records, PNG export and resource lifecycle.',
     'radar-integration': 'Only three new radar components: native workbenches, owned CLI workers, complete records, exports, geospatial import and cancellation.',
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
@@ -100,7 +101,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'pulse-scene':
+            if suite == 'fmcw-scene':
+                from .fmcw_scene import exercise_fmcw_scene
+                run_group(report,'fmcw-scene',lambda:exercise_fmcw_scene(app,window,output,report,check))
+            elif suite == 'pulse-scene':
                 from .pulse_scene import exercise_pulse_scene
                 run_group(report,'pulse-scene',lambda:exercise_pulse_scene(app,window,output,report,check))
             elif suite == 'radar-integration':

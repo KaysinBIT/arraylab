@@ -299,7 +299,7 @@ def _validate_radar_results(report, config, active):
                 raise ValueError('稀疏检查项格式无效。')
 
 
-def _record_payload(report, view, comparisons, profile):
+def _record_payload(report, view, comparisons, profile, scene_state=None):
     saved = validate_waveform_report(report)
     profile = profile or saved['configuration']['activeProfile']
     if view not in VIEWS or profile not in saved['spectra']: raise ValueError('波形记录视图或分析组无效。')
@@ -310,24 +310,34 @@ def _record_payload(report, view, comparisons, profile):
         if type(row) is not dict or set(row) != {'name', 'report'} or type(row['name']) is not str or not 1 <= len(row['name']) <= 100:
             raise ValueError('波形对比名称或字段无效。')
         items.append({'name': row['name'], 'report': validate_waveform_report(row['report'])})
-    return {'report': saved, 'view': view, 'profile': profile, 'comparisons': items}
+    payload = {'report': saved, 'view': view, 'profile': profile, 'comparisons': items}
+    if scene_state is not None:
+        from .scene import normalize_scene_state
+        payload['scene_state'] = normalize_scene_state(scene_state)
+    return payload
 
 
-def save_waveform_record(path, report, view='overview', comparisons=None, profile=None):
-    payload = _record_payload(report, view, comparisons, profile)
-    _write(path, {'format': 'arraylab.waveform.record', 'schema_version': 1,
+def save_waveform_record(path, report, view='overview', comparisons=None, profile=None, scene_state=None):
+    payload = _record_payload(report, view, comparisons, profile, scene_state)
+    _write(path, {'format': 'arraylab.waveform.record', 'schema_version': 2 if scene_state is not None else 1,
                   **payload, 'sha256': hashlib.sha256(_canonical(payload)).hexdigest()})
 
 
 def load_waveform_record(path):
     d = _read(path)
-    if type(d) is not dict or set(d) != {'format', 'schema_version', 'report', 'view', 'profile', 'comparisons', 'sha256'} or d['format'] != 'arraylab.waveform.record' or type(d['schema_version']) is not int or d['schema_version'] != 1:
+    version = d.get('schema_version') if type(d) is dict else None
+    keys = {'format', 'schema_version', 'report', 'view', 'profile', 'comparisons', 'sha256'}
+    if version == 2:keys.add('scene_state')
+    if type(d) is not dict or set(d) != keys or d['format'] != 'arraylab.waveform.record' or type(version) is not int or version not in (1, 2):
         raise ValueError('波形记录类型或版本无效。')
     payload = {k: d[k] for k in ('report', 'view', 'profile', 'comparisons')}
+    if version == 2:
+        if type(d['scene_state']) is not dict:raise ValueError('FMCW场景显示状态字段无效。')
+        payload['scene_state'] = d['scene_state']
     digest = d['sha256']
     if type(digest) is not str or not hmac.compare_digest(digest, hashlib.sha256(_canonical(payload)).hexdigest()):
         raise ValueError('波形记录摘要校验失败。')
-    return _record_payload(d['report'], d['view'], d['comparisons'], d['profile'])
+    return _record_payload(d['report'], d['view'], d['comparisons'], d['profile'], d.get('scene_state'))
 
 
 def is_waveform_record(path):
@@ -340,10 +350,20 @@ def _csv(path, columns, rows):
         writer = csv.writer(stream); writer.writerow(columns); writer.writerows(rows)
 
 
-def export_waveform_directory(path, report, plot='all'):
+def export_waveform_directory(path, report, plot='all', *, scene_png=None, scene_state=None, profile=None):
     if plot not in ('none', 'all', 'overview', 'phase', 'spectra', 'rd', 'range_recovery', 'pri_recovery', 'antenna', 'sparse_design', 'gain_budget'):
         raise ValueError('波形导出图形类型无效。')
     saved = validate_waveform_report(report)
+    selected = profile or saved['configuration']['activeProfile']
+    if selected not in saved['spectra']:raise ValueError('导出分析组无效。')
+    state = None
+    if scene_state is not None or scene_png is not None:
+        from .scene import normalize_scene_state, scene_payload
+        if scene_png is not None and (not isinstance(scene_png, bytes) or not scene_png.startswith(b'\x89PNG\r\n\x1a\n') or len(scene_png) > MAX_BYTES):
+            raise ValueError('FMCW三维场景PNG无效。')
+        state = normalize_scene_state(scene_state)
+        display = scene_payload(saved, selected, state['time_s'], state)
+        state['time_s'] = display['time_s']
     target = Path(path).expanduser().absolute()
     if target.exists() or target.is_symlink(): raise FileExistsError('输出目录已存在，未覆盖。')
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -351,7 +371,11 @@ def export_waveform_directory(path, report, plot='all'):
     try:
         _write(staging/'summary.json', saved)
         save_waveform_configuration(staging/'parameters.json', saved['configuration'])
-        save_waveform_record(staging/'waveform-record.json', saved)
+        save_waveform_record(staging/'waveform-record.json', saved, view='scene' if state is not None else 'overview',
+                             profile=selected, scene_state=state)
+        if state is not None:
+            _write(staging/'scene-view.json', {'profile': selected, 'scene_state': state, 'note': display['note']})
+        if scene_png is not None:(staging/'scene.png').write_bytes(scene_png)
         for name, spectrum in saved['spectra'].items():
             _csv(staging/f'{name}-range.csv', ['apparent_range_m', 'normalized_amplitude_db'], ([p['x'], p['y']] for p in spectrum['rangeProfile']))
             _csv(staging/f'{name}-doppler.csv', ['velocity_mps', 'velocity_kmh', 'normalized_amplitude_db'], ([p['x'], p['x']*3.6, p['y']] for p in spectrum['dopplerProfile']))

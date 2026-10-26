@@ -263,7 +263,10 @@ class WorkflowActions:
         if kind=='sparse':return self.sparse_panel.canvas if self.sparse_panel.tabs.currentIndex()==0 else None
         if kind=='subarray':return self.subarray_panel.canvas
         if kind=='mimo':return self.mimo_panel.canvas if self.mimo_panel.canvas.isVisible() else None
-        if kind=='waveform':return self.waveform_panel.canvas if self.waveform_panel.canvas.isVisible() else None
+        if kind=='waveform':
+            scene=self.waveform_panel.scene_widget
+            if scene is not None and scene.isVisible():return scene if scene.ready else None
+            return self.waveform_panel.canvas if self.waveform_panel.canvas.isVisible() else None
 
     def save_plot(self):
         widget=self.current_picture()
@@ -290,7 +293,10 @@ class WorkflowActions:
         elif kind=='sparse':self.sparse_panel.redraw()
         elif kind=='subarray':self.subarray_panel.redraw()
         elif kind=='mimo':self.mimo_panel.redraw()
-        elif kind=='waveform':self.waveform_panel.redraw()
+        elif kind=='waveform':
+            scene=self.waveform_panel.scene_widget
+            if scene is not None and scene.isVisible():scene.reset_camera()
+            else:self.waveform_panel.redraw()
 
     def show_help(self):
         kind=self.active_task()

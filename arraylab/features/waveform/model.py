@@ -12,7 +12,7 @@ SOURCE_VERSION = '1.4'
 SOURCE_ARCHIVE_SHA256 = '2af9b70fee0df942fb9e3fede34b0d83b87c76652e9a9bffd281355682075509'
 LEGACY_CONFIG_KEYS = ('params', 'profileB', 'abOptions', 'activeProfile', 'rangeOptions', 'priOptions')
 CONFIG_KEYS = (*LEGACY_CONFIG_KEYS, 'geometry', 'antennaDesign')
-VIEWS = ('overview', 'phase', 'spectra', 'rd', 'metrics', 'range_recovery', 'pri_recovery', 'comparisons', 'theory', 'antenna', 'sparse_design', 'gain_budget')
+VIEWS = ('overview', 'phase', 'spectra', 'rd', 'metrics', 'range_recovery', 'pri_recovery', 'comparisons', 'theory', 'antenna', 'sparse_design', 'gain_budget', 'scene')
 
 
 def _default_profile_b(a):

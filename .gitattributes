@@ -8,4 +8,4 @@
 *.cmd text eol=crlf
 *.png binary
 # Generated Three.js contains upstream GLSL string literals; preserve their text.
-arraylab/features/pulse/resources/scene/scene.bundle.js -whitespace linguist-generated=true
+arraylab/shared/resources/radar_scene/scene.bundle.js -whitespace linguist-generated=true

@@ -1,9 +1,12 @@
 """Public waveform API; implementation imports are lazy and owned by the feature."""
 
-__all__ = ['attach_waveform', 'calculate_waveform', 'default_waveform_configuration', 'is_waveform_record', 'load_waveform_configuration', 'main', 'normalize_waveform_configuration', 'save_waveform_configuration']
+__all__ = ['attach_waveform', 'calculate_waveform', 'default_waveform_configuration', 'is_waveform_record', 'load_waveform_configuration', 'main', 'normalize_waveform_configuration', 'save_waveform_configuration', 'scene_payload', 'normalize_scene_state']
 
 
 def __getattr__(name):
+    if name in ('scene_payload', 'normalize_scene_state'):
+        from . import scene
+        return getattr(scene, name)
     if name == 'attach_waveform':
         from .integration import attach_waveform
         return attach_waveform

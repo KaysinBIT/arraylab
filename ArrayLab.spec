@@ -10,8 +10,8 @@ common = ["tkinter", "PyQt5", "PyQt6", "PySide2", "pytest"]
 sparse_resources = [(str(ROOT / "arraylab/sparse2d/resources"), "arraylab/sparse2d/resources")]
 application_icons = ROOT / "arraylab/resources/icons"
 equation_resources = [(str(ROOT / "arraylab/features/equation/data"), "arraylab/features/equation/data")]
-pulse_scene = ROOT / "arraylab/features/pulse/resources/scene"
-scene_resources = [(str(pulse_scene / name), "arraylab/features/pulse/resources/scene")
+radar_scene = ROOT / "arraylab/shared/resources/radar_scene"
+scene_resources = [(str(radar_scene / name), "arraylab/shared/resources/radar_scene")
                    for name in ("index.html", "scene.bundle.js", "THREE-LICENSE.txt", "SOURCE.md")]
 # GeoTIFF/CRS support must work in both native UI and headless programs. Keep
 # extension modules and their GDAL/PROJ data; Python source files stay in PYZ.

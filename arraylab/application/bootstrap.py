@@ -34,7 +34,10 @@ def _radar_integration(app,window,output):
 def _pulse_scene(app,window,output):
     from .verification.suites import schedule_feature_test
     return schedule_feature_test(app,window,output,'pulse-scene')
+def _fmcw_scene(app,window,output):
+    from .verification.suites import schedule_feature_test
+    return schedule_feature_test(app,window,output,'fmcw-scene')
 def main(argv=None):
     return run(argv,headless_main=_headless,window_factory=_window,icon_factory=_icon,version=__version__,
-               smoke_schedulers={'all':_all,'sparse-view':_sparse,'mimo':_mimo,'waveform':_waveform,'navigation':_navigation,'resize':_resize,'radar-integration':_radar_integration,'pulse-scene':_pulse_scene})
+               smoke_schedulers={'all':_all,'sparse-view':_sparse,'mimo':_mimo,'waveform':_waveform,'navigation':_navigation,'resize':_resize,'radar-integration':_radar_integration,'pulse-scene':_pulse_scene,'fmcw-scene':_fmcw_scene})
 _set_windows_application_id=set_windows_application_id

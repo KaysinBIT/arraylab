@@ -46,7 +46,7 @@ export class RadarScene{
   private renderer:THREE.WebGLRenderer;private scene=new THREE.Scene();private camera:THREE.PerspectiveCamera;
   private controls:OrbitControls;private group=new THREE.Group();private ro:ResizeObserver;private frame=0;
   private actors:{mesh:THREE.Group;object:Dict}[]=[];private project:Dict={};private span=1000;private heightGrid:Grid|null=null;
-  private beam?:THREE.Mesh;private running=false;private visible=true;private time=0;private last=0;private maxTime=5;private disposed=false;
+  private beam?:THREE.Mesh;private pointingAxis?:THREE.Group;private running=false;private visible=true;private time=0;private last=0;private maxTime=5;private disposed=false;
   private renderCount=0;private terrainTriangles=0;private unknownActors=0;private caption='输入场景';
   onTime?:(time:number)=>void;
   constructor(private container:HTMLElement){
@@ -68,7 +68,7 @@ export class RadarScene{
   };
   private clearGroup(){for(const child of [...this.group.children]){child.traverse(obj=>{const mesh=obj as THREE.Mesh;mesh.geometry?.dispose();
     for(const material of (Array.isArray(mesh.material)?mesh.material:[mesh.material])){if(!material)continue;(material as THREE.MeshBasicMaterial).map?.dispose();material.dispose();}});
-    this.group.remove(child);}this.actors=[];this.beam=undefined;this.terrainTriangles=0;}
+    this.group.remove(child);}this.actors=[];this.beam=undefined;this.pointingAxis=undefined;this.terrainTriangles=0;}
   setProject(project:Dict,grid:Grid|null=null,resetCamera=false,maxTime=5,caption='输入场景'){
     if(!project?.scene?.platform||!Array.isArray(project.scene.targets)||!project.array)throw new Error('场景配置缺少平台、目标或阵列');
     vector(project.scene.platform.position_m);project.scene.targets.forEach((item:Dict)=>vector(item.position_m));
@@ -77,15 +77,24 @@ export class RadarScene{
     this.heightGrid=terrain?.enabled&&terrain.kind==='dem'&&terrain.x_m&&terrain.y_m&&terrain.heights_m?
       {x_m:terrain.x_m,y_m:terrain.y_m,z_m:terrain.heights_m,valid:terrain.valid}:grid;
     this.clearGroup();const points=[project.scene.platform.position_m,...project.scene.targets.map((o:Dict)=>o.position_m)];
-    this.span=Math.max(100,...points.flat().map((n:number)=>Math.abs(n)),grid?Math.max(...grid.x_m.map(Math.abs),...grid.y_m.map(Math.abs)):0)*1.2;
+    const requestedMin=project.scene.display_min_span_m,minSpan=typeof requestedMin==='number'&&Number.isFinite(requestedMin)&&requestedMin>0?requestedMin:100;
+    this.span=Math.max(minSpan,...points.flat().map((n:number)=>Math.abs(n)),grid?Math.max(...grid.x_m.map(Math.abs),...grid.y_m.map(Math.abs)):0)*1.2;
     this.camera.near=Math.max(.01,this.span/1e5);this.camera.far=this.span*100;this.camera.updateProjectionMatrix();
     const helper=new THREE.GridHelper(this.span*2,20,0x2b5364,0x1d3748);helper.position.set(this.span*.4,-2,0);this.group.add(helper);
     const axes=new THREE.AxesHelper(this.span*.15);axes.position.set(0,1,0);this.group.add(axes);if(grid)this.addTerrain(grid);
     const platform=this.addActor(project.scene.platform,'雷达平台',0x63d5cf,true);this.actors.push({mesh:platform,object:project.scene.platform});
     project.scene.targets.forEach((obj:Dict,i:number)=>{const mesh=this.addActor(obj,obj.id||`目标 ${i+1}`,0xf5bf68,false);this.actors.push({mesh,object:obj});});
-    const length=this.span*.6,bw=Number(project.array.beamwidth_deg?.[0]||30),radius=length*Math.tan(Math.min(80,bw/2)*Math.PI/180);
-    const geometry=new THREE.ConeGeometry(radius,length,40,1,true);geometry.translate(0,-length/2,0);geometry.rotateZ(Math.PI/2);
-    this.beam=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x56ccbc,transparent:true,opacity:.085,side:THREE.DoubleSide,depthWrite:false}));platform.add(this.beam);
+    if(project.array.beam_visible!==false){
+      const length=this.span*.6,bw=Number(project.array.beamwidth_deg?.[0]||30),radius=length*Math.tan(Math.min(80,bw/2)*Math.PI/180);
+      const geometry=new THREE.ConeGeometry(radius,length,40,1,true);geometry.translate(0,-length/2,0);geometry.rotateZ(Math.PI/2);
+      this.beam=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x56ccbc,transparent:true,opacity:.085,side:THREE.DoubleSide,depthWrite:false}));platform.add(this.beam);
+    }
+    if(project.array.pointing_axis===true){
+      // The group carries scan/pointing rotation; ArrowHelper keeps its own +X orientation.
+      this.pointingAxis=new THREE.Group();this.pointingAxis.add(new THREE.ArrowHelper(
+        new THREE.Vector3(1,0,0),new THREE.Vector3(),this.span*.6,0x63d5cf,this.span*.045,this.span*.022));
+      platform.add(this.pointingAxis);
+    }
     this.seek(this.time);if(resetCamera)this.resetCamera();else this.requestFrame();
   }
   private addTerrain(grid:Grid){
@@ -121,8 +130,9 @@ export class RadarScene{
     for(const actor of this.actors){const position=this.worldPosition(actor.object,t);actor.mesh.visible=position!==null;
       if(!position){this.unknownActors++;continue;}actor.mesh.position.copy(xyz(position));const attitude=attitudeAt(actor.object,t);
       actor.mesh.rotation.set((attitude[2]||0)*Math.PI/180,(attitude[0]||0)*Math.PI/180,(attitude[1]||0)*Math.PI/180,'YZX');}
-    if(this.beam){const a=this.project.array,az=(Number(a.pointing_deg?.[0]||0)+Number(a.scan_rate_deg_s?.[0]||0)*t)*Math.PI/180,
-      el=(Number(a.pointing_deg?.[1]||0)+Number(a.scan_rate_deg_s?.[1]||0)*t)*Math.PI/180;this.beam.rotation.set(0,az,el,'YZX');}
+    if(this.beam||this.pointingAxis){const a=this.project.array,az=(Number(a.pointing_deg?.[0]||0)+Number(a.scan_rate_deg_s?.[0]||0)*t)*Math.PI/180,
+      el=(Number(a.pointing_deg?.[1]||0)+Number(a.scan_rate_deg_s?.[1]||0)*t)*Math.PI/180;
+      this.beam?.rotation.set(0,az,el,'YZX');this.pointingAxis?.rotation.set(0,az,el,'YZX');}
     this.onTime?.(t);if(request)this.requestFrame();
   }
   play(value:boolean){this.running=!!value;this.last=0;this.requestFrame();}
@@ -145,6 +155,7 @@ export class RadarScene{
     camera:{position:this.camera.position.toArray(),target:this.controls.target.toArray(),zoom:this.camera.zoom},
     actors:this.actors.map(a=>({id:a.object.id||'平台',visible:a.mesh.visible,position:a.mesh.position.toArray(),quaternion:a.mesh.quaternion.toArray()})),
     beam_direction:this.beam?new THREE.Vector3(1,0,0).applyQuaternion(this.beam.getWorldQuaternion(new THREE.Quaternion())).toArray():null,
+    pointing_direction:this.pointingAxis?new THREE.Vector3(1,0,0).applyQuaternion(this.pointingAxis.getWorldQuaternion(new THREE.Quaternion())).toArray():null,
     geometries:this.renderer.info.memory.geometries,textures:this.renderer.info.memory.textures};}
   png(){if(this.disposed)throw new Error('场景已关闭');this.controls.update();this.renderer.render(this.scene,this.camera);return this.renderer.domElement.toDataURL('image/png');}
   dispose(){if(this.disposed)return;this.disposed=true;this.running=false;cancelAnimationFrame(this.frame);this.frame=0;this.ro.disconnect();this.controls.removeEventListener('change',this.requestFrame);this.controls.dispose();this.clearGroup();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();}

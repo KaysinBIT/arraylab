@@ -1,4 +1,4 @@
-"""Native waveform, A/B and distance-ambiguity task; no browser dependency."""
+"""Native FMCW task with an optional, fully offline shared 3D viewport."""
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QScrollArea, QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QTextBrowser, QFileDialog,
-    QMessageBox, QInputDialog, QPlainTextEdit)
+    QMessageBox, QInputDialog, QPlainTextEdit, QDoubleSpinBox, QGridLayout)
 
 from arraylab.framework.parallel import ComputationCancelled, requested_workers
 from arraylab.features.waveform.model import default_waveform_configuration, normalize_waveform_configuration, calculate_waveform
@@ -81,6 +81,7 @@ class WaveformPanel(QWidget):
     def __init__(self,window):
         super().__init__()
         self.host=window;self.report=None;self.thread=None;self._busy=False
+        self.scene_widget=None;self._scene_key=None;self._scene_camera=None
         self._changing=True;self._cancel_pending=False;self._last_error=None
         self.comparisons=[];self.last_export=None;self.inputs={};self.profile_inputs={}
         self.derived_inputs={};self.range_inputs={};self.pri_inputs={};self._derived_updating=False
@@ -97,10 +98,24 @@ class WaveformPanel(QWidget):
                           ('ADC折叠解模糊','range_recovery'),('跨周期归属解模糊','pri_recovery'),
                           ('雷达天线布局与方向图','antenna'),('稀疏阵列设计 / 高分辨验证','sparse_design'),
                           ('天线增益预算','gain_budget'),
+                          ('三维场景','scene'),
                           ('方案对比','comparisons'),('公式与适用范围','theory')]:self.view.addItem(title,key)
         self.view.setAccessibleName('波形结果视图');controls.addWidget(self.view,1);body.addLayout(controls)
         self.recovery_table_toggle=QCheckBox('候选表');self.recovery_table_toggle.setToolTip('显示全部候选区间；图中只展示前80项。')
         self.recovery_table_toggle.toggled.connect(self._candidate_display_changed);controls.addWidget(self.recovery_table_toggle)
+        self.scene_controls=QWidget();scene_row=QGridLayout(self.scene_controls);scene_row.setContentsMargins(0,0,0,0)
+        self.scene_time=QDoubleSpinBox();self.scene_time.setDecimals(3);self.scene_time.setRange(0,5);self.scene_time.setSuffix(' s')
+        self.scene_target_az=QDoubleSpinBox();self.scene_target_az.setRange(-180,180);self.scene_target_az.setSuffix('°')
+        self.scene_target_el=QDoubleSpinBox();self.scene_target_el.setRange(-90,90);self.scene_target_el.setSuffix('°')
+        self.scene_motion=QComboBox()
+        for title,key in [('静态标注速度','stationary'),('沿参考射线靠近','approaching'),('沿参考射线远离','receding')]:self.scene_motion.addItem(title,key)
+        for i,(title,control) in enumerate([('预览时间',self.scene_time),('目标显示方位',self.scene_target_az),('目标显示俯仰',self.scene_target_el),('运动显示约定',self.scene_motion)]):
+            scene_row.addWidget(QLabel(title),i//2,(i%2)*2);scene_row.addWidget(control,i//2,(i%2)*2+1)
+            control.setAccessibleName(title+'（仅场景，不改变波形计算）')
+        body.addWidget(self.scene_controls)
+        self.scene_time.valueChanged.connect(self._scene_time_changed)
+        self.scene_target_az.valueChanged.connect(self._scene_display_changed);self.scene_target_el.valueChanged.connect(self._scene_display_changed)
+        self.scene_motion.currentIndexChanged.connect(self._scene_display_changed)
         self.figure=Figure(figsize=(8,5),dpi=100);self.canvas=FigureCanvasQTAgg(self.figure)
         self.canvas.setMinimumSize(480,360);body.addWidget(self.canvas,1)
         self.toolbar=WaveformToolbar(self.canvas,self);body.addWidget(self.toolbar);self.plot_layout=body
@@ -322,7 +337,7 @@ class WaveformPanel(QWidget):
         except (ValueError,TypeError,ArithmeticError) as exc:
             QMessageBox.warning(self,'波形参数检查',str(exc));return
         self._busy=True;self._cancel_pending=False;self._last_error=None
-        self.parameter_widget.setEnabled(False);self.state.setText('正在计算雷达波形与天线设计…')
+        self.parameter_widget.setEnabled(False);self.state.setText('正在计算FMCW雷达波形与天线设计…')
         if radar_action in ('sparse','evaluate'):
             self.view.setCurrentIndex(self.view.findData('sparse_design'))
         worker=WaveformWorker(configuration,self,radar_action);self.thread=worker
@@ -378,6 +393,7 @@ class WaveformPanel(QWidget):
 
     def _make_figure(self,report,view,profile):
         figure=Figure(figsize=(8,5),dpi=100)
+        if view=='scene' and report is not None:return figure
         if report is None:
             axis=figure.add_subplot(111);axis.set_axis_off();axis.text(.5,.5,'设置波形参数后按F5计算',ha='center',va='center',transform=axis.transAxes)
         else:draw_waveform_figure(figure,report,view if view in VIEWS else 'overview',profile,chinese=True)
@@ -391,16 +407,18 @@ class WaveformPanel(QWidget):
         old=self.toolbar;self.toolbar=WaveformToolbar(self.canvas,self);self.plot_layout.replaceWidget(old,self.toolbar);old.hide();old.deleteLater()
         self.reflow()
 
-    def accept_result(self,report,*,restore_inputs=False,view=None,profile=None,comparisons=None):
+    def accept_result(self,report,*,restore_inputs=False,view=None,profile=None,comparisons=None,scene_state=None):
         chosen=view or self.view.currentData();profile=profile or report['configuration']['activeProfile']
         if self.view.findData(chosen)<0:raise ValueError('未知波形结果视图。')
         if profile not in ('A','B') or not report['analysis']['profiles'].get(profile):raise ValueError('该记录没有所选A/B组结果。')
         figure=self._make_figure(report,chosen,profile)
         old=(self.report,self.figure,self.view.currentIndex(),self.result_profile.currentIndex(),self._input_state(),self.comparisons,
-             self.radar_controls.pages.currentIndex(),self.radar_controls._section)
+             self.radar_controls.pages.currentIndex(),self.radar_controls._section,self.scene_state(sync=False))
         try:
             if restore_inputs:self.apply_configuration(report['configuration'])
             self.report=report
+            if scene_state is not None:self.restore_scene_state(scene_state)
+            elif restore_inputs:self.restore_scene_state(None)
             if comparisons is not None:self.comparisons=deepcopy(comparisons)
             with QSignalBlocker(self.view),QSignalBlocker(self.result_profile):
                 self.view.setCurrentIndex(self.view.findData(chosen));self.result_profile.setCurrentIndex(self.result_profile.findData(profile))
@@ -412,6 +430,7 @@ class WaveformPanel(QWidget):
             self.radar_controls._section=old[7]
             with QSignalBlocker(self.view),QSignalBlocker(self.result_profile):
                 self.view.setCurrentIndex(old[2]);self.result_profile.setCurrentIndex(old[3])
+            self.restore_scene_state(old[8])
             self._install_figure(old[1]);self._show_view();self.update_summary();raise
         self._last_error=None
         self.state.setText('已恢复完整波形记录；使用已保存结果，未重新计算。' if restore_inputs else '波形计算完成；结果对应本次成功输入。')
@@ -444,22 +463,28 @@ class WaveformPanel(QWidget):
 
     def _show_view(self):
         view=self.view.currentData();recovery=view in ('range_recovery','pri_recovery')
+        scene=view=='scene'
         radar=view in ('antenna','sparse_design','gain_budget')
         candidate_table=(recovery or radar) and self.recovery_table_toggle.isChecked()
         plot=view in VIEWS and not candidate_table;metrics=view=='metrics';compare=view=='comparisons';theory=view=='theory'
         self.recovery_table_toggle.setVisible(recovery or radar)
         self.recovery_table_toggle.setText('详细表格' if radar else '候选表')
         self.recovery_table_toggle.setToolTip('切换图形与完整结果表。' if radar else '显示全部候选区间；图中只展示前80项。')
-        self.canvas.setVisible(plot);self.toolbar.setVisible(plot)
+        self.canvas.setVisible(plot or scene and self.report is None);self.toolbar.setVisible(plot)
+        if self.canvas.isVisible():self.reflow()
+        self.scene_controls.setVisible(scene);self.scene_controls.setEnabled(self.report is not None)
+        if self.scene_widget is not None:self.scene_widget.setVisible(scene and self.report is not None)
         self.table.setVisible(metrics or compare or candidate_table);self.check_table.setVisible(metrics or radar)
-        self.table_note.setVisible(metrics or compare or recovery or radar)
+        self.table_note.setVisible(metrics or compare or recovery or radar or scene)
         self.theory.setVisible(theory);self.comparison_bar.setVisible(compare)
         self.add_comparison_button.setEnabled(self.report is not None and not self._busy)
         self.remove_comparison_button.setEnabled(bool(self.comparisons) and not self._busy)
         if self.report is None:
             self.table.setRowCount(0);self.check_table.setRowCount(0);self.table_note.clear()
+            if scene:self.table_note.setText('先按F5取得波形计算快照，再查看三维场景；场景不使用未提交的输入。')
             self.theory.setPlainText('先设置参数并按F5计算。');return
-        if radar:
+        if scene:self.show_scene()
+        elif radar:
             from .antenna_views import radar_table
             columns,rows,checks,note=radar_table(self.report,view,self.result_profile.currentData())
             if candidate_table:self._fill(self.table,columns,rows)
@@ -534,6 +559,58 @@ class WaveformPanel(QWidget):
     def _candidate_display_changed(self,*_):
         self._show_view();self._refresh_host()
 
+    def scene_state(self,sync=True):
+        from .scene import normalize_scene_state
+        camera=self._scene_camera
+        if self.scene_widget is not None and self.scene_widget.ready:
+            camera=self.scene_widget.get_state(sync=sync).get('camera') or camera
+        return normalize_scene_state({'time_s':self.scene_time.value(),'camera':camera,
+            'target_az_deg':self.scene_target_az.value(),'target_el_deg':self.scene_target_el.value(),
+            'motion':self.scene_motion.currentData()})
+
+    def restore_scene_state(self,state):
+        from .scene import normalize_scene_state
+        state=normalize_scene_state(state);self._scene_camera=state['camera'];self._scene_key=None
+        for control,value in [(self.scene_time,state['time_s']),(self.scene_target_az,state['target_az_deg']),(self.scene_target_el,state['target_el_deg'])]:
+            with QSignalBlocker(control):
+                if control is self.scene_time:control.setMaximum(max(5.,state['time_s']))
+                control.setValue(value)
+        with QSignalBlocker(self.scene_motion):self.scene_motion.setCurrentIndex(self.scene_motion.findData(state['motion']))
+
+    def show_scene(self):
+        from .scene import scene_payload
+        if self.scene_widget is None:
+            from arraylab.shared.qt.radar_scene import SceneWidget
+            self.scene_widget=SceneWidget(self)
+            self.plot_layout.insertWidget(self.plot_layout.indexOf(self.canvas),self.scene_widget,1)
+            self.scene_widget.timeChanged.connect(self._scene_clock)
+            self.scene_widget.readyChanged.connect(lambda *_:self._refresh_host())
+        self.scene_widget.show()
+        profile=self.result_profile.currentData()
+        options={'target_az_deg':self.scene_target_az.value(),'target_el_deg':self.scene_target_el.value(),'motion':self.scene_motion.currentData()}
+        key=(id(self.report),profile,*options.values())
+        if key!=self._scene_key:
+            payload=scene_payload(self.report,profile,self.scene_time.value(),options=options)
+            camera=self._scene_camera
+            if camera is None and self.scene_widget.ready:camera=self.scene_widget.get_state(sync=True).get('camera')
+            with QSignalBlocker(self.scene_time):
+                self.scene_time.setMaximum(payload['max_time_s']);self.scene_time.setValue(payload['time_s'])
+            self.scene_widget.set_scene(payload,key=key,camera=camera);self._scene_camera=None;self._scene_key=key
+            self.table_note.setText(payload['note'])
+        else:self.scene_widget.set_time(self.scene_time.value())
+
+    def _scene_clock(self,time_s):
+        with QSignalBlocker(self.scene_time):self.scene_time.setValue(time_s)
+
+    def _scene_time_changed(self,value):
+        if self.scene_widget is not None:self.scene_widget.set_time(value)
+
+    def _scene_display_changed(self,*_):
+        if self.report is not None and self.view.currentData()=='scene':self.show_scene()
+
+    def shutdown_scene(self):
+        if self.scene_widget is not None:self.scene_widget.shutdown()
+
     def redraw(self,*_):
         profile=self.result_profile.currentData()
         if self.report is not None and not self.report['analysis']['profiles'].get(profile):
@@ -548,6 +625,7 @@ class WaveformPanel(QWidget):
 
     def reflow(self):
         if not hasattr(self,'canvas'):return
+        if not self.canvas.isVisible():return
         if self.canvas.resize_pending:return
         ratio=self.canvas.device_pixel_ratio
         self.figure.set_size_inches(max(1,self.canvas.width())*ratio/self.figure.dpi,max(1,self.canvas.height())*ratio/self.figure.dpi,forward=False)
@@ -608,13 +686,14 @@ class WaveformPanel(QWidget):
     def save_record_path(self,path):
         if self.report is None:raise ValueError('请先完成波形计算。')
         from arraylab.features.waveform.io import save_waveform_record
-        save_waveform_record(path,self.report,view=self.view.currentData(),profile=self.result_profile.currentData(),comparisons=self.comparisons)
+        scene=self.scene_state() if self.scene_widget is not None or self.view.currentData()=='scene' else None
+        save_waveform_record(path,self.report,view=self.view.currentData(),profile=self.result_profile.currentData(),comparisons=self.comparisons,scene_state=scene)
 
     def load_record_path(self,path):
         if self._busy or self.thread is not None:raise ValueError('请先完成或取消波形计算。')
         from arraylab.features.waveform.io import load_waveform_record
         record=load_waveform_record(path)
-        self.accept_result(record['report'],restore_inputs=True,view=record['view'],profile=record.get('profile'),comparisons=record.get('comparisons',[]))
+        self.accept_result(record['report'],restore_inputs=True,view=record['view'],profile=record.get('profile'),comparisons=record.get('comparisons',[]),scene_state=record.get('scene_state'))
 
     def save_record_dialog(self):
         if self.report is None:return
@@ -632,7 +711,11 @@ class WaveformPanel(QWidget):
     def export_path(self,path):
         if self.report is None:raise ValueError('请先完成波形计算。')
         from arraylab.features.waveform.io import export_waveform_directory
-        export_waveform_directory(path,self.report,plot='all');self.last_export=Path(path)
+        options={}
+        if self.scene_widget is not None and self.scene_widget.isVisible():
+            self.scene_widget.pause()
+            options={'scene_png':self.scene_widget.png_bytes(),'scene_state':self.scene_state(),'profile':self.result_profile.currentData()}
+        export_waveform_directory(path,self.report,plot='all',**options);self.last_export=Path(path)
 
     def export_dialog(self):
         if self.report is None or self._busy:return
