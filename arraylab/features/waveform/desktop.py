@@ -6,7 +6,8 @@ import math
 import threading
 
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from arraylab.shared.qt.resize_canvas import ResizeAwareFigureCanvas as FigureCanvasQTAgg
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QTabWidget, QScrollArea, QLabel, QLineEdit, QComboBox, QCheckBox, QPushButton,
@@ -118,6 +119,7 @@ class WaveformPanel(QWidget):
         note=QLabel('WaveLab 1.4 · 理想波形、Tx/Rx反向设计与增益预算；高分辨判据是已知双目标有限快拍实验，不是硬件分辨率保证。')
         note.setWordWrap(True);note.setObjectName('scope');body.addWidget(note)
         self.resize_timer=QTimer(self);self.resize_timer.setSingleShot(True);self.resize_timer.timeout.connect(self.reflow)
+        self.canvas.resize_finished.connect(self.reflow)
         self.view.currentIndexChanged.connect(self.redraw);self.result_profile.currentIndexChanged.connect(self.redraw)
         self._changing=False;self.apply_configuration(default_waveform_configuration())
         self.state.setText('右侧分别设置波形、A/B编排和解模糊实验，按F5计算。');self.redraw()
@@ -546,6 +548,7 @@ class WaveformPanel(QWidget):
 
     def reflow(self):
         if not hasattr(self,'canvas'):return
+        if self.canvas.resize_pending:return
         ratio=self.canvas.device_pixel_ratio
         self.figure.set_size_inches(max(1,self.canvas.width())*ratio/self.figure.dpi,max(1,self.canvas.height())*ratio/self.figure.dpi,forward=False)
         if getattr(self.figure,'_arraylab_responsive_plots',None):reflow_plot_layout(self.figure)

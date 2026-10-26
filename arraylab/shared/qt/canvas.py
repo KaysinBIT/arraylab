@@ -12,7 +12,7 @@ import weakref
 import numpy as np
 from PySide6.QtCore import QTimer
 from matplotlib.backend_bases import DrawEvent
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from .resize_canvas import ResizeAwareFigureCanvas
 
 
 @dataclass
@@ -62,7 +62,7 @@ def _preview_grid(x, y, z, facecolors, max_faces=600):
     return tuple(value[selected].copy() for value in xyz), colors[color_selection].copy()
 
 
-class InteractiveFigureCanvas(FigureCanvasQTAgg):
+class InteractiveFigureCanvas(ResizeAwareFigureCanvas):
     """Keep the latest 3D camera, with one pending frame and no motion backlog.
 
     Register optional display-only surface previews with :meth:`register_surface`.

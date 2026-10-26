@@ -12,6 +12,8 @@
 
 ## 开发检查
 
+桌面尺寸响应使用`tests/test_resize_canvas.py`及`--smoke-suite resize`检查；共享3D画布继承变化时选择受影响交互测试，避免扩展为全量数值回归。记录真实Dock宽度、完整绘制次数、最终尺寸/数据/导出，以及计时环境，不能只测延迟计时器是否触发。
+
 任务树导航调整使用`tests/test_navigation.py`和`--smoke-suite navigation`定向验证，覆盖全部已有叶节点、双向选择与记录入口，不运行全套业务数值回归。应用层`application/desktop/navigation.py`只组合现有视图/参数控件，不启动计算或创建新历史库。
 
 建议使用Python 3.14创建独立环境。仅修改计算/无头功能时安装`.[plotting]`与pytest；修改桌面界面时安装`.[desktop]`与pytest。

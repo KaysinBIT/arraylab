@@ -10,13 +10,14 @@ import time
 import traceback
 
 
-SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation')
+SUITES = ('all', 'sparse-view', 'mimo', 'waveform', 'navigation', 'resize')
 SCOPES = {
     'all': 'Complete desktop workflow, numerical handoffs, history, layout and responsiveness acceptance.',
     'sparse-view': 'Focused sparse overview, navigation and automatic-history acceptance; excludes other workbenches and large-array performance.',
     'mimo': 'Focused radar MIMO calculation, array handoff, records and view acceptance; excludes other complete workbench workflows.',
     'waveform': 'Only new waveform/A-B/distance-recovery and directly affected task/record entrypoints; no unrelated calculations.',
     'navigation': 'Task-tree routing, selection synchronization and existing record entrypoints only; no numerical regression suite.',
+    'resize': 'Dock resize responsiveness, plot previews and final rendering only; no full numerical or desktop suite.',
 }
 
 
@@ -70,6 +71,10 @@ def schedule_navigation_test(app, window, output):
     schedule_feature_test(app, window, output, 'navigation')
 
 
+def schedule_resize_test(app, window, output):
+    schedule_feature_test(app, window, output, 'resize')
+
+
 def schedule_feature_test(app, window, output, suite):
     """Reuse real Qt exercises with isolated history, without full-suite setup."""
     from PySide6.QtCore import QTimer, Qt
@@ -93,7 +98,10 @@ def schedule_feature_test(app, window, output, suite):
             app.processEvents()
 
         try:
-            if suite == 'navigation':
+            if suite == 'resize':
+                from .resize import exercise_resize
+                run_group(report,'resize',lambda:exercise_resize(app,window,output,report,check))
+            elif suite == 'navigation':
                 from .navigation import exercise_navigation
                 run_group(report,'navigation',lambda:exercise_navigation(app,window,output,report,check))
             elif suite == 'waveform':

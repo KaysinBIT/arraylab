@@ -11,6 +11,10 @@ def picture_pixmap(widget):
     finish = getattr(widget, 'finish_interaction', None)
     if finish is not None:
         finish(redraw=False)
+    resize = getattr(widget, 'finish_resize', None)
+    if resize is not None:
+        resize(redraw=False)
+    if finish is not None or resize is not None:
         widget.draw()
     return widget.grab()
 

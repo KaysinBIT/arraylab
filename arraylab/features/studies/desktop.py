@@ -4,7 +4,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
                                QSpinBox, QLineEdit, QPushButton, QProgressBar, QTableWidget,
                                QTableWidgetItem, QTabWidget, QWidget, QFileDialog, QMessageBox)
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from arraylab.shared.qt.resize_canvas import ResizeAwareFigureCanvas as FigureCanvasQTAgg
 
 from arraylab.features.linear import parameters_from_values
 from arraylab.features.feed import FeedSettings

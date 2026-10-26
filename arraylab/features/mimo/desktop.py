@@ -8,7 +8,8 @@ import threading
 
 import numpy as np
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from arraylab.shared.qt.resize_canvas import ResizeAwareFigureCanvas as FigureCanvasQTAgg
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QTabWidget,
     QScrollArea, QLabel, QLineEdit, QComboBox, QPlainTextEdit, QPushButton,
@@ -138,6 +139,7 @@ class MIMOPanel(QWidget):
         note.setWordWrap(True); note.setObjectName('scope'); body.addWidget(note)
         self.resize_timer = QTimer(self); self.resize_timer.setSingleShot(True)
         self.resize_timer.timeout.connect(self.reflow)
+        self.canvas.resize_finished.connect(self.reflow)
         self.view.currentIndexChanged.connect(self.redraw)
         self.apply_configuration(MIMOParameters())
         self.state.setText('分别设置Tx与Rx坐标，按F5计算虚拟阵列与波束指标。')
@@ -427,6 +429,7 @@ class MIMOPanel(QWidget):
 
     def reflow(self):
         if not hasattr(self, 'canvas'): return
+        if self.canvas.resize_pending:return
         ratio = self.canvas.device_pixel_ratio
         self.figure.set_size_inches(max(1, self.canvas.width())*ratio/self.figure.dpi,
                                     max(1, self.canvas.height())*ratio/self.figure.dpi, forward=False)

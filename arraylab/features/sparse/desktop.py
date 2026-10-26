@@ -8,7 +8,8 @@ import time
 import matplotlib
 import numpy as np
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
+from arraylab.shared.qt.resize_canvas import ResizeAwareFigureCanvas as FigureCanvasQTAgg
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit, QTabWidget, QScrollArea, QSplitter,
@@ -171,6 +172,7 @@ class SparsePanel(QWidget):
         for combo in (self.view, self.case_selector, self.pattern_view, self.phase_view): combo.currentIndexChanged.connect(self.redraw)
         self.tabs.currentChanged.connect(self._history_ui_changed)
         self.resize_timer = QTimer(self); self.resize_timer.setSingleShot(True); self.resize_timer.timeout.connect(self.refresh_layout)
+        self.canvas.resize_finished.connect(self.refresh_layout)
         self._compact = None; self._initializing = False; self.set_busy(False); self.update_controls()
 
     def resizeEvent(self, event):
@@ -183,6 +185,7 @@ class SparsePanel(QWidget):
         self.resize_timer.start(60)
 
     def refresh_layout(self):
+        if self.canvas.resize_pending:return
         if self.table.isVisible() and self.table.currentRow() >= 0:
             self.table.scrollToItem(self.table.item(self.table.currentRow(), 0))
         # Keep axes and the toolbar's navigation stack during delayed resize
