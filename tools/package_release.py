@@ -53,10 +53,11 @@ def main():
     shutil.copy2(source_archive,portable/source_archive.name)
     manual=ROOT/f"output/pdf/ArrayLab-{VERSION}-使用说明书.pdf"
     if not manual.is_file():raise FileNotFoundError('请先生成与版本匹配的使用说明书PDF。')
-    shutil.copy2(manual,portable/manual.name);shutil.copy2(manual,OUT/manual.name)
+    public_manual=OUT/f"ArrayLab-{VERSION}-User-Manual.pdf"
+    shutil.copy2(manual,portable/manual.name);shutil.copy2(manual,public_manual)
     zip_files(OUT / f"ArrayLab-{VERSION}-windows-x64.zip", [p for p in portable.rglob("*") if p.is_file()], portable, "ArrayLab")
     hashes = []
-    for p in sorted([OUT/f"ArrayLab-{VERSION}-source.zip",OUT/f"ArrayLab-{VERSION}-windows-x64.zip",OUT/manual.name]):
+    for p in sorted([OUT/f"ArrayLab-{VERSION}-source.zip",OUT/f"ArrayLab-{VERSION}-windows-x64.zip",public_manual]):
         digest = hashlib.sha256(p.read_bytes()).hexdigest()
         hashes.append(f"{digest}  {p.name}")
         if p.suffix=='.zip':
