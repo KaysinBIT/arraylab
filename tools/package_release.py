@@ -36,6 +36,9 @@ def source_files():
     sources.append(ROOT / "examples/pulse-demo-hill-utm.tif")
     sources.extend((ROOT / ".github").rglob("*.yml"))
     sources.extend(p for p in (ROOT / "docs").rglob("*") if p.is_file() and p.suffix in {".md", ".png"})
+    sources.extend(p for p in (ROOT / "docs/manual/fonts").glob("*") if p.is_file() and p.suffix in {".ttf", ".txt"})
+    audit=ROOT/'docs/audit-0.27.0-results.json'
+    if audit.is_file():sources.append(audit)
     return sources
 
 
@@ -43,19 +46,25 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     portable = ROOT / "dist" / f"ArrayLab-{VERSION}"
     assert (portable / "ArrayLab.exe").exists()
-    zip_files(OUT / f"ArrayLab-{VERSION}-windows-x64.zip", [p for p in portable.rglob("*") if p.is_file()], portable, "ArrayLab")
     sources = source_files()
-    zip_files(OUT / f"ArrayLab-{VERSION}-source.zip", sources, ROOT, "ArrayLab-source")
+    source_archive=OUT / f"ArrayLab-{VERSION}-source.zip"
+    zip_files(source_archive, sources, ROOT, "ArrayLab-source")
+    import shutil
+    shutil.copy2(source_archive,portable/source_archive.name)
+    manual=ROOT/f"output/pdf/ArrayLab-{VERSION}-使用说明书.pdf"
+    if not manual.is_file():raise FileNotFoundError('请先生成与版本匹配的使用说明书PDF。')
+    shutil.copy2(manual,portable/manual.name);shutil.copy2(manual,OUT/manual.name)
+    zip_files(OUT / f"ArrayLab-{VERSION}-windows-x64.zip", [p for p in portable.rglob("*") if p.is_file()], portable, "ArrayLab")
     hashes = []
-    for p in sorted(OUT.glob("*.zip")):
+    for p in sorted([OUT/f"ArrayLab-{VERSION}-source.zip",OUT/f"ArrayLab-{VERSION}-windows-x64.zip",OUT/manual.name]):
         digest = hashlib.sha256(p.read_bytes()).hexdigest()
         hashes.append(f"{digest}  {p.name}")
-        with zipfile.ZipFile(p) as archive:
-            assert archive.testzip() is None
+        if p.suffix=='.zip':
+            with zipfile.ZipFile(p) as archive:assert archive.testzip() is None
         print(p.name, p.stat().st_size)
-    (OUT / "SHA256SUMS.txt").write_text("\n".join(hashes) + "\n", encoding="ascii")
+    (OUT / "SHA256SUMS.txt").write_text("\n".join(hashes) + "\n", encoding="utf-8")
     current = [line for line in hashes if f"  ArrayLab-{VERSION}-" in line]
-    (OUT / f"SHA256SUMS-{VERSION}.txt").write_text("\n".join(current) + "\n", encoding="ascii")
+    (OUT / f"SHA256SUMS-{VERSION}.txt").write_text("\n".join(current) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

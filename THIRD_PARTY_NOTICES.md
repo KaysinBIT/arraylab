@@ -8,6 +8,7 @@ ArrayLab原创代码采用MIT许可，第三方组件继续适用各自的许可
 | PySide6 Essentials、Addons 与 Shiboken6 | [Qt for Python许可说明](https://doc.qt.io/qtforpython-6/)、[pyside-setup源代码](https://code.qt.io/cgit/pyside/pyside-setup.git/)、[Qt发布源码](https://download.qt.io/official_releases/qt/) |
 | Qt WebEngine / Chromium | [Qt WebEngine源码](https://code.qt.io/cgit/qt/qtwebengine.git/)；用于桌面内嵌离线三维视口，随Qt动态库及许可元信息分发 |
 | Three.js 0.180.0 | [源码与MIT许可](https://github.com/mrdoob/three.js/tree/r180)；场景资源保留`THREE-LICENSE.txt`，运行包另附`licenses/three/LICENSE.txt` |
+| Noto Sans SC | 使用说明书嵌入字形子集；手册源码随附OFL字体与许可，见`docs/manual/fonts/OFL.txt`。该字体用于文档重建，不替换Windows系统字体。 |
 | NumPy | [源代码与许可](https://github.com/numpy/numpy) |
 | SciPy | [源代码与许可](https://github.com/scipy/scipy) |
 | threadpoolctl | [线程数控制与BSD-3-Clause许可](https://github.com/joblib/threadpoolctl) |

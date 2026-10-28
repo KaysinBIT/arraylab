@@ -154,13 +154,14 @@ def test_desktop_bootstrap_preserves_order_settings_and_factories(monkeypatch, t
         events.append('schedule')
     monkeypatch.setitem(sys.modules, 'PySide6.QtWidgets', SimpleNamespace(QApplication=App))
     monkeypatch.setitem(sys.modules, 'PySide6.QtCore', SimpleNamespace(Qt=SimpleNamespace(
-        ApplicationAttribute=SimpleNamespace(AA_DontUseNativeDialogs='non-native'))))
+        ApplicationAttribute=SimpleNamespace(AA_DontUseNativeDialogs='non-native',AA_ShareOpenGLContexts='shared-gl'))))
     monkeypatch.setattr(bootstrap, 'set_windows_application_id', lambda: events.append('windows-id'))
     monkeypatch.setenv('MPLCONFIGDIR', 'keep-this-cache')
     args = ['--smoke-test', str(tmp_path), '--smoke-suite', 'waveform'] if smoke else []
     assert run(args, headless_main=lambda _: pytest.fail('wrong dispatch'), window_factory=window_factory,
                icon_factory=icon_factory, version='unchanged', smoke_schedulers={'all': scheduler, 'waveform': scheduler}) == 23
     assert events[0:2] == ['windows-id', ('attribute', 'non-native', True)]
+    assert events.index(('attribute','shared-gl',True)) < next(i for i,e in enumerate(events) if isinstance(e,tuple) and e[0]=='app')
     assert ('name', 'ArrayLab') in events and ('style', 'Fusion') in events and ('version', 'unchanged') in events
     assert events.index('icon-installed') < events.index(('window', {'auto_compute': not smoke}))
     assert ('resize', 1440, 900) in events

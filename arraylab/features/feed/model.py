@@ -16,7 +16,7 @@ from arraylab import __version__
 from arraylab.features.linear import FIELDS, MAX_BYTES, parameters_from_values
 from arraylab.shared.io import write_text_atomic, invalid_constant as _invalid_constant, unique_keys as _unique_keys
 from arraylab.features.linear import write_pattern
-from arraylab.features.feed.excitation import target_amplitudes, validate_electrical, electrical_excitation, excitation_csv
+from arraylab.features.feed.excitation import target_amplitudes, validate_electrical, electrical_excitation, excitation_csv, _relative_port_power
 
 LEGACY_SETTINGS = {"topology", "input_ohm", "junction_ohm", "load_ohm", "min_line_ohm", "max_line_ohm"}
 BRANCH_DELAY_FIELDS = {"branch_delays_deg", "branch_delay_elements", "branch_delay_topology"}
@@ -150,10 +150,8 @@ def validate_feed_inputs(parameters, settings):
 def synthesize_impedance(parameters, settings=FeedSettings(), amplitude_override=None):
     validate_feed_inputs(parameters, settings)
     n = parameters.elements
-    amplitudes = target_amplitudes(parameters, settings) if amplitude_override is None else np.asarray(amplitude_override, dtype=float)
-    if amplitudes.shape != (n,) or not np.isfinite(amplitudes).all() or np.any(amplitudes <= 0):
-        raise ValueError("目标幅度须为每端口一个正有限值。")
-    powers = amplitudes**2 / np.sum(amplitudes**2)
+    amplitudes = target_amplitudes(parameters, settings) if amplitude_override is None else amplitude_override
+    powers = _relative_port_power(amplitudes, n)
     nodes, sections, ports = [], [], []
 
     def branch(parent, child, fraction, parent_z, child_z, count, kind):

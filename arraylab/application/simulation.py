@@ -159,9 +159,12 @@ def load_record(path):
                 document.get('arrays_file')!='arrays.npz'):
             raise ValueError('不是可恢复的完整雷达记录。')
         filename=path.parent/'arrays.npz'
-        with filename.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
-        if digest!=document.get('arrays_sha256'):raise ValueError('结果数组摘要不匹配。')
-        inner,arrays=read_npz(filename);record=document.get('record')
+        with filename.open('rb') as stream:
+            digest=hashlib.file_digest(stream,'sha256').hexdigest()
+            if digest!=document.get('arrays_sha256'):raise ValueError('结果数组摘要不匹配。')
+            stream.seek(0)
+            inner,arrays=read_npz(stream)
+        record=document.get('record')
         if type(record) is not dict or inner!=record.get('result'):raise ValueError('数组元数据与记录不一致。')
     validate_record(record,arrays)
     return record,arrays
@@ -217,6 +220,23 @@ def export_result(path,record,arrays,*,plot=False):
     return target
 
 
+def _worker_runtime(subcommand,*,plotting=False):
+    """Resolve the paired CLI and its isolated numerical environment once."""
+    if getattr(sys,'frozen',False):
+        executable=Path(sys.executable).resolve().with_name('ArrayLab-cli.exe')
+        if not executable.is_file():raise ValueError('请完整解压包含ArrayLab-cli.exe的运行目录。')
+        command=[str(executable),subcommand];cwd=executable.parent
+    else:
+        from arraylab.framework.resources import source_root
+        cwd=source_root();command=[sys.executable,'-m','arraylab','--headless',subcommand]
+    environment=os.environ.copy()
+    environment.update(PYTHONUTF8='1',PYTHONIOENCODING='utf-8',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
+    if plotting:environment['MPLBACKEND']='Agg'
+    if getattr(sys,'frozen',False):environment['PYINSTALLER_RESET_ENVIRONMENT']='1'
+    else:environment['PYTHONPATH']=str(cwd)
+    return command,cwd,environment
+
+
 def export_process(path,record,arrays,*,progress=None,cancel=None,scene_png=None):
     """Keep Agg/font rendering out of the live Qt process and publish atomically."""
     validate_record(record,arrays)
@@ -231,15 +251,7 @@ def export_process(path,record,arrays,*,progress=None,cancel=None,scene_png=None
             folder=Path(temporary);request=folder/'record.npz'
             if progress:progress('准备完整结果快照…')
             write_npz(request,record,arrays,compressed=False);check_cancelled(cancel)
-            if getattr(sys,'frozen',False):
-                executable=Path(sys.executable).resolve().with_name('ArrayLab-cli.exe')
-                command=[str(executable),'simulation-export-worker'];cwd=executable.parent
-            else:
-                from arraylab.framework.resources import source_root
-                cwd=source_root();command=[sys.executable,'-m','arraylab','--headless','simulation-export-worker']
-            env=os.environ.copy();env.update(PYTHONUTF8='1',PYTHONIOENCODING='utf-8',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MPLBACKEND='Agg')
-            if getattr(sys,'frozen',False):env['PYINSTALLER_RESET_ENVIRONMENT']='1'
-            else:env['PYTHONPATH']=str(cwd)
+            command,cwd,env=_worker_runtime('simulation-export-worker',plotting=True)
             run_owned(command+['--record',str(request),'--output',str(staging/'result'),'--caller-version',__version__],cwd=cwd,environment=env,folder=folder,
                       memory_limit_bytes=memory_budget(record['configuration']),progress=progress,cancelled=cancel)
             check_cancelled(cancel)
@@ -273,19 +285,10 @@ def export_worker_main(argv=None):
 def run_process(feature,action,configuration,*,workers=0,progress=None,cancel=None):
     module=provider(feature);configuration=module.normalize_configuration(configuration)
     budget=memory_budget(configuration);check_cancelled(cancel)
-    if getattr(sys,'frozen',False):
-        executable=Path(sys.executable).resolve().with_name('ArrayLab-cli.exe')
-        if not executable.is_file():raise ValueError('请完整解压包含ArrayLab-cli.exe的运行目录。')
-        command=[str(executable),'simulation-worker'];cwd=executable.parent
-    else:
-        from arraylab.framework.resources import source_root
-        cwd=source_root();command=[sys.executable,'-m','arraylab','--headless','simulation-worker']
+    command,cwd,env=_worker_runtime('simulation-worker')
     with temporary_directory(prefix='arraylab-radar-') as temporary:
         folder=Path(temporary);request=folder/'request.json';output=folder/'result.npz'
         write_json(request,{'feature':feature,'action':action,'configuration':configuration,'workers':requested_workers(workers)})
-        env=os.environ.copy();env.update(PYTHONUTF8='1',PYTHONIOENCODING='utf-8',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
-        if getattr(sys,'frozen',False):env['PYINSTALLER_RESET_ENVIRONMENT']='1'
-        else:env['PYTHONPATH']=str(cwd)
         run_owned(command+['--request',str(request),'--result',str(output)],cwd=cwd,environment=env,
                   folder=folder,memory_limit_bytes=budget,progress=progress,cancelled=cancel)
         check_cancelled(cancel)

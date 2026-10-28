@@ -39,10 +39,10 @@ def simulation_result():
     return service.execute('simulation',small())
 
 
-def test_six_numerical_kernels_keep_frozen_source_hashes():
+def test_current_numerical_kernels_keep_frozen_source_hashes():
     root=Path(service.__file__).parent
     manifest=json.loads((root/'data/source.json').read_text(encoding='utf-8'))
-    assert len(manifest['kernel_normalized_sha256'])==6
+    assert set(manifest['kernel_normalized_sha256'])=={'config.py','budget.py','engine.py','detection.py','statistics.py','receiver_spec.py','propagation.py'}
     for name,expected in manifest['kernel_normalized_sha256'].items():
         assert hashlib.sha256((root/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==expected
 

@@ -68,7 +68,11 @@ def exercise_waveform(app, window, output, report, check):
               and probe.inspector_stack.currentWidget() is panel.parameter_widget,
               'waveform_home_card_opens_native_page_and_parameters')
         probe.activate_task('home'); key(probe, Qt.Key.Key_F11); settle()
-        check(probe.active_task() == 'waveform' and probe.tree.currentItem() is probe.waveform_tree_item,
+        selected=probe.tree.currentItem();ancestor=selected
+        while ancestor is not None and ancestor is not probe.waveform_tree_item:ancestor=ancestor.parent()
+        check(probe.active_task() == 'waveform' and ancestor is probe.waveform_tree_item
+              and panel.view.currentData() == 'overview'
+              and selected.data(0,Qt.ItemDataRole.UserRole)==('task_node',('waveform','result','overview')),
               'waveform_F11_routes_task_and_navigation')
         key(probe, Qt.Key.Key_F5)
         check(panel.thread is not None and panel._busy and probe.cancel_button.isEnabled()

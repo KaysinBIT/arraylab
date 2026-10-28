@@ -12,3 +12,4 @@
 arraylab/shared/resources/radar_scene/scene.bundle.js -whitespace linguist-generated=true
 # Keep upstream license/attribution text verbatim, including intentional spacing.
 licenses/qt/** -whitespace
+docs/manual/fonts/OFL.txt -whitespace

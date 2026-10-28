@@ -1,6 +1,10 @@
 # ArrayLab 阵列分析
 
-用于直线阵、平面阵、理想馈电网络和雷达设计分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版为 **0.26.1**，原创源码采用MIT许可。[下载正式版](https://github.com/KaysinBIT/arraylab/releases/tag/v0.26.1) · [发行说明](docs/releases/0.26.1.md)。
+用于直线阵、平面阵、理想馈电网络和雷达设计分析的开源Python工具，提供Qt桌面工作台与无头命令行。当前正式版为 **0.27.0**，原创源码采用MIT许可。[下载正式版及PDF说明书](https://github.com/KaysinBIT/arraylab/releases/tag/v0.27.0) · [发行说明](docs/releases/0.27.0.md)。
+
+**0.27.0 验证与重构**：修复极端公共幅度尺度下的3dB测宽与馈电功率归一化错误，完善JSON/NPZ记录的非法输入、成员命名及并发读取处理；提取重复的数值和文件处理逻辑。最终回归覆盖78个测试入口、2007项用例，全部通过，无跳过。详细问题、复现、测试映射、性能及未覆盖范围见[本轮审查报告](docs/audit-0.27.0.md)。
+
+新增**38页中文使用说明书**，覆盖十个业务任务、操作流程、参数与结果解释、记录与导出、无头运行、限制和排错。Windows包解压后，PDF和完整源码ZIP与`ArrayLab.exe`同目录；Release另提供Windows包、源码ZIP、PDF及SHA-256清单四个独立附件。说明书的[可编辑源码与重建方法](docs/manual/README.md)随Git仓库和源码包提供。
 
 **0.26.1 修复同步**：同步ArrayStudio 1.2.2与EquationLab 1.0.1，修正相控阵约束/量化/指标精度，以及雷达相位、匹配滤波和检测统计口径。旧相控阵与方程记录保留原快照并持续提示需要重算，旧H0校准不能复用。PulseLab 1.0.1、WaveLab 1.4已是对应交付版本，本轮不重复迁移。保留FMCW/脉冲三维场景及既有操作流程。[修复范围与兼容说明](docs/upstream-sync-0261.md)。
 
@@ -58,7 +62,7 @@
 
 ## 启动
 
-Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.26.1)下载`ArrayLab-0.26.1-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。本版包含三个新增雷达组件及FMCW/脉冲离线三维场景。
+Windows用户可从[GitHub Release](https://github.com/KaysinBIT/arraylab/releases/tag/v0.27.0)下载`ArrayLab-0.27.0-windows-x64.zip`，完整解压后运行`ArrayLab.exe`，无需安装Python；脚本使用同目录的`ArrayLab-cli.exe`。移动时保留整个目录及`_internal`。本版包含三个新增雷达组件及FMCW/脉冲离线三维场景。
 
 源码用户可在Windows PowerShell中创建环境并启动桌面版：
 
@@ -72,7 +76,7 @@ python -m venv .venv
 
 已记录的本地构建环境为Python 3.14.2 x64；`requirements-lock.txt`保留其依赖版本。其他版本的兼容性以对应测试结果为准。
 
-当前源码构建后的桌面入口为`dist/ArrayLab-0.26.1/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
+当前源码构建后的桌面入口为`dist/ArrayLab-0.27.0/ArrayLab.exe`，无头入口为同目录的`ArrayLab-cli.exe`。项目根目录的“启动 ArrayLab.cmd”也指向本版。具体系统和验证边界见[验证记录](docs/validation.md)。
 
 ## 无头运行
 
@@ -85,7 +89,7 @@ python -m venv .venv
 构建运行包后的等价入口：
 
 ```powershell
-.\dist\ArrayLab-0.26.1\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
+.\dist\ArrayLab-0.27.0\ArrayLab-cli.exe --elements 20 --scan-deg 30 --output-dir ".\results\run02" --plot both
 ```
 
 也可运行`python -m arraylab.cli`或安装后的`arraylab-cli`。独立命令行EXE的启动逻辑不包含Qt；源码无头路径在导入任何Qt模块前分派。无需显示器、桌面会话或`QT_QPA_PLATFORM=offscreen`；不会打开图形窗口。当前实际测试环境仍为Windows，未声称完成Linux/macOS验收。
@@ -260,9 +264,10 @@ python -m arraylab --headless --sparse planar --input results/sparse01 --index 3
 - 数值与文件测试：`python -m pytest`
 - Qt交互集成检查：`python -m arraylab --smoke-test tmp/qt-smoke`
 - Windows构建依赖：`python -m pip install ".[desktop]" pyinstaller`
-- Windows独立运行包构建：`python tools/build_release.py`
+- 先在文档环境安装`reportlab pypdf`，运行`python tools/build_manual.py --version 0.27.0`生成说明书，再构建Windows运行包：`python tools/build_release.py`。
 - 运行包检查：`dist/ArrayLab-0.25.0.dev1/ArrayLab.exe --smoke-test tmp/frozen-smoke`
-- 便携包与源码包：`python tools/package_release.py`（先完成运行包构建）。
+- 便携包、源码包和PDF：`python tools/package_release.py`（先完成说明书与运行包构建；PDF和源码ZIP会同时放到EXE旁）。
+- 隔离回归：`python tools/run_regression.py audit-run`，逐文件创建测试子进程及独立历史/临时目录；可在运行名后列出指定测试文件。
 
 检查报告区分数学测试、Qt自动交互、真实桌面操作和打包运行结果。打包运行通过不自动证明在未安装Python的另一台干净电脑上通过。
 

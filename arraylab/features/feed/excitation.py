@@ -112,11 +112,26 @@ def wrap_phase(values):
     return (np.asarray(values) + 180) % 360 - 180
 
 
+def _relative_port_power(values, count):
+    """Validate positive real amplitudes, then normalize before squaring."""
+    if np.iscomplexobj(values):
+        raise ValueError("目标幅度须为每端口一个正有限实数。")
+    amplitudes = np.asarray(values, dtype=float)
+    if amplitudes.shape != (count,) or not np.isfinite(amplitudes).all() or np.any(amplitudes <= 0):
+        raise ValueError("目标幅度须为每端口一个正有限值。")
+    scaled = amplitudes / np.max(amplitudes)
+    power = scaled ** 2
+    power /= np.sum(power)
+    if np.any(power <= 0):
+        raise ValueError("目标相对幅度动态范围过大，端口功率无法可靠表示。")
+    return power
+
+
 def electrical_excitation(parameters, settings, ports, amplitude_override=None, phase_override=None):
     """Compensation is a matched terminal phase shift (negative electrical delay)."""
     n, s = parameters.elements, settings
-    amplitudes = target_amplitudes(parameters, s) if amplitude_override is None else np.asarray(amplitude_override, dtype=float)
-    power = amplitudes**2 / np.sum(amplitudes**2)
+    amplitudes = target_amplitudes(parameters, s) if amplitude_override is None else amplitude_override
+    power = _relative_port_power(amplitudes, n)
     amplitudes = np.sqrt(power)  # unit total nominal delivered power, equal resistive loads
     offsets = np.arange(n) - (n - 1) / 2
     scan = 0 if s.phase_mode == "equalize" else parameters.scan_deg

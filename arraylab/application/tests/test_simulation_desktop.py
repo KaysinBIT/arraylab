@@ -15,7 +15,8 @@ OUTPUT=ROOT/'tmp/merge-radar/ui-checks'
 def ui():
     pytest.importorskip('PySide6')
     OUTPUT.mkdir(parents=True,exist_ok=True)
-    settings={'QT_QPA_PLATFORM':'offscreen','MPLCONFIGDIR':str(OUTPUT/'mpl'),
+    qt_platform='windows' if os.name=='nt' else 'offscreen'
+    settings={'QT_QPA_PLATFORM':qt_platform,'MPLCONFIGDIR':str(OUTPUT/'mpl'),
               'ARRAYLAB_HISTORY_DIR':str(OUTPUT/'linear'),'ARRAYLAB_SPARSE_HISTORY_DIR':str(OUTPUT/'sparse'),
               'TEMP':str(OUTPUT/'temp'),'TMP':str(OUTPUT/'temp'),'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'}
     for key in ('MPLCONFIGDIR','ARRAYLAB_HISTORY_DIR','ARRAYLAB_SPARSE_HISTORY_DIR','TEMP'):Path(settings[key]).mkdir(parents=True,exist_ok=True)
@@ -27,7 +28,8 @@ def ui():
     from arraylab.application.desktop.simulation_panel import SimulationPanel
     from arraylab.application.simulation import calculate
     from arraylab.framework.parallel import requested_workers,set_workers
-    app=QApplication.instance() or QApplication([]);assert app.platformName()=='offscreen'
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts,True)
+    app=QApplication.instance() or QApplication([]);assert app.platformName()==qt_platform
     if not QFontDatabase.families():
         font=Path(os.environ.get('WINDIR','C:/Windows'))/'Fonts/msyh.ttc'
         if font.is_file():QFontDatabase.addApplicationFont(str(font));app.setFont(QFont('Microsoft YaHei',9))
@@ -50,6 +52,7 @@ def ui():
     finally:
         for host,panel in panels.values():
             if panel.thread is not None:panel.cancel();wait_idle(app,panel)
+            panel.shutdown_scene()
             host.close();host.deleteLater()
         app.processEvents();set_workers(previous);context.__exit__(None,None,None)
         for key,value in old.items():
@@ -452,17 +455,17 @@ def test_failed_record_restore_preserves_operation_and_extended_scene_time(ui):
                                                 {'time_s':20.,'position_m':[20.,0.,10.]}]
     report,arrays=calculate('pulse','budget',config,workers=1)
     panel.accept_result(report,arrays,restore_inputs=True)
-    panel.view.setCurrentIndex(panel.view.findData('scene'));panel.table_toggle.setChecked(False)
+    panel.view.setCurrentIndex(panel.view.findData('scene'));panel.table_toggle.setChecked(True)
     panel.scene_time.setValue(15.125);panel.action.setCurrentIndex(panel.action.findData('statistics'))
     original_state=panel.record_snapshot()['view_state'];original_action=panel.action.currentData()
-    original_maximum=panel.scene_time.maximum();original=panel.backend.draw;calls=[]
+    original_maximum=panel.scene_time.maximum();original=panel.backend.table;calls=[]
     def fail_once(*args,**kwargs):
         calls.append(1)
         if len(calls)==1:raise RuntimeError('extended scene restore failure')
         return original(*args,**kwargs)
-    # Force the incoming valid budget snapshot to draw, so failure occurs after its time range is installed.
-    incoming={**new_report,'view_state':{'view':'scene','selection':None,'table':False,'scene_time':1.}}
-    with patch.object(panel.backend,'draw',side_effect=fail_once),pytest.raises(RuntimeError,match='extended scene restore failure'):
+    # Force the incoming scene table to fail after its time range is installed.
+    incoming={**new_report,'view_state':{'view':'scene','selection':None,'table':True,'scene_time':1.}}
+    with patch.object(panel.backend,'table',side_effect=fail_once),pytest.raises(RuntimeError,match='extended scene restore failure'):
         panel.accept_result(incoming,new_arrays,restore_inputs=True)
     assert panel.report is report and panel.arrays is arrays
     assert panel.action.currentData()==original_action

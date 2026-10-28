@@ -69,7 +69,11 @@ def finish_release():
     for name in ["README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"]:
         shutil.copy2(ROOT / name, release / name)
     shutil.copytree(ROOT / "examples", release / "examples", dirs_exist_ok=True)
-    shutil.copytree(ROOT / "docs", release / "docs", dirs_exist_ok=True)
+    shutil.copytree(ROOT / "docs", release / "docs", dirs_exist_ok=True,
+                    ignore=lambda directory,names:['fonts'] if Path(directory)==ROOT/'docs/manual' else [])
+    manual=ROOT/f"output/pdf/ArrayLab-{VERSION}-使用说明书.pdf"
+    if not manual.is_file():raise FileNotFoundError('请先生成与版本一致的PDF使用说明书。')
+    shutil.copy2(manual,release/manual.name)
     shutil.copytree(ROOT / "arraylab/sparse2d/resources", release / "_internal/arraylab/sparse2d/resources", dirs_exist_ok=True)
     shutil.copy2(ROOT / "ROADMAP.md", release / "ROADMAP.md")
     shutil.copy2(ROOT / "CONTRIBUTING.md", release / "CONTRIBUTING.md")

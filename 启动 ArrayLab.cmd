@@ -1,9 +1,9 @@
 @echo off
 setlocal
-if not exist "%~dp0dist\ArrayLab-0.26.1\ArrayLab.exe" (
+if not exist "%~dp0dist\ArrayLab-0.27.0\ArrayLab.exe" (
   echo ArrayLab.exe was not found. Please build the release first.
   pause
   exit /b 1
 )
-start "" "%~dp0dist\ArrayLab-0.26.1\ArrayLab.exe"
+start "" "%~dp0dist\ArrayLab-0.27.0\ArrayLab.exe"
 endlocal

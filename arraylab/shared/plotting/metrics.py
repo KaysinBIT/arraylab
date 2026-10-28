@@ -89,6 +89,33 @@ either bounding minimum is absent no PSL is inferred from a guessed mask.
     return result
 
 
+def _great_circle_half_power_edge(values, center, tangent, offsets, sign, peak):
+    """Find/refine the first crossing; values and peak are scaled amplitudes."""
+    bracket = None
+    for start in range(0, len(offsets), 128):
+        angles = sign * offsets[start:start+128]
+        radians = np.deg2rad(angles)
+        directions = np.cos(radians)[:, None] * center + np.sin(radians)[:, None] * tangent
+        crossings = np.flatnonzero(values(directions) <= peak * math.sqrt(.5))
+        if len(crossings):
+            index = start + int(crossings[0])
+            bracket = sorted((0.0 if index == 0 else sign * offsets[index-1], sign * offsets[index]))
+            break
+    if bracket is None:
+        return None
+    a, b = bracket
+
+    def residual(angle):
+        radians = math.radians(angle)
+        direction = math.cos(radians) * center + math.sin(radians) * tangent
+        return float(values(direction[None, :])[0]) / peak - math.sqrt(.5)
+
+    ra, rb = residual(a), residual(b)
+    # Vectorized/scalar trig may place an exact endpoint on opposite ulp sides.
+    root = a if abs(ra) <= 1e-12 else b if abs(rb) <= 1e-12 else brentq(residual, a, b, xtol=1e-10)
+    return float(root)
+
+
 def spherical_beamwidths(field_xyz, theta_deg, phi_deg, step_deg=.25, *, flat_cuts=()):
     """Local half-power widths on meridional and transverse great circles.
 
@@ -108,13 +135,28 @@ center geometric samples avoid skipping very narrow main lobes.
     tangents = [np.array([np.cos(t) * np.cos(p), np.cos(t) * np.sin(p), -np.sin(t)]),
                 np.array([-np.sin(p), np.cos(p), 0.0])]
 
-    def values(directions):
+    def fields(directions):
         answer = np.asarray(field_xyz(directions), dtype=complex)
         if answer.shape != (len(directions),) or not np.isfinite(answer).all():
             raise ValueError("Direction-field callback must return one finite complex value per direction.")
-        return abs(answer) ** 2
+        return answer
 
-    peak = float(values(center[None, :])[0])
+    peak_field = fields(center[None, :])[0]
+    # Compare amplitudes at 1/sqrt(2), avoiding an unnecessary square. Extreme
+    # common scales are removed first so threshold/ratio arithmetic stays safe.
+    component = max(abs(peak_field.real), abs(peak_field.imag))
+    scale = component if component and not 1e-150 <= component <= 1e150 else 1.0
+
+    def values(directions):
+        answer = fields(directions)
+        if scale == 1.0:
+            return abs(answer)
+        # Componentwise division also handles subnormal scales; complex division
+        # can form an overflowing reciprocal of the same small real denominator.
+        with np.errstate(over='ignore'):
+            return np.hypot(answer.real / scale, answer.imag / scale)
+
+    peak = math.hypot(peak_field.real / scale, peak_field.imag / scale)
     # Positive offsets, supplemented near zero to protect narrow selected lobes.
     offsets = np.unique(np.r_[np.geomspace(1e-6, step_deg, 32), np.arange(step_deg, 180, step_deg), 180.0])
     records = []
@@ -131,30 +173,9 @@ center geometric samples avoid skipping very narrow main lobes.
             continue
         edges = []
         for sign in (-1, 1):
-            bracket = None
-            for start in range(0, len(offsets), 128):
-                angles = sign * offsets[start:start+128]
-                radians = np.deg2rad(angles)
-                directions = np.cos(radians)[:, None] * center + np.sin(radians)[:, None] * tangent
-                crossings = np.flatnonzero(values(directions) <= peak / 2)
-                if len(crossings):
-                    index = start + int(crossings[0])
-                    bracket = sorted((0.0 if index == 0 else sign * offsets[index-1], sign * offsets[index]))
-                    break
-            if bracket is None:
-                continue
-            a, b = bracket
-
-            def residual(angle):
-                radians = math.radians(angle)
-                direction = math.cos(radians) * center + math.sin(radians) * tangent
-                return float(values(direction[None, :])[0]) / peak - .5
-
-            ra, rb = residual(a), residual(b)
-            # Vectorized and scalar trigonometry can round an exact half-power
-            # endpoint to opposite sides by a few ulps.
-            root = a if abs(ra) <= 1e-12 else b if abs(rb) <= 1e-12 else brentq(residual, a, b, xtol=1e-10)
-            edges.append(float(root))
+            edge = _great_circle_half_power_edge(values, center, tangent, offsets, sign, peak)
+            if edge is not None:
+                edges.append(edge)
         if len(edges) == 2:
             record.update(half_power_edges_deg=edges,
                           half_power_beamwidth_deg=edges[1] - edges[0], status="bounded_selected_lobe")

@@ -19,6 +19,10 @@ def schedule_smoke_test(app, window, output: Path):
     output.mkdir(parents=True, exist_ok=True)
 
     def run():
+        # Hidden helper launch can suppress Windows' first native show. Expose
+        # the owned test window before exercising actual application shortcuts.
+        window.hide();window.show();window.raise_();window.activateWindow()
+        QTest.qWait(250);app.processEvents()
         report = new_report(app.platformName(), "all")
         started = time.perf_counter()
         core_group = SmokeGroup(report, "desktop-core")

@@ -1,0 +1,2066 @@
+{
+  "format": "arraylab.audit.results",
+  "schema_version": 1,
+  "version": "0.27.0",
+  "date": "2026-10-28",
+  "baseline_commit": "70f21ca89747b50e4ae9119d92c25e49affb0da7",
+  "scope": "Existing test collection plus targeted mathematical/record audits; not exhaustive model or hardware verification",
+  "baseline": {
+    "files": 75,
+    "tests": 1959,
+    "test_failures": 5,
+    "file_results": [
+      {
+        "file": "test_architecture_contracts.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 18.523,
+        "tests": 116,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_compatibility.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.675,
+        "tests": 66,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_delay_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.343,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_delays.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.564,
+        "tests": 61,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 20.309,
+        "tests": 27,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_configuration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.682,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_core.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.004,
+        "tests": 33,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_electrical.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 6.843,
+        "tests": 53,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_budget.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.816,
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_signal.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.918,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_statistics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.719,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_integration.py",
+        "exit_code": 1,
+        "timeout": false,
+        "seconds": 4.296,
+        "tests": 29,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          "test_six_numerical_kernels_keep_frozen_source_hashes"
+        ]
+      },
+      {
+        "file": "test_equation_sync_101.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.345,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_feed.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 13.554,
+        "tests": 48,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_feed_pattern_selection.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.865,
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_fmcw_scene_model.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.067,
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_footer_layout_cache.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.954,
+        "tests": 69,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_framework_contracts.py",
+        "exit_code": 1,
+        "timeout": false,
+        "seconds": 0.884,
+        "tests": 9,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          "test_desktop_bootstrap_preserves_order_settings_and_factories[False]",
+          "test_desktop_bootstrap_preserves_order_settings_and_factories[True]"
+        ]
+      },
+      {
+        "file": "test_history_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.949,
+        "tests": 87,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_interactive_canvas.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.633,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear3d.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.155,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear_feed_import.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.925,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear_history_store.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.267,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.768,
+        "tests": 37,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 6.189,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.978,
+        "tests": 30,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_navigation.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 9.187,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_parallel.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.39,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pattern_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.209,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_phased_audit_122.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.758,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_phased_service.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.271,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_planar.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 9.81,
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_plot_layout.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.702,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pointing.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.787,
+        "tests": 28,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pulse_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.933,
+        "tests": 33,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pulse_scene_view.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 14.605,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_radar_bridges.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.591,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_radar_sync.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.86,
+        "tests": 51,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_resize_canvas.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 8.542,
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_series_terminal_diagram.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.397,
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_simulation_desktop.py",
+        "exit_code": 3221225477,
+        "timeout": false,
+        "seconds": 26.594,
+        "tests": 60,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          "test_failed_record_restore_preserves_operation_and_extended_scene_time"
+        ]
+      },
+      {
+        "file": "test_simulation_integration.py",
+        "exit_code": 1,
+        "timeout": false,
+        "seconds": 19.906,
+        "tests": 43,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": [
+          "test_saved_record_loads_without_solver_even_if_current_inputs_are_invalid"
+        ]
+      },
+      {
+        "file": "test_simulation_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.641,
+        "tests": 31,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_smoke_suites.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.972,
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_snapshot_contracts.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.815,
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_aperture_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.88,
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_arbitrary_size.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 11.736,
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_elements.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 8.705,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_history_store.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.25,
+        "tests": 29,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 22.453,
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_numeric.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 22.974,
+        "tests": 64,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_overview_plot.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.451,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_pattern_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.618,
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_phase.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.494,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_plot_cache.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.474,
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_process.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 11.743,
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_resources.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.212,
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_solver_resources.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 20.719,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_study.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 13.076,
+        "tests": 32,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_subarray.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.739,
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_subarray_encoding.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.563,
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_surface_lifecycle.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.571,
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_task_registry.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.791,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_upstream_sync.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.078,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_ab.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.574,
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_ambiguity.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.56,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_antenna.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.523,
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_core.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.615,
+        "tests": 31,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_doa.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.305,
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_gain.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.585,
+        "tests": 57,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.686,
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_pri.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.494,
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_radar_desktop.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 12.189,
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_scene_desktop.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 14.474,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_sparse_design.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.738,
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      }
+    ]
+  },
+  "final": {
+    "files": 78,
+    "failed_files": [],
+    "tests": 2007,
+    "seconds": 441.667,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "file_results": [
+      {
+        "file": "test_architecture_contracts.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.445,
+        "tests": 116,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_audit_state.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.531,
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_compatibility.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.649,
+        "tests": 66,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_delay_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.332,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_branch_delays.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.721,
+        "tests": 61,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 20.122,
+        "tests": 27,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_configuration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.635,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_core.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.064,
+        "tests": 33,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_electrical.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 6.801,
+        "tests": 53,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_budget.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.108,
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_signal.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.474,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_audit_statistics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.49,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.072,
+        "tests": 29,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_equation_sync_101.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.522,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_feed.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 11.986,
+        "tests": 48,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_feed_pattern_selection.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.264,
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_fmcw_scene_model.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.2,
+        "tests": 16,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_footer_layout_cache.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.251,
+        "tests": 69,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_framework_contracts.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.625,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_history_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.302,
+        "tests": 87,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_interactive_canvas.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.846,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear3d.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.214,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear_feed_import.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.56,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_linear_history_store.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.365,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_metric_scale_audit.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.497,
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.766,
+        "tests": 37,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo_cli.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 6.648,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_mimo_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.838,
+        "tests": 30,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_navigation.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 8.282,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_parallel.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.079,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pattern_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.562,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_phased_audit_122.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.71,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_phased_service.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 6.785,
+        "tests": 40,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_planar.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 10.125,
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_plot_layout.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.594,
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pointing.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.805,
+        "tests": 28,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_power_scale_audit.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.554,
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pulse_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.822,
+        "tests": 33,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_pulse_scene_view.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 13.912,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_radar_bridges.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.531,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_radar_sync.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.768,
+        "tests": 51,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_resize_canvas.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 8.46,
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_series_terminal_diagram.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.293,
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_simulation_desktop.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 28.585,
+        "tests": 60,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_simulation_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 19.583,
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_simulation_io.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.707,
+        "tests": 31,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_smoke_suites.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.948,
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_snapshot_contracts.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.794,
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_aperture_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.957,
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_arbitrary_size.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 11.056,
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_elements.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 8.419,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_history_store.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.975,
+        "tests": 29,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 19.97,
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_numeric.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 22.314,
+        "tests": 64,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_overview_plot.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 4.456,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_pattern_metrics.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.476,
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_phase.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.653,
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_plot_cache.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.608,
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_process.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 11.381,
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_resources.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.064,
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_sparse_solver_resources.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 20.771,
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_study.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 13.112,
+        "tests": 32,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_subarray.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 5.455,
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_subarray_encoding.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.578,
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_surface_lifecycle.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.546,
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_task_registry.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 3.207,
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_upstream_sync.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.947,
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_ab.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.531,
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_ambiguity.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.535,
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_antenna.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.468,
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_core.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.586,
+        "tests": 31,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_doa.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 1.399,
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_gain.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.586,
+        "tests": 57,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_integration.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 7.421,
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_pri.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.476,
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_radar_desktop.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 12.209,
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_scene_desktop.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 13.501,
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      },
+      {
+        "file": "test_waveform_sparse_design.py",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 2.783,
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failed_cases": []
+      }
+    ]
+  },
+  "functional_matrix": [
+    {
+      "id": "F01",
+      "function": "启动、任务及旧接口",
+      "expected_behavior": "GUI/无头正确分派，旧导入与任务映射保持",
+      "test_evidence": "`test_architecture_contracts`、`test_framework_contracts`、`test_task_registry`",
+      "executed_result": "通过；启动契约与依赖静态检查，不代表全部系统部署"
+    },
+    {
+      "id": "F02",
+      "function": "线阵场与加权",
+      "expected_behavior": "已知阵列满足解析/显式复数和；非法输入拒绝",
+      "test_evidence": "`test_core`、`test_configuration`、独立复数求和探针",
+      "executed_result": "通过；4个手算/复数和场景最大场误差3.31e-14"
+    },
+    {
+      "id": "F03",
+      "function": "三维与3dB指标",
+      "expected_behavior": "相对指标不随共同场幅度/相位缩放改变",
+      "test_evidence": "`test_linear3d`、`test_pattern_metrics`、`test_metric_scale_audit`",
+      "executed_result": "通过；新增13项尺度/解析宽度用例"
+    },
+    {
+      "id": "F04",
+      "function": "三类馈电阻抗",
+      "expected_behavior": "并联、串行、对称串行满足目标分配和相位",
+      "test_evidence": "`test_feed`、`test_electrical`、`test_pointing`、`test_power_scale_audit`",
+      "executed_result": "通过；新增19项功率尺度/输入边界用例"
+    },
+    {
+      "id": "F05",
+      "function": "支路电长度",
+      "expected_behavior": "延迟进入对应路径和输出相位，旧记录仍可读",
+      "test_evidence": "`test_branch_delays`、`test_branch_delay_cli`、`test_branch_compatibility`",
+      "executed_result": "通过；数值、格式、CLI相关回归"
+    },
+    {
+      "id": "F06",
+      "function": "线阵到馈电交接",
+      "expected_behavior": "使用已算快照，保持所选阵列与指向",
+      "test_evidence": "`test_linear_feed_import`、`test_feed_pattern_selection`、`test_series_terminal_diagram`",
+      "executed_result": "通过；交接与终端连接图检查"
+    },
+    {
+      "id": "F07",
+      "function": "平面阵馈电",
+      "expected_behavior": "规则/任意坐标及目标角正确进入电气计算",
+      "test_evidence": "`test_planar`、`test_pointing`、`test_electrical`",
+      "executed_result": "通过；有限测试布局，不代表任意连续孔径全覆盖"
+    },
+    {
+      "id": "F08",
+      "function": "二维稀疏数值综合",
+      "expected_behavior": "方案满足已声明计数、约束及复核规则",
+      "test_evidence": "`test_sparse_numeric`、`test_sparse_phase`、`test_sparse_elements`",
+      "executed_result": "通过；测试场景覆盖，非全局最优证明"
+    },
+    {
+      "id": "F09",
+      "function": "任意网格及资源",
+      "expected_behavior": "合法奇偶网格/K可用，超限明确拒绝",
+      "test_evidence": "`test_sparse_arbitrary_size`、`test_sparse_resources`、`test_sparse_solver_resources`",
+      "executed_result": "通过；含无效、边界及资源保护"
+    },
+    {
+      "id": "F10",
+      "function": "稀疏记录/显示",
+      "expected_behavior": "历史快照恢复、工况/曲线选择、缓存失效一致",
+      "test_evidence": "`test_sparse_history_store`、`test_sparse_integration`、`test_sparse_overview_plot`、`test_sparse_plot_cache`",
+      "executed_result": "通过；临时历史库与图形检查"
+    },
+    {
+      "id": "F11",
+      "function": "子阵级优化",
+      "expected_behavior": "固定模板下中心优化及编码/约束行为保持",
+      "test_evidence": "`test_subarray`、`test_subarray_encoding`",
+      "executed_result": "通过；未新增模板或优化目标"
+    },
+    {
+      "id": "F12",
+      "function": "MIMO几何与波束",
+      "expected_behavior": "Tx/Rx通道对、虚拟位置/重数及数字波束一致",
+      "test_evidence": "`test_mimo`、`test_mimo_io`、`test_mimo_cli`",
+      "executed_result": "通过；不把虚拟通道数当硬件增益"
+    },
+    {
+      "id": "F13",
+      "function": "FMCW及A/B",
+      "expected_behavior": "参数、时序、编码与所选组输出一致",
+      "test_evidence": "`test_waveform_core`、`test_waveform_ab`、`test_waveform_integration`",
+      "executed_result": "通过；保留已有独立处理规则"
+    },
+    {
+      "id": "F14",
+      "function": "两类距离解模糊",
+      "expected_behavior": "保存所有有效候选和失败/多解状态",
+      "test_evidence": "`test_waveform_ambiguity`、`test_waveform_pri`",
+      "executed_result": "通过；只对已实现有限搜索域有效"
+    },
+    {
+      "id": "F15",
+      "function": "雷达天线与增益",
+      "expected_behavior": "阵列设计、有限快拍判据和预算分项一致",
+      "test_evidence": "`test_waveform_antenna`、`test_waveform_gain`、`test_waveform_doa`、`test_waveform_sparse_design`",
+      "executed_result": "通过；不声称硬件角分辨率保证"
+    },
+    {
+      "id": "F16",
+      "function": "相控阵分析/综合",
+      "expected_behavior": "保留当前1.2.2修复的场、约束及可行性口径",
+      "test_evidence": "`test_phased_service`、`test_phased_audit_122`",
+      "executed_result": "通过；没有把来源浏览器验收算作本轮GUI检查"
+    },
+    {
+      "id": "F17",
+      "function": "雷达方程/信号/统计",
+      "expected_behavior": "独立预算、接收处理、CUT及旧校准边界一致",
+      "test_evidence": "`test_equation_integration`、`test_equation_sync_101`、3个`test_equation_audit_*`",
+      "executed_result": "通过；固定来源反例/适配检查"
+    },
+    {
+      "id": "F18",
+      "function": "脉冲处理与工程",
+      "expected_behavior": "已实现体制、场景/工程及数组输出兼容",
+      "test_evidence": "`test_pulse_integration`、`test_radar_sync`",
+      "executed_result": "通过；非全部体制组合穷尽验证"
+    },
+    {
+      "id": "F19",
+      "function": "共享三维场景",
+      "expected_behavior": "真实渲染、旋转/播放、隐藏暂停、视角记录一致",
+      "test_evidence": "`test_pulse_scene_view`、`test_waveform_scene_desktop`、`test_fmcw_scene_model`",
+      "executed_result": "通过；使用本机Windows Qt/WebGL；不把offscreen当WebGL实测"
+    },
+    {
+      "id": "F20",
+      "function": "保存/历史/坏文件",
+      "expected_behavior": "成功结果原样恢复，失败保留原文件与界面状态",
+      "test_evidence": "`test_history_io`、`test_linear_history_store`、`test_simulation_desktop`、`test_upstream_sync`",
+      "executed_result": "通过；临时库、实际旧记录及异常注入"
+    },
+    {
+      "id": "F21",
+      "function": "数值文件完整性",
+      "expected_behavior": "不接收溢出JSON、不丢失/错读数组、摘要与读取同代",
+      "test_evidence": "`test_simulation_io`、`test_audit_state`",
+      "executed_result": "通过；本轮16项新增数据边界/竞态用例"
+    },
+    {
+      "id": "F22",
+      "function": "并行与取消",
+      "expected_behavior": "同输入保持结果，取消/失败回收本任务进程",
+      "test_evidence": "`test_parallel`、`test_sparse_process`、`test_simulation_integration`",
+      "executed_result": "通过；含真实子进程及模拟错误，不代表所有崩溃时序"
+    },
+    {
+      "id": "F23",
+      "function": "导出与跨模块复用",
+      "expected_behavior": "输出对应已选结果，原子发布，旧算法标识保留",
+      "test_evidence": "`test_snapshot_contracts`、`test_radar_bridges`、`test_upstream_sync`、`test_simulation_integration`",
+      "executed_result": "通过；版本、摘要、选择和原画面等检查"
+    },
+    {
+      "id": "F24",
+      "function": "图形交互/布局/导航",
+      "expected_behavior": "缩放、转动、恢复及切页不导致状态混用",
+      "test_evidence": "`test_interactive_canvas`、`test_resize_canvas`、`test_plot_layout`、`test_footer_layout_cache`、`test_surface_lifecycle`、`test_navigation`、`test_smoke_suites`",
+      "executed_result": "通过；现有窗口尺寸与图形场景，非全部DPI/显卡组合"
+    }
+  ],
+  "performance": {
+    "math_tracemalloc": {
+      "baseline_commit": "70f21ca89747b50e4ae9119d92c25e49affb0da7",
+      "environment": {
+        "python": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]",
+        "numpy": "2.5.4",
+        "thread_limits": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1"
+      },
+      "cases": {
+        "cosine_width": {
+          "repeats_per_side": 3000,
+          "before": {
+            "median_s": 0.00021972566666742449,
+            "min_s": 0.00019751800000146128,
+            "max_s": 0.00023649299999912424,
+            "python_numpy_peak_bytes": 28356
+          },
+          "after": {
+            "median_s": 0.00020571816666688393,
+            "min_s": 0.00019712233333545252,
+            "max_s": 0.00023709366666783656,
+            "python_numpy_peak_bytes": 28025
+          },
+          "median_change_percent": -6.374994880203156
+        },
+        "ula32_width": {
+          "repeats_per_side": 1000,
+          "before": {
+            "median_s": 0.0010935985000014624,
+            "min_s": 0.0009905340000022989,
+            "max_s": 0.0012068629999976111,
+            "python_numpy_peak_bytes": 30536
+          },
+          "after": {
+            "median_s": 0.0011471139999957814,
+            "min_s": 0.0010535100000015518,
+            "max_s": 0.0012284149999959482,
+            "python_numpy_peak_bytes": 27696
+          },
+          "median_change_percent": 4.893523536677069
+        },
+        "feed32_series": {
+          "repeats_per_side": 50,
+          "before": {
+            "median_s": 0.019183520000024146,
+            "min_s": 0.01836244000005536,
+            "max_s": 0.022148959999867657,
+            "python_numpy_peak_bytes": 904133
+          },
+          "after": {
+            "median_s": 0.01975460000003295,
+            "min_s": 0.018380460000116727,
+            "max_s": 0.020852699999886683,
+            "python_numpy_peak_bytes": 903941
+          },
+          "median_change_percent": 2.9769301984624574
+        }
+      }
+    },
+    "io_rss": {
+      "input_bytes": 25165824,
+      "environment": "same Python 3.14.2 / NumPy 2.5.4 / Windows host; fresh process; one warmup + five measured reads; peak RSS sampled during and immediately after read",
+      "results": [
+        {
+          "archive": "plain.npz",
+          "mode": "before",
+          "seconds": [
+            0.010498399999960384,
+            0.009923600000547594,
+            0.010601199999655364,
+            0.010109799999554525,
+            0.010453100000631821
+          ],
+          "median_s": 0.010453100000631821,
+          "peak_rss_bytes": 57868288,
+          "baseline_rss_bytes": 32514048,
+          "peak_increment_bytes": 25354240
+        },
+        {
+          "archive": "plain.npz",
+          "mode": "after",
+          "seconds": [
+            0.009907900000143854,
+            0.010376299999734329,
+            0.01010729999961768,
+            0.009959199999684643,
+            0.009823399999731919
+          ],
+          "median_s": 0.009959199999684643,
+          "peak_rss_bytes": 57724928,
+          "baseline_rss_bytes": 32362496,
+          "peak_increment_bytes": 25362432
+        },
+        {
+          "archive": "compressed.npz",
+          "mode": "before",
+          "seconds": [
+            0.08878520000052958,
+            0.08462019999933545,
+            0.08438189999924361,
+            0.07577479999963543,
+            0.07486340000014025
+          ],
+          "median_s": 0.08438189999924361,
+          "peak_rss_bytes": 58081280,
+          "baseline_rss_bytes": 32329728,
+          "peak_increment_bytes": 25751552
+        },
+        {
+          "archive": "compressed.npz",
+          "mode": "after",
+          "seconds": [
+            0.08899130000008881,
+            0.0779406999999992,
+            0.08355739999933576,
+            0.08018420000007609,
+            0.0811942000000272
+          ],
+          "median_s": 0.0811942000000272,
+          "peak_rss_bytes": 58368000,
+          "baseline_rss_bytes": 32473088,
+          "peak_increment_bytes": 25894912
+        }
+      ]
+    }
+  },
+  "release_stage_status": "Final packaged native UI, manual PDF visual review and public upload/download checks are recorded separately by release work; not inferred from this report.",
+  "release_acceptance": {
+    "version": "0.27.0",
+    "success": true,
+    "full_suite_executed": true,
+    "unit_test_files": 78,
+    "unit_cases": 2007,
+    "gui_scopes": {
+      "all": {
+        "checks": 1181,
+        "seconds": 210.338455,
+        "success": true
+      },
+      "upstream-sync": {
+        "checks": 19,
+        "seconds": 6.003535,
+        "success": true
+      },
+      "fmcw-scene": {
+        "checks": 15,
+        "seconds": 6.191585,
+        "success": true
+      }
+    },
+    "headless_checks": [
+      "console_stdout_JSON_matches_manual_example",
+      "unicode_paths_JSON_DAT_CSV_exports",
+      "PNG_export_with_invalid_Qt_platform_and_forced_QtAgg_environment",
+      "linear_full_sphere_CSV_and_3d_PNG_without_Qt",
+      "subarray_parallel_centers_actual_elements_metrics_sphere_and_four_PNG_views_without_Qt",
+      "invalid_arguments_stderr_JSON_exit_2",
+      "existing_outputs_preserved_exit_3",
+      "windowed_EXE_headless_dispatch_without_QApplication",
+      "help_and_version"
+    ],
+    "code_identity": {
+      "ArrayLab.exe": {
+        "checked_project_modules": 314,
+        "sha256": "7a41af64031370d5ae30c6b7c9bce9b9d235cab553c769ee00c87eb98c09f546"
+      },
+      "ArrayLab-cli.exe": {
+        "checked_project_modules": 202,
+        "sha256": "5ac4797da1dbdd5bf0d3da2e620fc4b4d0dce145162041abc96edd9932eb7b20"
+      }
+    },
+    "pdf": {
+      "pages": 38,
+      "sha256": "78f70c59c5491bd1a4399191191091fa7b08b5bea0e51439397ca58b5156e948",
+      "bytes": 952281
+    },
+    "no_post_push_software_tests": true
+  }
+}

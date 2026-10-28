@@ -14,6 +14,7 @@ from arraylab.features.linear.model import ArrayParameters
 from arraylab.framework.parallel import requested_workers, set_workers
 from arraylab.features.subarray.service import SubarrayConfig, expanded_coordinates, layout_valid
 from arraylab.application.desktop.window import MainWindow
+from arraylab.application.desktop.task_registry import TASK_REGISTRY
 
 
 def exercise_next_stage(app, window, output, report, check):
@@ -94,8 +95,8 @@ def exercise_next_stage(app, window, output, report, check):
 
         watcher.timeout.connect(dismiss_unexpected_modal); watcher.start(50)
         settle(120)
-        check(set(probe.task_cards) == {"linear", "feed", "planar", "sparse", "subarray", "mimo", "waveform"},
-              "next_home_contains_seven_task_cards")
+        check(set(probe.task_cards) == {task.key for task in TASK_REGISTRY if task.key!='home'},
+              "next_home_contains_registered_task_cards")
         check(probe.active_task() == "home" and probe.subarray_panel.report is None
               and probe.subarray_panel.thread is None, "next_home_has_no_subarray_auto_run")
         QTest.keyClick(probe, Qt.Key.Key_F9); settle()
@@ -219,9 +220,21 @@ def exercise_next_stage(app, window, output, report, check):
             else:
                 panel.view.setCurrentIndex(panel.view.findData("3d")); panel.redraw(); canvas = panel.canvas
             settle()
-            previous_artist = canvas.figure._arraylab_metric_footer
-            probe.resize(1100, 740); settle(100)
-            check(canvas.figure._arraylab_metric_footer is not previous_artist,
+            previous_lines=tuple(canvas.figure._arraylab_footer_lines)
+            previous_size=(canvas.width(),canvas.height())
+            snapshots=(id(probe.selected_dataset().result),id(feed.report),id(planar.report),id(panel.report))
+            probe.resize(1100, 740)
+            deadline=time.monotonic()+2
+            while canvas.resize_pending and time.monotonic()<deadline:settle(20)
+            settle(20)
+            artist=canvas.figure._arraylab_metric_footer
+            ratio=canvas.device_pixel_ratio
+            check(not canvas.resize_pending and (canvas.width(),canvas.height()) != previous_size
+                  and tuple(canvas.figure._arraylab_footer_lines)==previous_lines
+                  and artist in canvas.figure.texts and bool(artist.get_text())
+                  and abs(canvas.figure.bbox.width-canvas.width()*ratio)<1
+                  and abs(canvas.figure.bbox.height-canvas.height()*ratio)<1
+                  and snapshots==(id(probe.selected_dataset().result),id(feed.report),id(planar.report),id(panel.report)),
                   f"next_{kind}_resize_alone_reflows_existing_footer")
             footer_snapshot(canvas, f"{kind}-resize-only-1100")
 

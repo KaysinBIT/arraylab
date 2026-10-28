@@ -81,7 +81,11 @@ def exercise_mimo(app, window, output, report, check):
         check(probe.active_task() == 'mimo' and probe.inspector_stack.currentWidget() is panel.parameter_widget,
               'mimo_home_card_routes_native_page_and_parameters')
         probe.activate_task('linear'); key(probe, Qt.Key.Key_F10); settle()
-        check(probe.active_task() == 'mimo' and probe.tree.currentItem() is probe.mimo_tree_item,
+        selected=probe.tree.currentItem();ancestor=selected
+        while ancestor is not None and ancestor is not probe.mimo_tree_item:ancestor=ancestor.parent()
+        check(probe.active_task() == 'mimo' and ancestor is probe.mimo_tree_item
+              and panel.view.currentData() == 'layout'
+              and selected.data(0,Qt.ItemDataRole.UserRole)==('task_node',('mimo','result','layout')),
               'mimo_F10_routes_page_and_navigation')
         check(f5(probe, 'mimo_default_real_worker_completes'), 'mimo_F5_starts_background_worker')
         default = panel.report; default_parameters = mimo_parameters_from_dict(default['parameters'])

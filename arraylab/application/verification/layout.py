@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (
 )
 
 from arraylab.application.desktop.window import MainWindow
+from arraylab.application.desktop.task_registry import TASK_REGISTRY
 
 
 _CONTROLS = (QLabel, QLineEdit, QComboBox, QPushButton, QCheckBox, QAbstractSpinBox)
-_TASKS = ("home", "linear", "feed", "planar", "sparse", "subarray", "mimo", "waveform")
+_TASKS = tuple(task.key for task in TASK_REGISTRY)
 
 
 def _name(widget):
@@ -55,6 +56,14 @@ def _contents_issues(container):
     return issues
 
 
+def _nearest_scroll(widget):
+    parent=widget.parentWidget()
+    while parent is not None:
+        if isinstance(parent,QScrollArea):return parent
+        parent=parent.parentWidget()
+    return None
+
+
 def _caller_state(window):
     if window is None:
         return None
@@ -72,7 +81,7 @@ def _caller_state(window):
 
 
 def exercise_layout(app, output, check, report, window=None):
-    """Check every task layout in an isolated, hidden native Qt window."""
+    """Check current registered task layouts and home cards in isolation."""
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     caller = _caller_state(window)
@@ -83,6 +92,7 @@ def exercise_layout(app, output, check, report, window=None):
         "qt_platform": app.platformName(),
         "native_windows": app.platformName() == "windows",
         "scope": "Uncomputed widget geometry; no business plots or calculations",
+        "task_layouts": list(_TASKS),
         "sizes": [],
     }
     report["layout"] = details
@@ -109,6 +119,7 @@ def exercise_layout(app, output, check, report, window=None):
             "mimo": probe.mimo_panel.parameter_widget,
             "waveform": probe.waveform_panel.parameter_widget,
         }
+        parameter_tabs.update({key:panel.parameter_widget for key,panel in probe.simulation_panels.items()})
         tab_indices = {key: tabs.currentIndex() for key, tabs in parameter_tabs.items()}
         canvases = {
             "linear": probe.plot.canvas, "feed": probe.feed_panel.pattern_plot.canvas,
@@ -117,6 +128,7 @@ def exercise_layout(app, output, check, report, window=None):
             "mimo": probe.mimo_panel.canvas,
             "waveform": probe.waveform_panel.canvas,
         }
+        canvases.update({key:panel.canvas for key,panel in probe.simulation_panels.items()})
 
         for width, height in ((1440, 900), (1100, 740), (1100, 640)):
             probe.resize(width, height)
@@ -150,7 +162,8 @@ def exercise_layout(app, output, check, report, window=None):
                 if kind == "home":
                     home_issues = _contents_issues(probe.start_page.widget())
                     row["home_issues"] = home_issues
-                    check(len(probe.task_cards) == len(_TASKS)-1 and not home_issues,
+                    expected_cards={task.key for task in TASK_REGISTRY if task.key!='home'}
+                    check(set(probe.task_cards) == expected_cards and not home_issues,
                           f"layout_home_cards_and_text_fit_{width}x{height}")
                     continue
 
@@ -172,7 +185,12 @@ def exercise_layout(app, output, check, report, window=None):
                         settle()
                         issues = _contents_issues(scroll.widget())
                         leaves = [item for item in scroll.widget().findChildren(QWidget)
-                                  if isinstance(item, _CONTROLS) and item.isVisible()]
+                                  if isinstance(item, _CONTROLS) and item.isVisible()
+                                  and _nearest_scroll(item) is scroll]
+                        # A nested scroll viewport is reachable as one outer
+                        # item; its clipped contents are checked at its own level.
+                        leaves += [child.viewport() for child in scroll.widget().findChildren(QScrollArea)
+                                   if child.isVisible() and _nearest_scroll(child) is scroll]
                         bottom = max((item.mapTo(scroll.viewport(), QPoint(0, item.height())).y()
                                       for item in leaves), default=0)
                         state = {"vertical_max": bar.maximum(), "vertical_value": bar.value(),
@@ -270,7 +288,9 @@ def exercise_layout(app, output, check, report, window=None):
         check(not probe.datasets and not probe.feed_panel.history and probe.feed_panel.report is None
               and probe.planar_panel.report is None and probe.sparse_panel.bundle is None
               and probe.subarray_panel.report is None and probe.sparse_panel.thread is None
-              and probe.subarray_panel.thread is None, "layout_probe_never_starts_business_calculations")
+              and probe.subarray_panel.thread is None
+              and all(panel.report is None and panel.thread is None for panel in probe.simulation_panels.values()),
+              "layout_probe_never_starts_business_calculations")
     finally:
         if probe is not None:
             # Stop resize/interaction/progress timers before deferred deletion so

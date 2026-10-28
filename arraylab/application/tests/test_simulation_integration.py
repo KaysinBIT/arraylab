@@ -186,7 +186,9 @@ def test_saved_record_loads_without_solver_even_if_current_inputs_are_invalid(ap
         monkeypatch.setattr(simulation,'calculate',fail);monkeypatch.setattr(simulation_panel,'run_process',fail)
         monkeypatch.setattr(panel.backend,'execute',fail)
         panel.load_record_path(target)
-        assert panel.report==report and panel.configuration()==report['configuration']
+        assert {k:v for k,v in panel.report.items() if k!='view_state'}==report
+        assert panel.configuration()==report['configuration']
+        assert panel.report['view_state']['view']==panel.view.currentData()
         assert target.read_bytes()==before and panel.thread is None
     finally:host.close();host.deleteLater();application.processEvents()
 

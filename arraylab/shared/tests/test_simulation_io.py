@@ -50,11 +50,12 @@ def test_object_arrays_never_enter_npz(tmp_path):
 def test_atomic_json_and_npz_failure_preserve_existing_files(tmp_path,monkeypatch):
     target=tmp_path/'record.npz';target.write_bytes(b'previous-valid-record')
     before=target.read_bytes()
-    def interrupted(stream,**values):
-        stream.write(b'incomplete');raise OSError('simulated disk failure')
-    monkeypatch.setattr(io.np,'savez_compressed',interrupted)
+    original_fsync=io.os.fsync
+    def interrupted(fd):raise OSError('simulated disk synchronization failure')
+    monkeypatch.setattr(io.os,'fsync',interrupted)
     with pytest.raises(OSError):io.write_npz(target,{}, {'value':np.arange(5)})
     assert target.read_bytes()==before and list(tmp_path.iterdir())==[target]
+    monkeypatch.setattr(io.os,'fsync',original_fsync)
     text=tmp_path/'config.json';text.write_bytes(b'previous-config')
     def replacement(*args):raise OSError('simulated replace failure')
     monkeypatch.setattr(io.os,'replace',replacement)
